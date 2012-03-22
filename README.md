@@ -1,4 +1,4 @@
-== Introduction ==
+#Introduction
 
 Package goproxy provides a customizable HTTP proxy library for Go (golang),
 
@@ -10,9 +10,9 @@ yet, customizable and programable.
 
 The proxy itself is simply a `net/http` handler.
 
-== Use Examples ==
+#A taste of goproxy
 
-To get a taste of goproxy, a basic HTTP/HTTPS transparent proxy
+To get a taste of `goproxy`, a basic HTTP/HTTPS transparent proxy
 
 
     import (
@@ -28,7 +28,7 @@ To get a taste of goproxy, a basic HTTP/HTTPS transparent proxy
     }
 
 
-This line will add "X-GoProxy: yxorPoG-X" header to all requests sent through the proxy
+This line will add `X-GoProxy: yxorPoG-X` header to all requests sent through the proxy
 
     proxy.OnRequest().DoFunc(
         func(r *http.Request,ctx *goproxy.ProxyCtx)(*http.Request,*http.Response) {
@@ -37,7 +37,7 @@ This line will add "X-GoProxy: yxorPoG-X" header to all requests sent through th
         }
     )
 
-DoFunc will process all incoming requests to the proxy. It will add a header to the request
+`DoFunc` will process all incoming requests to the proxy. It will add a header to the request
 and return it. The proxy will send the modified request.
 
 Note that we returned nil value as the response. Have we returned a response, goproxy would
@@ -53,11 +53,11 @@ In order to refuse connections to reddit at work time
             return r,nil
     })
 
-DstHostIs returns a ReqCondition, that is a function receiving a Request and returning a boolean
-we will only process requests that matches the condition. DstHostIs("www.reddit.com") will return
-a ReqCondition accepting only requests directed to "www.reddit.com".
+`DstHostIs` returns a `ReqCondition`, that is a function receiving a `Request` and returning a boolean
+we will only process requests that matches the condition. `DstHostIs("www.reddit.com")` will return
+a `ReqCondition` accepting only requests directed to "www.reddit.com".
 
-DoFunc will recieve a function that will preprocess the request. We can change the request, or
+`DoFunc` will recieve a function that will preprocess the request. We can change the request, or
 return a response. If the time is between 8:00am and 17:00pm, we will neglect the request, and
 return a precanned text response saying "do not waste your time".
 
