@@ -1,4 +1,4 @@
-#Introduction
+# Introduction
 
 Package goproxy provides a customizable HTTP proxy library for Go (golang),
 
@@ -10,7 +10,7 @@ yet, customizable and programable.
 
 The proxy itself is simply a `net/http` handler.
 
-#A taste of goproxy
+# A taste of goproxy
 
 To get a taste of `goproxy`, a basic HTTP/HTTPS transparent proxy
 
