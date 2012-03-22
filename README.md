@@ -1,0 +1,64 @@
+== Introduction ==
+
+Package goproxy provides a customizable HTTP proxy library for Go (golang),
+
+It supports regular HTTP proxy, HTTPS through CONNECT, and "hijacking" HTTPS
+connection using "Man in the Middle" style attack.
+
+The intent of the proxy, is to be usable with reasonable amount of traffic
+yet, customizable and programable.
+
+The proxy itself is simply a `net/http` handler.
+
+== Use Examples ==
+
+To get a taste of goproxy, a basic HTTP/HTTPS transparent proxy
+
+
+    import (
+        "github.com/elazarl/goproxy"
+        "log"
+        "net/http"
+    )
+
+    func main() {
+        proxy := goproxy.NewProxyHttpServer()
+        proxy.Verbose = true
+        log.Fatal(http.ListenAndServe(":8080", proxy))
+    }
+
+
+This line will add "X-GoProxy: yxorPoG-X" header to all requests sent through the proxy
+
+    proxy.OnRequest().DoFunc(
+        func(r *http.Request,ctx *goproxy.ProxyCtx)(*http.Request,*http.Response) {
+            r.Header.Set("X-GoProxy","yxorPoG-X")
+            return r,nil
+        }
+    )
+
+DoFunc will process all incoming requests to the proxy. It will add a header to the request
+and return it. The proxy will send the modified request.
+
+Note that we returned nil value as the response. Have we returned a response, goproxy would
+have discarded the request and sent the new response to the client.
+
+In order to refuse connections to reddit at work time
+
+    proxy.OnRequest(goproxy.DstHostIs("www.reddit.com"),goproxy.IsWebRelatedText).DoFunc(
+        func(r *http.Request,ctx *goproxy.ProxyCtx)(*http.Request,*http.Response) {
+            if h,_,_ := time.Now().Clock(); h > 8 && h < 17 {
+		return r,goproxy.ForbiddenTextResponse(r,"Don't waste your time!")
+            }
+            return r,nil
+    })
+
+DstHostIs returns a ReqCondition, that is a function receiving a Request and returning a boolean
+we will only process requests that matches the condition. DstHostIs("www.reddit.com") will return
+a ReqCondition accepting only requests directed to "www.reddit.com".
+
+DoFunc will recieve a function that will preprocess the request. We can change the request, or
+return a response. If the time is between 8:00am and 17:00pm, we will neglect the request, and
+return a precanned text response saying "do not waste your time".
+
+See additional examples in the examples directory.
