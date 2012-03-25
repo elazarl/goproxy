@@ -1,4 +1,4 @@
-package goproxy
+package goproxy_test
 
 import "bufio"
 import "bytes"
@@ -15,6 +15,8 @@ import "net/http/httptest"
 import "net/url"
 import "os"
 import "testing"
+import . "github.com/elazarl/goproxy"
+import "github.com/elazarl/goproxy/ext/image"
 
 var _ = bufio.ErrBufferFull
 var _ = base64.StdEncoding
@@ -267,7 +269,7 @@ func TestConstantImageHandler(t *testing.T) {
 	//panda := getImage("panda.png", t)
 	football := getImage("test_data/football.png", t)
 
-	proxy.OnResponse().Do(HandleImage(func(img image.Image, ctx *ProxyCtx) image.Image {
+	proxy.OnResponse().Do(goproxy_image.HandleImage(func(img image.Image, ctx *ProxyCtx) image.Image {
 		return football
 	}))
 
@@ -291,7 +293,7 @@ func TestImageHandler(t *testing.T) {
 
 	football := getImage("test_data/football.png", t)
 
-	proxy.OnResponse(UrlIs("/test_data/panda.png")).Do(HandleImage(func(img image.Image, ctx *ProxyCtx) image.Image {
+	proxy.OnResponse(UrlIs("/test_data/panda.png")).Do(goproxy_image.HandleImage(func(img image.Image, ctx *ProxyCtx) image.Image {
 		return football
 	}))
 
@@ -349,10 +351,10 @@ func TestReplaceImage(t *testing.T) {
 	panda := getImage("test_data/panda.png", t)
 	football := getImage("test_data/football.png", t)
 
-	proxy.OnResponse(UrlIs("/test_data/panda.png")).Do(HandleImage(func(img image.Image, ctx *ProxyCtx) image.Image {
+	proxy.OnResponse(UrlIs("/test_data/panda.png")).Do(goproxy_image.HandleImage(func(img image.Image, ctx *ProxyCtx) image.Image {
 		return football
 	}))
-	proxy.OnResponse(UrlIs("/test_data/football.png")).Do(HandleImage(func(img image.Image, ctx *ProxyCtx) image.Image {
+	proxy.OnResponse(UrlIs("/test_data/football.png")).Do(goproxy_image.HandleImage(func(img image.Image, ctx *ProxyCtx) image.Image {
 		return panda
 	}))
 

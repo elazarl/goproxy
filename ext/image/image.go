@@ -1,4 +1,4 @@
-package goproxy
+package goproxy_image
 
 import (
 	"bytes"
@@ -8,6 +8,7 @@ import (
 	"image/png"
 	"io/ioutil"
 	"net/http"
+	. "github.com/elazarl/goproxy"
 )
 
 var RespIsImage = ContentTypeIs("image/gif",

@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/elazarl/goproxy"
+	"github.com/elazarl/goproxy/ext/image"
 	"syscall"
 	"os"
 	"os/signal"
@@ -46,7 +47,7 @@ func main() {
 		}
 	}
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.OnResponse().HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
+	proxy.OnResponse().Do(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
 		dx, dy := img.Bounds().Dx(), img.Bounds().Dy()
 
 		nimg := image.NewRGBA(img.Bounds())
@@ -56,7 +57,7 @@ func main() {
 			}
 		}
 		return nimg
-	})
+	}))
 	proxy.Verbose = true
 	l,err := net.Listen("tcp",":8080")
 	if err != nil {log.Fatal(err)}
