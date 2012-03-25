@@ -267,9 +267,9 @@ func TestConstantImageHandler(t *testing.T) {
 	//panda := getImage("panda.png", t)
 	football := getImage("test_data/football.png", t)
 
-	proxy.OnResponse().HandleImage(func(img image.Image, ctx *ProxyCtx) image.Image {
+	proxy.OnResponse().Do(HandleImage(func(img image.Image, ctx *ProxyCtx) image.Image {
 		return football
-	})
+	}))
 
 	resp, err := client.Get(localFile("test_data/panda.png"))
 	if err != nil {
@@ -291,9 +291,9 @@ func TestImageHandler(t *testing.T) {
 
 	football := getImage("test_data/football.png", t)
 
-	proxy.OnResponse(UrlIs("/test_data/panda.png")).HandleImage(func(img image.Image, ctx *ProxyCtx) image.Image {
+	proxy.OnResponse(UrlIs("/test_data/panda.png")).Do(HandleImage(func(img image.Image, ctx *ProxyCtx) image.Image {
 		return football
-	})
+	}))
 
 	resp, err := client.Get(localFile("test_data/panda.png"))
 	if err != nil {
@@ -349,12 +349,12 @@ func TestReplaceImage(t *testing.T) {
 	panda := getImage("test_data/panda.png", t)
 	football := getImage("test_data/football.png", t)
 
-	proxy.OnResponse(UrlIs("/test_data/panda.png")).HandleImage(func(img image.Image, ctx *ProxyCtx) image.Image {
+	proxy.OnResponse(UrlIs("/test_data/panda.png")).Do(HandleImage(func(img image.Image, ctx *ProxyCtx) image.Image {
 		return football
-	})
-	proxy.OnResponse(UrlIs("/test_data/football.png")).HandleImage(func(img image.Image, ctx *ProxyCtx) image.Image {
+	}))
+	proxy.OnResponse(UrlIs("/test_data/football.png")).Do(HandleImage(func(img image.Image, ctx *ProxyCtx) image.Image {
 		return panda
-	})
+	}))
 
 	imgByPandaReq,_,err := image.Decode(bytes.NewReader(getOrFail(localFile("test_data/panda.png"),client,t)))
 	fatalOnErr(err,"decode panda",t)

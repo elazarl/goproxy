@@ -17,27 +17,11 @@ var RespIsImage = ContentTypeIs("image/gif",
 		"image/png")
 		// "image/tiff" tiff support is in external package, and rarely used, so we omitted it
 
-func (cond *ProxyConds) ensureHasReqCond(r ReqCondition) {
-	for _,c := range cond.reqConds {
-		if r == c {
-			return
+func HandleImage(f func(img image.Image, ctx *ProxyCtx) image.Image) RespHandler {
+	return FuncRespHandler(func(resp *http.Response, ctx *ProxyCtx) *http.Response {
+		if ! RespIsImage.HandleResp(resp,ctx.Req) {
+			return resp
 		}
-	}
-	cond.reqConds = append(cond.reqConds,r)
-}
-
-func (cond *ProxyConds) ensureHasRespCond(r RespCondition) {
-	for _,c := range cond.respCond {
-		if r == c {
-			return
-		}
-	}
-	cond.respCond = append(cond.respCond,r)
-}
-
-func (cond *ProxyConds) HandleImage(f func(img image.Image, ctx *ProxyCtx) image.Image) {
-	cond.ensureHasRespCond(RespIsImage)
-	cond.DoFunc(func(resp *http.Response, ctx *ProxyCtx) *http.Response {
 		if resp.StatusCode != 200 {
 			// we might get 304 - not modified response without data
 			return resp
