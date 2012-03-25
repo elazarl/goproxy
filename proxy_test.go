@@ -156,7 +156,7 @@ func TestOneShotFileServer(t *testing.T) {
 	client, _, l := oneShotProxy(t)
 	defer l.Close()
 
-	file := "panda.png"
+	file := "test_data/panda.png"
 	info, err := os.Stat(file)
 	if err != nil {
 		t.Fatal("Cannot find", file)
@@ -183,7 +183,7 @@ func TestContentType(t *testing.T) {
 		return resp
 	})
 
-	for _, file := range []string{"panda.png", "football.png"} {
+	for _, file := range []string{"test_data/panda.png", "test_data/football.png"} {
 		if resp, err := client.Get(localFile(file)); err != nil || resp.Header.Get("X-Shmoopi") != "1" {
 			if err == nil {
 				t.Error("pngs should have X-Shmoopi header = 1, actually", resp.Header.Get("X-Shmoopi"))
@@ -265,13 +265,13 @@ func TestConstantImageHandler(t *testing.T) {
 	defer l.Close()
 
 	//panda := getImage("panda.png", t)
-	football := getImage("football.png", t)
+	football := getImage("test_data/football.png", t)
 
 	proxy.OnResponse().HandleImage(func(img image.Image, ctx *ProxyCtx) image.Image {
 		return football
 	})
 
-	resp, err := client.Get(localFile("panda.png"))
+	resp, err := client.Get(localFile("test_data/panda.png"))
 	if err != nil {
 		t.Fatal("Cannot get panda.png",err)
 	}
@@ -289,13 +289,13 @@ func TestImageHandler(t *testing.T) {
 	var _ = client
 	defer l.Close()
 
-	football := getImage("football.png", t)
+	football := getImage("test_data/football.png", t)
 
-	proxy.OnResponse(UrlIs("/panda.png")).HandleImage(func(img image.Image, ctx *ProxyCtx) image.Image {
+	proxy.OnResponse(UrlIs("/test_data/panda.png")).HandleImage(func(img image.Image, ctx *ProxyCtx) image.Image {
 		return football
 	})
 
-	resp, err := client.Get(localFile("panda.png"))
+	resp, err := client.Get(localFile("test_data/panda.png"))
 	if err != nil {
 		t.Fatal("Cannot get panda.png",err)
 	}
@@ -308,7 +308,7 @@ func TestImageHandler(t *testing.T) {
 	}
 
 	// and again
-	resp, err = client.Get(localFile("panda.png"))
+	resp, err = client.Get(localFile("test_data/panda.png"))
 	if err != nil {
 		t.Fatal("Cannot get panda.png",err)
 	}
@@ -332,7 +332,7 @@ func TestChangeResp(t *testing.T) {
 		return resp
 	})
 
-	resp,err := client.Get(localFile("panda.png"))
+	resp,err := client.Get(localFile("test_data/panda.png"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -346,21 +346,21 @@ func TestReplaceImage(t *testing.T) {
 	client, proxy, l := oneShotProxy(t)
 	defer l.Close()
 
-	panda := getImage("panda.png", t)
-	football := getImage("football.png", t)
+	panda := getImage("test_data/panda.png", t)
+	football := getImage("test_data/football.png", t)
 
-	proxy.OnResponse(UrlIs("/panda.png")).HandleImage(func(img image.Image, ctx *ProxyCtx) image.Image {
+	proxy.OnResponse(UrlIs("/test_data/panda.png")).HandleImage(func(img image.Image, ctx *ProxyCtx) image.Image {
 		return football
 	})
-	proxy.OnResponse(UrlIs("/football.png")).HandleImage(func(img image.Image, ctx *ProxyCtx) image.Image {
+	proxy.OnResponse(UrlIs("/test_data/football.png")).HandleImage(func(img image.Image, ctx *ProxyCtx) image.Image {
 		return panda
 	})
 
-	imgByPandaReq,_,err := image.Decode(bytes.NewReader(getOrFail(localFile("panda.png"),client,t)))
+	imgByPandaReq,_,err := image.Decode(bytes.NewReader(getOrFail(localFile("test_data/panda.png"),client,t)))
 	fatalOnErr(err,"decode panda",t)
 	compareImage(football,imgByPandaReq,t)
 
-	imgByFootballReq,_,err := image.Decode(bytes.NewReader(getOrFail(localFile("football.png"),client,t)))
+	imgByFootballReq,_,err := image.Decode(bytes.NewReader(getOrFail(localFile("test_data/football.png"),client,t)))
 	fatalOnErr(err,"decode football",t)
 	compareImage(panda,imgByFootballReq,t)
 }
