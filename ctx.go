@@ -1,6 +1,7 @@
 package goproxy
 
-import "net/http"
+import ("net/http"
+	"regexp")
 
 type ProxyCtx struct {
 	Req   *http.Request
@@ -21,4 +22,15 @@ func (ctx *ProxyCtx) Logf(msg string,argv ...interface{}) {
 func (ctx *ProxyCtx) Warnf(msg string,argv ...interface{}) {
 	ctx.Printf("WARN: "+msg,argv...)
 }
+
+var charsetFinder = regexp.MustCompile("charset=([^ ]*)")
+
+func (ctx *ProxyCtx) Charset() string {
+	charsets := charsetFinder.FindStringSubmatch(ctx.Req.Header.Get("Content-Type"))
+	if charsets == nil {
+		return ""
+	}
+	return charsets[0]
+}
+
 

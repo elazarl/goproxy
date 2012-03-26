@@ -1,6 +1,8 @@
 package goproxy
 
 import (
+	"bytes"
+	"io/ioutil"
 	"net/http"
 	"regexp"
 	"strings"
@@ -150,6 +152,8 @@ func (pcond *ProxyConds) Do(h RespHandler) {
 		}))
 }
 
+// OnResponse is used when adding a response-filter to the HTTP proxy, usual pattern is
+//    proxy.OnResponse(...conditions when filter applies...).Do(filter)
 func (proxy *ProxyHttpServer) OnResponse(conds ...ReqCondition) *ProxyConds {
 	pconds := &ProxyConds{proxy, make([]ReqCondition, 0), make([]RespCondition, 0)}
 	for _, cond := range conds {
@@ -163,6 +167,8 @@ func (proxy *ProxyHttpServer) OnResponse(conds ...ReqCondition) *ProxyConds {
 	return pconds
 }
 
+// MitmHost will cause the proxy server to eavesdrop an http connection when
+// a client tries to CONNECT to a host name that matches any of the given regular expressions
 func (proxy *ProxyHttpServer) MitmHostMatches(res... *regexp.Regexp) *ProxyHttpServer {
 	proxy.httpsHandlers = append(proxy.httpsHandlers,FuncHttpsHandler(func(host string,_ *http.Request) bool {
 		for _, re := range res {
@@ -175,6 +181,9 @@ func (proxy *ProxyHttpServer) MitmHostMatches(res... *regexp.Regexp) *ProxyHttpS
 	return proxy
 }
 
+// MitmHost will cause the proxy server to eavesdrop an http connection when
+// a client tries to CONNECT to any of the given hosts. Note, that you must
+// append the port to the host name, so a typical host is twitter.com:443
 func (proxy *ProxyHttpServer) MitmHost(hosts ...string) *ProxyHttpServer {
 	// TODO(elazar): optimize on single host
 	mitmHosts := make(map[string]bool)
@@ -187,3 +196,21 @@ func (proxy *ProxyHttpServer) MitmHost(hosts ...string) *ProxyHttpServer {
 	}))
 	return proxy
 }
+
+// HandleBytes will return a RespHandler that read the entire body of the request
+// to a byte array in memory, would run the user supplied f function on the byte arra,
+// and will replace the body of the original response with the resulting byte array.
+func HandleBytes(f func(b []byte, ctx *ProxyCtx)[]byte) RespHandler {
+	return FuncRespHandler(func(resp *http.Response, ctx *ProxyCtx) *http.Response {
+		b,err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			ctx.Warnf("Cannot read response %s",err)
+			return resp
+		}
+		resp.Body.Close()
+
+		resp.Body = ioutil.NopCloser(bytes.NewBuffer(f(b,ctx)))
+		return resp
+	})
+}
+
