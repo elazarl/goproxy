@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/elazarl/goproxy"
+	"github.com/elazarl/goproxy/ext/html"
 	"log"
 	"io"
 	"time"
@@ -24,7 +25,7 @@ func (c *CountReadCloser) Read(b []byte) (n int, err error) {
 	c.nr += int64(n)
 	return
 }
-func (c *CountReadCloser) Close() error {
+func (c CountReadCloser) Close() error {
 	c.ch <- Count{c.Id,c.nr}
 	return c.R.Close()
 }
@@ -36,7 +37,7 @@ func main() {
 	ch := make(chan Count,10)
 	go func() {
 		for {
-			time.Sleep(time.Second*10)
+			time.Sleep(time.Minute*2)
 			timer <- true
 		}
 	}()
@@ -54,7 +55,7 @@ func main() {
 			}
 		}
 	}()
-	proxy.OnResponse(/*goproxy.IsLocalHost,*/goproxy.IsWebRelatedText).DoFunc(func(resp *Response, ctx *goproxy.ProxyCtx) *Response {
+	proxy.OnResponse(goproxy_html.IsWebRelatedText).DoFunc(func(resp *Response, ctx *goproxy.ProxyCtx) *Response {
 		resp.Body = &CountReadCloser{ctx.Req.URL.String(),resp.Body,ch,0}
 		return resp
 	})
