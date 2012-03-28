@@ -20,7 +20,7 @@ var RespIsImage = ContentTypeIs("image/gif",
 
 func HandleImage(f func(img image.Image, ctx *ProxyCtx) image.Image) RespHandler {
 	return FuncRespHandler(func(resp *http.Response, ctx *ProxyCtx) *http.Response {
-		if ! RespIsImage.HandleResp(resp,ctx.Req) {
+		if ! RespIsImage.HandleResp(resp,ctx) {
 			return resp
 		}
 		if resp.StatusCode != 200 {

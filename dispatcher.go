@@ -9,33 +9,33 @@ import (
 )
 
 type ReqCondition interface {
-	HandleReq(req *http.Request) bool
+	HandleReq(req *http.Request, ctx *ProxyCtx) bool
 }
 
 type RespCondition interface {
 	ReqCondition
-	HandleResp(resp *http.Response, req *http.Request) bool
+	HandleResp(resp *http.Response, ctx *ProxyCtx) bool
 }
 
-type ReqConditionFunc func(req *http.Request) bool
+type ReqConditionFunc func(req *http.Request, ctx *ProxyCtx) bool
 
-type RespConditionFunc func(resp *http.Response, req *http.Request) bool
+type RespConditionFunc func(resp *http.Response, ctx *ProxyCtx) bool
 
-func (c ReqConditionFunc) HandleReq(req *http.Request) bool {
-	return c(req)
+func (c ReqConditionFunc) HandleReq(req *http.Request, ctx *ProxyCtx) bool {
+	return c(req, ctx)
 }
 
-func (c RespConditionFunc) HandleReq(req *http.Request) bool {
+func (c RespConditionFunc) HandleReq(req *http.Request, ctx *ProxyCtx) bool {
 	panic("RespCondition should never handle request, " +
 		"it is of the same type just to have poor man's algebraid data types")
 }
 
-func (c RespConditionFunc) HandleResp(resp *http.Response, req *http.Request) bool {
-	return c(resp, req)
+func (c RespConditionFunc) HandleResp(resp *http.Response, ctx *ProxyCtx) bool {
+	return c(resp, ctx)
 }
 
 func UrlHasPrefix(prefix string) ReqConditionFunc {
-	return func(req *http.Request) bool {
+	return func(req *http.Request, ctx *ProxyCtx) bool {
 		return strings.HasPrefix(req.URL.Path, prefix) ||
 			strings.HasPrefix(req.URL.Host+"/"+req.URL.Path, prefix) ||
 			strings.HasPrefix(req.URL.Scheme+req.URL.Host+req.URL.Path, prefix)
@@ -47,7 +47,7 @@ func UrlIs(urls ...string) ReqConditionFunc {
 	for _,u := range urls {
 		urlSet[u] = true
 	}
-	return func(req *http.Request) bool {
+	return func(req *http.Request, ctx *ProxyCtx) bool {
 		_,pathOk    := urlSet[req.URL.Path]
 		_,hostAndOk := urlSet[req.URL.Host+req.URL.Path]
 		return pathOk || hostAndOk
@@ -55,7 +55,7 @@ func UrlIs(urls ...string) ReqConditionFunc {
 }
 
 var localHostIpv4 = regexp.MustCompile(`127\.0\.0\.\d`)
-var IsLocalHost ReqConditionFunc = func(req *http.Request) bool {
+var IsLocalHost ReqConditionFunc = func(req *http.Request, ctx *ProxyCtx) bool {
 	return req.URL.Host == "::1" ||
 		req.URL.Host == "0:0:0:0:0:0:0:1" ||
 		localHostIpv4.MatchString(req.URL.Host) ||
@@ -63,33 +63,33 @@ var IsLocalHost ReqConditionFunc = func(req *http.Request) bool {
 }
 
 func UrlMatches(re *regexp.Regexp) ReqConditionFunc {
-	return func(req *http.Request) bool {
+	return func(req *http.Request, ctx *ProxyCtx) bool {
 		return re.MatchString(req.URL.Path) ||
 			re.MatchString(req.URL.Host+req.URL.Path)
 	}
 }
 
 func DstHostIs(host string) ReqConditionFunc {
-	return func(req *http.Request) bool {
+	return func(req *http.Request, ctx *ProxyCtx) bool {
 		return req.URL.Host == host
 	}
 }
 
 func SrcIpIs(ip string) ReqConditionFunc {
-	return func(req *http.Request) bool {
+	return func(req *http.Request, ctx *ProxyCtx) bool {
 		return strings.HasPrefix(req.RemoteAddr, ip+":")
 	}
 }
 
 func Not(r ReqCondition) ReqConditionFunc {
-	return func(req *http.Request) bool {
-		return !r.HandleReq(req)
+	return func(req *http.Request, ctx *ProxyCtx) bool {
+		return !r.HandleReq(req, ctx)
 	}
 }
 
 func ContentTypeIs(typ string, types ...string) RespConditionFunc {
 	types = append(types, typ)
-	return func(resp *http.Response, _ *http.Request) bool {
+	return func(resp *http.Response, ctx *ProxyCtx) bool {
 		contentType := resp.Header.Get("Content-Type")
 		for _, typ := range types {
 			if contentType == typ || strings.HasPrefix(contentType, typ+";") {
@@ -117,7 +117,7 @@ func (pcond *ReqProxyConds) Do(h ReqHandler) {
 	pcond.proxy.reqHandlers = append(pcond.proxy.reqHandlers,
 		FuncReqHandler(func(r *http.Request, ctx *ProxyCtx) (*http.Request,*http.Response) {
 			for _, cond := range pcond.reqConds {
-				if !cond.HandleReq(r) {
+				if !cond.HandleReq(r, ctx) {
 					return r,nil
 				}
 			}
@@ -139,12 +139,12 @@ func (pcond *ProxyConds) Do(h RespHandler) {
 	pcond.proxy.respHandlers = append(pcond.proxy.respHandlers,
 		FuncRespHandler(func(resp *http.Response, ctx *ProxyCtx) *http.Response {
 			for _, cond := range pcond.reqConds {
-				if !cond.HandleReq(ctx.Req) {
+				if !cond.HandleReq(ctx.Req, ctx) {
 					return resp
 				}
 			}
 			for _, cond := range pcond.respCond {
-				if !cond.HandleResp(resp, ctx.Req) {
+				if !cond.HandleResp(resp, ctx) {
 					return resp
 				}
 			}
