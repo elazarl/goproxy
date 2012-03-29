@@ -2,7 +2,6 @@ package goproxy
 
 import (
 	"bufio"
-	"errors"
 	"io"
 	"log"
 	"crypto/tls"
@@ -147,25 +146,6 @@ func (proxy *ProxyHttpServer) filterResponse(respOrig *http.Response, ctx *Proxy
 		resp = h.Handle(resp, ctx)
 	}
 	return
-}
-
-type readFirstCloseBoth struct {
-	r io.ReadCloser
-	c io.Closer
-}
-func (rfcb *readFirstCloseBoth) Read(b []byte) (nr int,err error) {
-	return rfcb.r.Read(b)
-}
-func (rfcb *readFirstCloseBoth) Close() error {
-	err1 := rfcb.r.Close()
-	err2 := rfcb.c.Close()
-	if err1 != nil && err2 != nil {
-		return errors.New(err1.Error()+", "+err2.Error())
-	}
-	if err1 != nil {
-		return err1
-	}
-	return err2
 }
 
 func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {

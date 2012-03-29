@@ -26,11 +26,11 @@ func (ctx *ProxyCtx) Warnf(msg string,argv ...interface{}) {
 var charsetFinder = regexp.MustCompile("charset=([^ ]*)")
 
 func (ctx *ProxyCtx) Charset() string {
-	charsets := charsetFinder.FindStringSubmatch(ctx.Req.Header.Get("Content-Type"))
+	charsets := charsetFinder.FindStringSubmatch(ctx.Resp.Header.Get("Content-Type"))
 	if charsets == nil {
 		return ""
 	}
-	return charsets[0]
+	return charsets[1]
 }
 
 

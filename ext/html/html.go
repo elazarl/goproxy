@@ -3,8 +3,12 @@ package goproxy_html
 
 import ("github.com/elazarl/goproxy"
 	"net/http"
+	"errors"
 	"bytes"
+	"io"
 	"io/ioutil"
+	"strings"
+	_ "code.google.com/p/go-charset/data"
 	"code.google.com/p/go-charset/charset"
 )
 
@@ -30,19 +34,69 @@ var IsWebRelatedText goproxy.RespConditionFunc = goproxy.ContentTypeIs("text/htm
 // header.
 // guessing Html charset encoding from the <META> tags is not yet implemented.
 func HandleString(f func(s string, ctx *goproxy.ProxyCtx) string) goproxy.RespHandler {
-	return goproxy.FuncRespHandler(func (resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
-		r,err := charset.NewReader(ctx.Charset(),resp.Body)
-		if err != nil {
-			ctx.Warnf("Cannot convert from %v to utf: %v",ctx.Charset(),err)
-			return resp
-		}
-		defer resp.Body.Close()
+	return HandleStringReader(func (r io.Reader, ctx *goproxy.ProxyCtx) io.Reader {
 		b,err := ioutil.ReadAll(r)
 		if err != nil {
 			ctx.Warnf("Cannot read string from resp body: %v",err)
-			return resp
+			return r
 		}
-		resp.Body = ioutil.NopCloser(bytes.NewBufferString(f(string(b),ctx)))
+		return bytes.NewBufferString(f(string(b),ctx))
+	})
+}
+
+// Will recieve an input stream which would convert the response to utf-8
+// The given function must close the reader r, in order to close the response body.
+func HandleStringReader(f func(r io.Reader, ctx *goproxy.ProxyCtx) io.Reader) goproxy.RespHandler {
+	return goproxy.FuncRespHandler(func (resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		charsetName := ctx.Charset()
+		if charsetName == "" {
+			charsetName = "utf-8"
+		}
+
+		if strings.ToLower(charsetName) != "utf-8" {
+			cs := charset.Info(charsetName)
+			if cs == nil {
+				ctx.Warnf("Charset %v not found",charsetName)
+				return resp
+			}
+			r,err := charset.NewReader(charsetName,resp.Body)
+			if err != nil {
+				ctx.Warnf("Cannot convert from %v to utf-8: %v",charsetName,err)
+				return resp
+			}
+			tr,err := cs.TranslatorTo()
+			var _ = tr
+			var _ = r
+			if err != nil {
+				ctx.Warnf("Cannot translate to %v: %v",charsetName,err)
+				return resp
+			}
+			newr := charset.NewTranslatingReader(f(r,ctx),tr)
+			resp.Body = &readFirstCloseBoth{ioutil.NopCloser(newr),resp.Body}
+		} else {
+			//no translation is needed, already at utf-8
+			resp.Body = &readFirstCloseBoth{ioutil.NopCloser(f(resp.Body,ctx)),resp.Body}
+		}
 		return resp
 	})
 }
+
+type readFirstCloseBoth struct {
+	r io.ReadCloser
+	c io.Closer
+}
+func (rfcb *readFirstCloseBoth) Read(b []byte) (nr int,err error) {
+	return rfcb.r.Read(b)
+}
+func (rfcb *readFirstCloseBoth) Close() error {
+	err1 := rfcb.r.Close()
+	err2 := rfcb.c.Close()
+	if err1 != nil && err2 != nil {
+		return errors.New(err1.Error()+", "+err2.Error())
+	}
+	if err1 != nil {
+		return err1
+	}
+	return err2
+}
+
