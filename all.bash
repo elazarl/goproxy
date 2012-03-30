@@ -1,8 +1,13 @@
 #!/bin/bash
 
-go test
+go test || exit
 
 mkdir -p bin
-find examples/* -maxdepth 0 -type d | while read d; do
-	(cd $d;go build -o ../../bin/$(basename $d))
+find examples/* ext/* -maxdepth 0 -type d | while read d; do
+	(cd $d
+	go build -o ../../bin/$(basename $d)
+	find *_test.go -maxdepth 0 2>/dev/null|while read f;do
+		go test
+		break
+	done)
 done
