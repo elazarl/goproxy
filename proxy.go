@@ -13,11 +13,12 @@ import (
 	"sync/atomic"
 )
 
-type Server map[string]string
-
+// The basic proxy type. Implements http.Handler.
 type ProxyHttpServer struct {
+	// setting Verbose to true will log information on each request sent to the proxy
 	Verbose       bool
-	logger        *log.Logger
+	// 
+	Logger        *log.Logger
 	reqHandlers   []ReqHandler
 	respHandlers  []RespHandler
 	httpsHandlers []HttpsHandler
@@ -30,7 +31,7 @@ var hasPort = regexp.MustCompile(`:\d+$`)
 func (proxy *ProxyHttpServer) copyAndClose(w io.WriteCloser, r io.Reader) {
 	io.Copy(w, r)
 	if err := w.Close(); err != nil {
-		proxy.logger.Println("Error closing", err)
+		proxy.Logger.Println("Error closing", err)
 	}
 }
 
@@ -148,6 +149,7 @@ func (proxy *ProxyHttpServer) filterResponse(respOrig *http.Response, ctx *Proxy
 	return
 }
 
+// Standard net/http function. Shouldn't be used directly, http.Serve will use it.
 func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	//r.Header["X-Forwarded-For"] = w.RemoteAddr()
 	if r.Method == "CONNECT" {
@@ -189,13 +191,10 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+// New proxy server, logs to StdErr by default
 func NewProxyHttpServer() *ProxyHttpServer {
-	return NewLoggedProxyHttpServer(log.New(os.Stderr, "", log.LstdFlags))
-}
-
-func NewLoggedProxyHttpServer(logger *log.Logger) *ProxyHttpServer {
 	return &ProxyHttpServer{
-		logger:        logger,
+		Logger:        log.New(os.Stderr, "", log.LstdFlags),
 		reqHandlers:   []ReqHandler{},
 		respHandlers:  []RespHandler{},
 		httpsHandlers: []HttpsHandler{},

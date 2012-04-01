@@ -4,7 +4,15 @@ import ("net/http"
 	"io/ioutil"
 	"bytes")
 
-func NewResponse(r *http.Request, contentType, body string,status int) *http.Response {
+// Will generate a valid http response to the given request the response will have
+// the given contentType, and http status.
+// Typical usage, refuse to process requests to local addresses:
+//
+//	proxy.OnRequest(IsLocalHost()).DoFunc(func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request,*http.Response) {
+//		return nil,NewResponse(r,goproxy.ContentTypeHtml,http.StatusUnauthorized,
+//			`<!doctype html><html><head><title>Can't use proxy for local addresses</title></head><body/></html>`)
+//	})
+func NewResponse(r *http.Request, contentType string, status int, body string) *http.Response {
 	resp := &http.Response{}
 	resp.Request = r
 	resp.TransferEncoding = r.TransferEncoding
@@ -17,14 +25,13 @@ func NewResponse(r *http.Request, contentType, body string,status int) *http.Res
 	return resp
 }
 
+const (
+	ContentTypeText = "text/plain"
+	ContentTypeHtml = "text/html"
+)
+
+// Alias for NewResponse(r,ContentTypeText,http.StatusAccepted,text)
 func TextResponse(r *http.Request, text string) *http.Response {
-	return NewResponse(r,"text/plain",text,200)
+	return NewResponse(r,ContentTypeText,http.StatusAccepted,text)
 }
 
-func NotFoundTextResponse(r *http.Request, text string) *http.Response {
-	return NewResponse(r,"text/plain",text,404)
-}
-
-func ForbiddenTextResponse(r *http.Request, text string) *http.Response {
-	return NewResponse(r,"text/plain",text,403)
-}

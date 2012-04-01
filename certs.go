@@ -2,6 +2,7 @@ package goproxy
 
 import "crypto/tls"
 
+// server certificate used when interception HTTPS traffic
 var SERVER_CERT = []byte(`-----BEGIN CERTIFICATE-----
 MIICATCCAWoCCQD/6eUeFn3yRDANBgkqhkiG9w0BAQUFADBFMQswCQYDVQQGEwJB
 VTETMBEGA1UECBMKU29tZS1TdGF0ZTEhMB8GA1UEChMYSW50ZXJuZXQgV2lkZ2l0
@@ -15,6 +16,7 @@ AAOBgQAITr5Ly40GBFfaYquy1IhhqbIzaTg8JaPnd7yBvxoez4U7D4SB8Gu90QdW
 0t2fPdiNmLaUzHckPnSJURiUjXW1v7eEDCAN6Gxc2TVt/wc4xshgCiOL7XBqxmNA
 c1kT5IqLS7CMqOnSBNCaTtQxba3E/xi8BcODJ8aeFw6AGU7O+A==
 -----END CERTIFICATE-----`)
+// server private key used when interception HTTPS traffic
 var SERVER_KEY  = []byte(`-----BEGIN RSA PRIVATE KEY-----
 MIICWwIBAAKBgQDQ7BI3aHzc5eTN2/xrPK8DAWwBYlk/JXygu8vTk4hRv5GC/N4D
 UUvdhexFHV0gEuoPsfw6ZLVly2lDrU3x04ohJOiEZ2QrSXdfVko0OXAKAfBiXT4Z
@@ -31,7 +33,6 @@ V9rA/VXnLmQLa+JWCQJAPxvmm5VLT0lFh6gYswvEJtUnJ++x1axbGlNxx+cg+vbT
 QSD5/EcAsiDP5HgX2BQ8VubV+cruuuOew56wcLjS/Q==
 -----END RSA PRIVATE KEY-----`)
 
-// we'd better not have any error here...
 var tlsCertificate,tlsCertificateError = tls.X509KeyPair(SERVER_CERT,SERVER_KEY)
 
 func init() {

@@ -14,6 +14,7 @@ type ReqHandler interface {
 // A wrapper that would convert a function to a ReqHandler interface type
 type FuncReqHandler func(req *http.Request, ctx *ProxyCtx) (*http.Request,*http.Response)
 
+// FuncReqHandler.Handle(req,ctx) <=> FuncReqHandler(req,ctx)
 func (f FuncReqHandler) Handle(req *http.Request, ctx *ProxyCtx) (*http.Request,*http.Response) {
 	return f(req,ctx)
 }
@@ -28,6 +29,7 @@ type RespHandler interface {
 // A wrapper that would convert a function to a RespHandler interface type
 type FuncRespHandler func(resp *http.Response, ctx *ProxyCtx) *http.Response
 
+// FuncRespHandler.Handle(req,ctx) <=> FuncRespHandler(req,ctx)
 func (f FuncRespHandler) Handle(resp *http.Response, ctx *ProxyCtx) *http.Response {
 	return f(resp, ctx)
 }
@@ -48,6 +50,7 @@ type HttpsHandler interface {
 // A wrapper that would convert a function to a HttpsHandler interface type
 type FuncHttpsHandler func(host string, r *http.Request) bool
 
+// FuncHttpsHandler should implement the RespHandler interface 
 func (f FuncHttpsHandler) ShouldMitm(host string, r *http.Request) bool {
 	return f(host, r)
 }
