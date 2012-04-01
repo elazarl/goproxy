@@ -54,19 +54,16 @@ func HandleStringReader(f func(r io.Reader, ctx *goproxy.ProxyCtx) io.Reader) go
 		}
 
 		if strings.ToLower(charsetName) != "utf-8" {
-			cs := charset.Info(charsetName)
-			if cs == nil {
-				ctx.Warnf("Charset %v not found",charsetName)
-				return resp
-			}
 			r,err := charset.NewReader(charsetName,resp.Body)
 			if err != nil {
 				ctx.Warnf("Cannot convert from %v to utf-8: %v",charsetName,err)
 				return resp
 			}
-			tr,err := cs.TranslatorTo()
-			var _ = tr
-			var _ = r
+			tr,err := charset.TranslatorTo(charsetName)
+			if err != nil {
+				ctx.Warnf("Can't translate to %v from utf-8: %v",charsetName,err)
+				return resp
+			}
 			if err != nil {
 				ctx.Warnf("Cannot translate to %v: %v",charsetName,err)
 				return resp
