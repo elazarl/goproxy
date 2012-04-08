@@ -215,13 +215,13 @@ func (proxy *ProxyHttpServer) OnResponse(conds ...ReqCondition) *ProxyConds {
 // MitmHost will cause the proxy server to eavesdrop an http connection when
 // a client tries to CONNECT to a host name that matches any of the given regular expressions
 func (proxy *ProxyHttpServer) MitmHostMatches(res... *regexp.Regexp) *ProxyHttpServer {
-	proxy.httpsHandlers = append(proxy.httpsHandlers,FuncHttpsHandler(func(host string,_ *http.Request) bool {
+	proxy.httpsHandlers = append(proxy.httpsHandlers,FuncHttpsHandler(func(host string, ctx *ProxyCtx) *ConnectAction {
 		for _, re := range res {
 			if re.MatchString(host) {
-				return true
+				return MitmConnect
 			}
 		}
-		return false
+		return OkConnect
 	}))
 	return proxy
 }
@@ -235,9 +235,12 @@ func (proxy *ProxyHttpServer) MitmHost(hosts ...string) *ProxyHttpServer {
 	for _,host := range hosts {
 		mitmHosts[host] = true
 	}
-	proxy.httpsHandlers = append(proxy.httpsHandlers,FuncHttpsHandler(func(host string,_ *http.Request) bool {
+	proxy.httpsHandlers = append(proxy.httpsHandlers,FuncHttpsHandler(func(host string, ctx *ProxyCtx) *ConnectAction {
 		_,ok := mitmHosts[host]
-		return ok
+		if ok {
+			return MitmConnect
+		}
+		return OkConnect
 	}))
 	return proxy
 }

@@ -380,7 +380,6 @@ func TestSimpleMitm(t *testing.T) {
 	defer l.Close()
 
 	proxy.MitmHost(https.Listener.Addr().String())
-	//proxy.logHttps = true
 
 	c,err := tls.Dial("tcp",https.Listener.Addr().String(),&tls.Config{InsecureSkipVerify:true})
 	if err!=nil {

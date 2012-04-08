@@ -4,10 +4,7 @@ import (
 	"bufio"
 	"io"
 	"log"
-	"crypto/tls"
-	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"regexp"
 	"sync/atomic"
@@ -55,84 +52,6 @@ func isEof(r *bufio.Reader) bool {
 }
 
 
-func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request) {
-	hij, ok := w.(http.Hijacker)
-	if !ok {
-		panic("httpserver does not support hijacking")
-	}
-
-	host := r.URL.Host
-	if !hasPort.MatchString(host) {
-		host += ":80"
-	}
-	targetSiteCon, e := net.Dial("tcp", host)
-	if e != nil {
-		// trying to mimic the behaviour of the offending website
-		// don't answer at all
-		return
-	}
-	proxyClient, _, e := hij.Hijack()
-	if e != nil {
-		panic("Cannot hijack connection " + e.Error())
-	}
-
-	mitm := false
-	for _, h := range proxy.httpsHandlers {
-		if h.ShouldMitm(r.Host, r) {
-			mitm = true
-			break
-		}
-	}
-	proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
-	if mitm {
-		// this goes in a separate goroutine, so that the net/http server won't think we're
-		// still handling the request even after hijacking the connection. Those HTTP CONNECT
-		// request can take forever, and the server will be stuck when "closed".
-		// TODO: Allow Server.Close() mechanism to shut down this connection as nicely as possible
-		go func() {
-			ctx := &ProxyCtx{Req:r, sess:atomic.AddInt32(&proxy.sess,1), proxy: proxy}
-
-			//TODO: cache connections to the remote website
-			rawClientTls := tls.Server(proxyClient,tlsConfig)
-			if err := rawClientTls.Handshake(); err != nil {
-				ctx.Warnf("Cannot handshake client %v %v",r.Host,err)
-			}
-			defer rawClientTls.Close()
-			clientTlsReader := bufio.NewReader(rawClientTls)
-			for ! isEof(clientTlsReader) {
-				req, err := http.ReadRequest(clientTlsReader)
-				if err != nil {
-					ctx.Warnf("Cannot read TLS request from mitm'd client %v %v",r.Host,err)
-					return
-				}
-				ctx.Logf("req %v",r.Host)
-				req, resp := proxy.filterRequest(req, ctx)
-				if resp == nil {
-					req.URL,err = url.Parse("https://"+r.Host+req.URL.Path)
-					if err != nil {
-						ctx.Warnf("Illegal URL %s","https://"+r.Host+req.URL.Path)
-						return
-					}
-					resp,err = proxy.tr.RoundTrip(req)
-					if err != nil {
-						ctx.Warnf("Cannot read TLS response from mitm'd server %v",err)
-						return
-					}
-					ctx.Logf("resp %v",resp.Status)
-				}
-				resp = proxy.filterResponse(resp, ctx)
-				if err := resp.Write(rawClientTls); err != nil {
-					ctx.Warnf("Cannot write TLS response from mitm'd client %v",err)
-					return
-				}
-			}
-			ctx.Logf("Exiting on EOF")
-		}()
-	} else {
-		go proxy.copyAndClose(targetSiteCon, proxyClient)
-		go proxy.copyAndClose(proxyClient, targetSiteCon)
-	}
-}
 func (proxy *ProxyHttpServer) filterRequest(r *http.Request, ctx *ProxyCtx) (req *http.Request,resp *http.Response) {
 	req = r
 	for _, h := range proxy.reqHandlers {

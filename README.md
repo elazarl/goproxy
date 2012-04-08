@@ -1,3 +1,10 @@
+# Alpha Software
+
+This software is still in alpha state. In the sense that the API may not be stable.
+
+I plan to stabilize the base module (package goproxy) within a month or so, after
+taking user's feedback into account.
+
 # Introduction
 
 Package goproxy provides a customizable HTTP proxy library for Go (golang),
@@ -9,6 +16,17 @@ The intent of the proxy, is to be usable with reasonable amount of traffic
 yet, customizable and programable.
 
 The proxy itself is simply a `net/http` handler.
+
+# Why not Fiddler2?
+
+Fiddler is an excellent software with similar intent. However, Fiddler is not
+as customable as goproxy intend to be. The main difference is, Fiddler is not
+intended to be used as a real proxy.
+
+A possible use case that suits goproxy but
+not Fiddler, is, gathering statisitics on page load times for a certain website over a week.
+With goproxy you could ask all your users to set their proxy to a dedicated machine running a
+goproxy server. Fiddler is a GUI app not designed to be ran like a server for multiple users.
 
 # A taste of goproxy
 
