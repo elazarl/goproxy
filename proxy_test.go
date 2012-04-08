@@ -379,7 +379,7 @@ func TestSimpleMitm(t *testing.T) {
 	var _ = l
 	defer l.Close()
 
-	proxy.MitmHost(https.Listener.Addr().String())
+	proxy.OnRequest(ReqHostIs(https.Listener.Addr().String())).HandleConnect(AlwaysMitm)
 
 	c,err := tls.Dial("tcp",https.Listener.Addr().String(),&tls.Config{InsecureSkipVerify:true})
 	if err!=nil {
@@ -423,7 +423,7 @@ func TestMitmIsFiltered(t *testing.T) {
 	defer l.Close()
 
 	//proxy.Verbose = true
-	proxy.MitmHost(https.Listener.Addr().String())
+	proxy.OnRequest(ReqHostIs(https.Listener.Addr().String())).HandleConnect(AlwaysMitm)
 	proxy.OnRequest(UrlIs("/momo")).DoFunc(func(req *http.Request, ctx *ProxyCtx) (*http.Request,*http.Response) {
 		return nil,TextResponse(req,"koko")
 	})

@@ -70,6 +70,31 @@ func UrlIs(urls ...string) ReqConditionFunc {
 	}
 }
 
+// Returns a ReqCondition, testing whether the host to which the request was directed to matches
+// any of the given regular expressions.
+func ReqHostMatches(regexps ...*regexp.Regexp) ReqConditionFunc {
+	return func(req *http.Request, ctx *ProxyCtx) bool {
+		for _, re := range regexps {
+			if re.MatchString(req.Host) {
+				return true
+			}
+		}
+		return false
+	}
+}
+// Returns a ReqCondition, testing whether the host to which the request is directed to equal
+// to one of the given strings
+func ReqHostIs(hosts ...string) ReqConditionFunc {
+	hostSet := make(map[string]bool)
+	for _,h := range hosts {
+		hostSet[h] = true
+	}
+	return func(req *http.Request, ctx *ProxyCtx) bool {
+		_,ok    := hostSet[req.URL.Host]
+		return ok
+	}
+}
+
 var localHostIpv4 = regexp.MustCompile(`127\.0\.0\.\d+`)
 // Checks whether the destination host is explicitly local host (buggy, there can be IPv6 addresses it doesn't catch)
 var IsLocalHost ReqConditionFunc = func(req *http.Request, ctx *ProxyCtx) bool {
@@ -164,6 +189,42 @@ func (pcond *ReqProxyConds) Do(h ReqHandler) {
 		}))
 }
 
+// When proxy receives an HTTP CONNECT request, it'll use the HttpsHandler to determine what should it
+// do with this request. The handler returns a ConnectAction struct, the Action field in the ConnectAction
+// struct returned will determine what to do with this request. ConnectAccept will simply accept the request
+// forwarding all bytes from the client to the remote host, ConnectReject will close the connection with the
+// client, and ConnectMitm, will assume the underlying connection is an HTTPS connection, and will use Man
+// in the Middle attack to eavesdrop the connection. All regular handler will be active on this eavesdropped
+// connection.
+// The ConnectAction struct contains possible tlsConfig that will be used for eavesdropping. If nil, the proxy
+// will use the default tls configuration.
+//	proxy.OnRequest().HandleConnect(goproxy.AlwaysReject) // rejects all CONNECT requests
+func (pcond *ReqProxyConds) HandleConnect(h HttpsHandler) {
+	pcond.proxy.httpsHandlers = append(pcond.proxy.httpsHandlers,
+		FuncHttpsHandler(func(host string, ctx *ProxyCtx) *ConnectAction {
+			for _,cond := range pcond.reqConds {
+				if cond.HandleReq(ctx.Req,ctx) {
+					return h.HandleConnect(host,ctx)
+				}
+			}
+			return OkConnect
+		}))
+}
+// See HandleConnect, for example, accepting CONNECT request if they contain a password in header
+//	io.WriteString(h,password)
+//	passHash := h.Sum(nil)
+//	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *ProxyCtx)*ConnectAction {
+//		c := sha1.New()
+//		io.WriteString(c,ctx.Req.Header.Get("X-GoProxy-Auth"))
+//		if c.Sum(nil) == passHash {
+//			return OkConnect
+//		}
+//		return RejectConnect
+//	})
+func (pcond *ReqProxyConds) HandleConnectFunc(f func(host string, ctx *ProxyCtx)*ConnectAction) {
+	pcond.HandleConnect(FuncHttpsHandler(f))
+}
+
 // aggregate RespConditions for a ProxyHttpServer. Upon calling Do, it will register a RespHandler that would
 // handle the HTTP response from remote server if all conditions on the HTTP response are met.
 type ProxyConds struct {
@@ -212,37 +273,19 @@ func (proxy *ProxyHttpServer) OnResponse(conds ...ReqCondition) *ProxyConds {
 	return pconds
 }
 
-// MitmHost will cause the proxy server to eavesdrop an http connection when
-// a client tries to CONNECT to a host name that matches any of the given regular expressions
-func (proxy *ProxyHttpServer) MitmHostMatches(res... *regexp.Regexp) *ProxyHttpServer {
-	proxy.httpsHandlers = append(proxy.httpsHandlers,FuncHttpsHandler(func(host string, ctx *ProxyCtx) *ConnectAction {
-		for _, re := range res {
-			if re.MatchString(host) {
-				return MitmConnect
-			}
-		}
-		return OkConnect
-	}))
-	return proxy
+// An HttpsHandler that always eavesdrop https connections, for example to
+// eavesdrop all https connections to www.google.com, we can use
+//	proxy.OnRequest(goproxy.ReqHostIs("www.google.com")).HandleConnect(goproxy.AlwaysMitm)
+var AlwaysMitm FuncHttpsHandler = func(host string, ctx *ProxyCtx) *ConnectAction {
+	return MitmConnect
 }
 
-// MitmHost will cause the proxy server to eavesdrop an http connection when
-// a client tries to CONNECT to any of the given hosts. Note, that you must
-// append the port to the host name, so a typical host is twitter.com:443
-func (proxy *ProxyHttpServer) MitmHost(hosts ...string) *ProxyHttpServer {
-	// TODO(elazar): optimize on single host
-	mitmHosts := make(map[string]bool)
-	for _,host := range hosts {
-		mitmHosts[host] = true
-	}
-	proxy.httpsHandlers = append(proxy.httpsHandlers,FuncHttpsHandler(func(host string, ctx *ProxyCtx) *ConnectAction {
-		_,ok := mitmHosts[host]
-		if ok {
-			return MitmConnect
-		}
-		return OkConnect
-	}))
-	return proxy
+// An HttpsHandler that drops any CONNECT request, for example, this code will disallow
+// connections to hosts on any other port than 443
+//	proxy.OnRequest(goproxy.Not(goproxy.ReqHostMatches(regexp.MustCompile(":443$"))).
+//		HandleConnect(goproxy.AlwaysReject)
+var AlwaysReject FuncHttpsHandler = func(host string, ctx *ProxyCtx) *ConnectAction {
+	return RejectConnect
 }
 
 // HandleBytes will return a RespHandler that read the entire body of the request
