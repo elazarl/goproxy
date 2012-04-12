@@ -63,10 +63,12 @@ have discarded the request and sent the new response to the client.
 
 In order to refuse connections to reddit at work time
 
-    proxy.OnRequest(goproxy.DstHostIs("www.reddit.com"),goproxy.IsWebRelatedText).DoFunc(
+    proxy.OnRequest(goproxy.DstHostIs("www.reddit.com")).DoFunc(
         func(r *http.Request,ctx *goproxy.ProxyCtx)(*http.Request,*http.Response) {
-            if h,_,_ := time.Now().Clock(); h > 8 && h < 17 {
-		return r,goproxy.ForbiddenTextResponse(r,"Don't waste your time!")
+            if h,_,_ := time.Now().Clock(); h >= 8 && h <= 17 {
+                return r,goproxy.NewResponse(r,
+                        goproxy.ContentTypeText,http.StatusForbidden,
+                        "Don't waste your time!")
             }
             return r,nil
     })
