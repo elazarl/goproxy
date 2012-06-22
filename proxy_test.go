@@ -15,7 +15,7 @@ import "net/http/httptest"
 import "net/url"
 import "os"
 import "testing"
-import . "github.com/elazarl/goproxy"
+import "github.com/elazarl/goproxy"
 import "github.com/elazarl/goproxy/ext/image"
 
 var _ = bufio.ErrBufferFull
@@ -81,8 +81,8 @@ func TestSimpleHttpReqWithProxy(t *testing.T) {
 }
 
 
-func oneShotProxy(t *testing.T) (client *http.Client, proxy *ProxyHttpServer, s *httptest.Server) {
-	proxy = NewProxyHttpServer()
+func oneShotProxy(t *testing.T) (client *http.Client, proxy *goproxy.ProxyHttpServer, s *httptest.Server) {
+	proxy = goproxy.NewProxyHttpServer()
 	s = httptest.NewServer(proxy)
 
 	proxyUrl, _ := url.Parse(s.URL)
@@ -95,7 +95,7 @@ func TestSimpleHook(t *testing.T) {
 	client, proxy, l := oneShotProxy(t)
 	defer l.Close()
 
-	proxy.OnRequest(SrcIpIs("127.0.0.1")).DoFunc(func(req *http.Request, ctx *ProxyCtx) (*http.Request,*http.Response) {
+	proxy.OnRequest(goproxy.SrcIpIs("127.0.0.1")).DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request,*http.Response) {
 		req.URL.Path = "/bobo"
 		return req,nil
 	})
@@ -110,7 +110,7 @@ func TestAlwaysHook(t *testing.T) {
 	client, proxy, l := oneShotProxy(t)
 	defer l.Close()
 
-	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *ProxyCtx) (*http.Request,*http.Response) {
+	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request,*http.Response) {
 		req.URL.Path = "/bobo"
 		return req,nil
 	})
@@ -125,7 +125,7 @@ func TestReplaceResponse(t *testing.T) {
 	client, proxy, l := oneShotProxy(t)
 	defer l.Close()
 
-	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *ProxyCtx) *http.Response {
+	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
 		resp.StatusCode = http.StatusOK
 		resp.Body = ioutil.NopCloser(bytes.NewBufferString("chico"))
 		return resp
@@ -140,7 +140,7 @@ func TestReplaceReponseForUrl(t *testing.T) {
 	client, proxy, l := oneShotProxy(t)
 	defer l.Close()
 
-	proxy.OnResponse(UrlIs("/koko")).DoFunc(func(resp *http.Response, ctx *ProxyCtx) *http.Response {
+	proxy.OnResponse(goproxy.UrlIs("/koko")).DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
 		resp.StatusCode = http.StatusOK
 		resp.Body = ioutil.NopCloser(bytes.NewBufferString("chico"))
 		return resp
@@ -180,7 +180,7 @@ func TestContentType(t *testing.T) {
 	client, proxy, l := oneShotProxy(t)
 	defer l.Close()
 
-	proxy.OnResponse(ContentTypeIs("image/png")).DoFunc(func(resp *http.Response, ctx *ProxyCtx) *http.Response {
+	proxy.OnResponse(goproxy.ContentTypeIs("image/png")).DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
 		resp.Header.Set("X-Shmoopi", "1")
 		return resp
 	})
@@ -269,7 +269,7 @@ func TestConstantImageHandler(t *testing.T) {
 	//panda := getImage("panda.png", t)
 	football := getImage("test_data/football.png", t)
 
-	proxy.OnResponse().Do(goproxy_image.HandleImage(func(img image.Image, ctx *ProxyCtx) image.Image {
+	proxy.OnResponse().Do(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
 		return football
 	}))
 
@@ -293,7 +293,7 @@ func TestImageHandler(t *testing.T) {
 
 	football := getImage("test_data/football.png", t)
 
-	proxy.OnResponse(UrlIs("/test_data/panda.png")).Do(goproxy_image.HandleImage(func(img image.Image, ctx *ProxyCtx) image.Image {
+	proxy.OnResponse(goproxy.UrlIs("/test_data/panda.png")).Do(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
 		return football
 	}))
 
@@ -328,7 +328,7 @@ func TestChangeResp(t *testing.T) {
 	var _ = client
 	defer l.Close()
 
-	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *ProxyCtx) *http.Response {
+	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
 		resp.Body.Read([]byte{0})
 		resp.Body = ioutil.NopCloser(new(bytes.Buffer))
 		return resp
@@ -351,10 +351,10 @@ func TestReplaceImage(t *testing.T) {
 	panda := getImage("test_data/panda.png", t)
 	football := getImage("test_data/football.png", t)
 
-	proxy.OnResponse(UrlIs("/test_data/panda.png")).Do(goproxy_image.HandleImage(func(img image.Image, ctx *ProxyCtx) image.Image {
+	proxy.OnResponse(goproxy.UrlIs("/test_data/panda.png")).Do(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
 		return football
 	}))
-	proxy.OnResponse(UrlIs("/test_data/football.png")).Do(goproxy_image.HandleImage(func(img image.Image, ctx *ProxyCtx) image.Image {
+	proxy.OnResponse(goproxy.UrlIs("/test_data/football.png")).Do(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
 		return panda
 	}))
 
@@ -379,7 +379,7 @@ func TestSimpleMitm(t *testing.T) {
 	var _ = l
 	defer l.Close()
 
-	proxy.OnRequest(ReqHostIs(https.Listener.Addr().String())).HandleConnect(AlwaysMitm)
+	proxy.OnRequest(goproxy.ReqHostIs(https.Listener.Addr().String())).HandleConnect(goproxy.AlwaysMitm)
 
 	c,err := tls.Dial("tcp",https.Listener.Addr().String(),&tls.Config{InsecureSkipVerify:true})
 	if err!=nil {
@@ -423,9 +423,9 @@ func TestMitmIsFiltered(t *testing.T) {
 	defer l.Close()
 
 	//proxy.Verbose = true
-	proxy.OnRequest(ReqHostIs(https.Listener.Addr().String())).HandleConnect(AlwaysMitm)
-	proxy.OnRequest(UrlIs("/momo")).DoFunc(func(req *http.Request, ctx *ProxyCtx) (*http.Request,*http.Response) {
-		return nil,TextResponse(req,"koko")
+	proxy.OnRequest(goproxy.ReqHostIs(https.Listener.Addr().String())).HandleConnect(goproxy.AlwaysMitm)
+	proxy.OnRequest(goproxy.UrlIs("/momo")).DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request,*http.Response) {
+		return nil, goproxy.TextResponse(req,"koko")
 	})
 
 	if resp := string(getOrFail(https.URL+"/momo",client,t)); resp != "koko" {
@@ -476,7 +476,7 @@ func TestChunkedResponse(t *testing.T) {
 	client, proxy, s := oneShotProxy(t)
 	defer s.Close()
 
-	proxy.OnResponse().DoFunc(func(resp *http.Response,ctx *ProxyCtx)*http.Response {
+	proxy.OnResponse().DoFunc(func(resp *http.Response,ctx *goproxy.ProxyCtx)*http.Response {
 		b, err := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
 		panicOnErr(err,"readall onresp")
