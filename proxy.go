@@ -13,8 +13,7 @@ import (
 // The basic proxy type. Implements http.Handler.
 type ProxyHttpServer struct {
 	// setting Verbose to true will log information on each request sent to the proxy
-	Verbose bool
-	// 
+	Verbose       bool
 	Logger        *log.Logger
 	reqHandlers   []ReqHandler
 	respHandlers  []RespHandler

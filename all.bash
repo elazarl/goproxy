@@ -1,6 +1,7 @@
 #!/bin/bash
 
 go test || exit
+for action in $@; do go $action; done
 
 mkdir -p bin
 find examples/* ext/* -maxdepth 0 -type d | while read d; do
