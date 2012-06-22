@@ -5,7 +5,7 @@ import (
 	"regexp"
 )
 
-// Proxy context, contains useful information about every request. It is passed to
+// ProxyCtx is the Proxy context, contains useful information about every request. It is passed to
 // every user function. Also used as a logger.
 type ProxyCtx struct {
 	// Will contain the client request from the proxy
@@ -20,7 +20,7 @@ func (ctx *ProxyCtx) printf(msg string, argv ...interface{}) {
 	ctx.proxy.Logger.Printf("[%03d] "+msg+"\n", append([]interface{}{ctx.sess & 0xFF}, argv...)...)
 }
 
-// prints a message to the proxy's log. Should be used in a ProxyHttpServer's filter
+// Logf prints a message to the proxy's log. Should be used in a ProxyHttpServer's filter
 // This message will be printed only if the Verbose field of the ProxyHttpServer is set to true
 // 
 //	proxy.OnRequest().DoFunc(func(r *http.Request,ctx *goproxy.ProxyCtx) *http.Request{
@@ -34,7 +34,7 @@ func (ctx *ProxyCtx) Logf(msg string, argv ...interface{}) {
 	}
 }
 
-// prints a message to the proxy's log. Should be used in a ProxyHttpServer's filter
+// Warnf prints a message to the proxy's log. Should be used in a ProxyHttpServer's filter
 // This message will always be printed.
 // 
 //	proxy.OnRequest().DoFunc(func(r *http.Request,ctx *goproxy.ProxyCtx) *http.Request{
