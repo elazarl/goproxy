@@ -1,22 +1,24 @@
 package goproxy_test
 
-import "bufio"
-import "bytes"
-import "strings"
-import "net"
-import "encoding/base64"
-import "crypto/tls"
-import "image"
-import "image/png"
-import "io"
-import "io/ioutil"
-import "net/http"
-import "net/http/httptest"
-import "net/url"
-import "os"
-import "testing"
-import "github.com/elazarl/goproxy"
-import "github.com/elazarl/goproxy/ext/image"
+import (
+	"bufio"
+	"bytes"
+	"crypto/tls"
+	"encoding/base64"
+	"github.com/elazarl/goproxy"
+	"github.com/elazarl/goproxy/ext/image"
+	"image"
+	"image/png"
+	"io"
+	"io/ioutil"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"os"
+	"strings"
+	"testing"
+)
 
 var _ = bufio.ErrBufferFull
 var _ = base64.StdEncoding
