@@ -1,15 +1,16 @@
 // extension to goproxy that will allow you to easily filter web browser related content.
 package goproxy_html
 
-import ("github.com/elazarl/goproxy"
-	"net/http"
-	"errors"
+import (
 	"bytes"
+	"code.google.com/p/go-charset/charset"
+	_ "code.google.com/p/go-charset/data"
+	"errors"
+	"github.com/elazarl/goproxy"
 	"io"
 	"io/ioutil"
+	"net/http"
 	"strings"
-	_ "code.google.com/p/go-charset/data"
-	"code.google.com/p/go-charset/charset"
 )
 
 var IsHtml goproxy.RespConditionFunc = goproxy.ContentTypeIs("text/html")
@@ -17,62 +18,62 @@ var IsHtml goproxy.RespConditionFunc = goproxy.ContentTypeIs("text/html")
 var IsCss goproxy.RespConditionFunc = goproxy.ContentTypeIs("text/css")
 
 var IsJavaScript goproxy.RespConditionFunc = goproxy.ContentTypeIs("text/javascript",
-					"application/javascript")
+	"application/javascript")
 
 var IsJson goproxy.RespConditionFunc = goproxy.ContentTypeIs("text/json")
 
 var IsXml goproxy.RespConditionFunc = goproxy.ContentTypeIs("text/xml")
 
 var IsWebRelatedText goproxy.RespConditionFunc = goproxy.ContentTypeIs("text/html",
-					"text/css",
-					"text/javascript","application/javascript",
-					"text/xml",
-					"text/json")
+	"text/css",
+	"text/javascript", "application/javascript",
+	"text/xml",
+	"text/json")
 
 // HandleString will recieve a function that filters a string, and will convert the
 // request body to a utf8 string, according to the charset specified in the Content-Type
 // header.
 // guessing Html charset encoding from the <META> tags is not yet implemented.
 func HandleString(f func(s string, ctx *goproxy.ProxyCtx) string) goproxy.RespHandler {
-	return HandleStringReader(func (r io.Reader, ctx *goproxy.ProxyCtx) io.Reader {
-		b,err := ioutil.ReadAll(r)
+	return HandleStringReader(func(r io.Reader, ctx *goproxy.ProxyCtx) io.Reader {
+		b, err := ioutil.ReadAll(r)
 		if err != nil {
-			ctx.Warnf("Cannot read string from resp body: %v",err)
+			ctx.Warnf("Cannot read string from resp body: %v", err)
 			return r
 		}
-		return bytes.NewBufferString(f(string(b),ctx))
+		return bytes.NewBufferString(f(string(b), ctx))
 	})
 }
 
 // Will recieve an input stream which would convert the response to utf-8
 // The given function must close the reader r, in order to close the response body.
 func HandleStringReader(f func(r io.Reader, ctx *goproxy.ProxyCtx) io.Reader) goproxy.RespHandler {
-	return goproxy.FuncRespHandler(func (resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+	return goproxy.FuncRespHandler(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
 		charsetName := ctx.Charset()
 		if charsetName == "" {
 			charsetName = "utf-8"
 		}
 
 		if strings.ToLower(charsetName) != "utf-8" {
-			r,err := charset.NewReader(charsetName,resp.Body)
+			r, err := charset.NewReader(charsetName, resp.Body)
 			if err != nil {
-				ctx.Warnf("Cannot convert from %v to utf-8: %v",charsetName,err)
+				ctx.Warnf("Cannot convert from %v to utf-8: %v", charsetName, err)
 				return resp
 			}
-			tr,err := charset.TranslatorTo(charsetName)
+			tr, err := charset.TranslatorTo(charsetName)
 			if err != nil {
-				ctx.Warnf("Can't translate to %v from utf-8: %v",charsetName,err)
+				ctx.Warnf("Can't translate to %v from utf-8: %v", charsetName, err)
 				return resp
 			}
 			if err != nil {
-				ctx.Warnf("Cannot translate to %v: %v",charsetName,err)
+				ctx.Warnf("Cannot translate to %v: %v", charsetName, err)
 				return resp
 			}
-			newr := charset.NewTranslatingReader(f(r,ctx),tr)
-			resp.Body = &readFirstCloseBoth{ioutil.NopCloser(newr),resp.Body}
+			newr := charset.NewTranslatingReader(f(r, ctx), tr)
+			resp.Body = &readFirstCloseBoth{ioutil.NopCloser(newr), resp.Body}
 		} else {
 			//no translation is needed, already at utf-8
-			resp.Body = &readFirstCloseBoth{ioutil.NopCloser(f(resp.Body,ctx)),resp.Body}
+			resp.Body = &readFirstCloseBoth{ioutil.NopCloser(f(resp.Body, ctx)), resp.Body}
 		}
 		return resp
 	})
@@ -82,18 +83,18 @@ type readFirstCloseBoth struct {
 	r io.ReadCloser
 	c io.Closer
 }
-func (rfcb *readFirstCloseBoth) Read(b []byte) (nr int,err error) {
+
+func (rfcb *readFirstCloseBoth) Read(b []byte) (nr int, err error) {
 	return rfcb.r.Read(b)
 }
 func (rfcb *readFirstCloseBoth) Close() error {
 	err1 := rfcb.r.Close()
 	err2 := rfcb.c.Close()
 	if err1 != nil && err2 != nil {
-		return errors.New(err1.Error()+", "+err2.Error())
+		return errors.New(err1.Error() + ", " + err2.Error())
 	}
 	if err1 != nil {
 		return err1
 	}
 	return err2
 }
-

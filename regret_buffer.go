@@ -1,7 +1,9 @@
 package goproxy
 
-import ("bytes"
-	"io")
+import (
+	"bytes"
+	"io"
+)
 
 // A RegretOnceBuffer will allow you to read from a reader, and then
 // to "regret" reading it, and push back everything you've read.
@@ -30,7 +32,7 @@ func (rbc *RegretOnceBufferCloser) Close() error {
 
 // initialize a RegretOnceBufferCloser with underlying readCloser rc
 func NewRegretOnceBufferCloser(rc io.ReadCloser) *RegretOnceBufferCloser {
-	return &RegretOnceBufferCloser{*NewRegretOnceBuffer(rc),rc}
+	return &RegretOnceBufferCloser{*NewRegretOnceBuffer(rc), rc}
 }
 
 // The next read from the RegretOnceBuffer will be as if the underlying reader
@@ -41,6 +43,7 @@ func (rb *RegretOnceBuffer) Regret() {
 	}
 	rb.regret = true
 }
+
 // Will "forget" everything read so far.
 //	rb := NewRegretOnceBuffer(bytes.NewBuffer([]byte{1,2,3}))
 //	var b = make([]byte,1)
@@ -55,21 +58,21 @@ func (rb *RegretOnceBuffer) Forget() {
 
 // initialize a RegretOnceBuffer with underlying reader r
 func NewRegretOnceBuffer(r io.Reader) *RegretOnceBuffer {
-	return &RegretOnceBuffer{r:r,regret:false,buf:new(bytes.Buffer)}
+	return &RegretOnceBuffer{r: r, regret: false, buf: new(bytes.Buffer)}
 }
 
 // reads from the underlying reader. Will buffer all input until Regret is called.
 func (rb *RegretOnceBuffer) Read(p []byte) (n int, err error) {
 	if rb.regret {
-		n,err = rb.buf.Read(p[:rb.buf.Len()])
+		n, err = rb.buf.Read(p[:rb.buf.Len()])
 		if err != nil {
 			return
 		}
 	}
 
-	en,err := rb.r.Read(p[n:])
-	if ! rb.regret {
-		rb.buf.Write(p[n:n+en])
+	en, err := rb.r.Read(p[n:])
+	if !rb.regret {
+		rb.buf.Write(p[n : n+en])
 	}
 	n += en
 	return

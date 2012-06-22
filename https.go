@@ -18,18 +18,18 @@ const (
 )
 
 var (
-	OkConnect     = &ConnectAction{Action:ConnectAccept}
-	MitmConnect   = &ConnectAction{Action:ConnectMitm}
-	RejectConnect = &ConnectAction{Action:ConnectReject}
+	OkConnect     = &ConnectAction{Action: ConnectAccept}
+	MitmConnect   = &ConnectAction{Action: ConnectMitm}
+	RejectConnect = &ConnectAction{Action: ConnectReject}
 )
 
 type ConnectAction struct {
-	Action ConnectActionLiteral
+	Action    ConnectActionLiteral
 	TlsConfig *tls.Config
 }
 
 func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request) {
-	ctx := &ProxyCtx{Req:r, sess:atomic.AddInt32(&proxy.sess,1), proxy: proxy}
+	ctx := &ProxyCtx{Req: r, sess: atomic.AddInt32(&proxy.sess, 1), proxy: proxy}
 
 	hij, ok := w.(http.Hijacker)
 	if !ok {
@@ -51,12 +51,12 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		panic("Cannot hijack connection " + e.Error())
 	}
 
-	ctx.Logf("Running %d CONNECT handlers",len(proxy.httpsHandlers))
+	ctx.Logf("Running %d CONNECT handlers", len(proxy.httpsHandlers))
 	todo := OkConnect
 	ctx.Req = r
 	for _, h := range proxy.httpsHandlers {
 		todo = h.HandleConnect(r.Host, ctx)
-		ctx.Logf("handler: %v",todo)
+		ctx.Logf("handler: %v", todo)
 	}
 	switch todo.Action {
 	case ConnectAccept:
@@ -78,36 +78,36 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		go func() {
 
 			//TODO: cache connections to the remote website
-			rawClientTls := tls.Server(proxyClient,tlsConfig)
+			rawClientTls := tls.Server(proxyClient, tlsConfig)
 			if err := rawClientTls.Handshake(); err != nil {
-				ctx.Warnf("Cannot handshake client %v %v",r.Host,err)
+				ctx.Warnf("Cannot handshake client %v %v", r.Host, err)
 			}
 			defer rawClientTls.Close()
 			clientTlsReader := bufio.NewReader(rawClientTls)
-			for ! isEof(clientTlsReader) {
+			for !isEof(clientTlsReader) {
 				req, err := http.ReadRequest(clientTlsReader)
 				if err != nil {
-					ctx.Warnf("Cannot read TLS request from mitm'd client %v %v",r.Host,err)
+					ctx.Warnf("Cannot read TLS request from mitm'd client %v %v", r.Host, err)
 					return
 				}
-				ctx.Logf("req %v",r.Host)
+				ctx.Logf("req %v", r.Host)
 				req, resp := proxy.filterRequest(req, ctx)
 				if resp == nil {
-					req.URL,err = url.Parse("https://"+r.Host+req.URL.Path)
+					req.URL, err = url.Parse("https://" + r.Host + req.URL.Path)
 					if err != nil {
-						ctx.Warnf("Illegal URL %s","https://"+r.Host+req.URL.Path)
+						ctx.Warnf("Illegal URL %s", "https://"+r.Host+req.URL.Path)
 						return
 					}
-					resp,err = proxy.tr.RoundTrip(req)
+					resp, err = proxy.tr.RoundTrip(req)
 					if err != nil {
-						ctx.Warnf("Cannot read TLS response from mitm'd server %v",err)
+						ctx.Warnf("Cannot read TLS response from mitm'd server %v", err)
 						return
 					}
-					ctx.Logf("resp %v",resp.Status)
+					ctx.Logf("resp %v", resp.Status)
 				}
 				resp = proxy.filterResponse(resp, ctx)
 				if err := resp.Write(rawClientTls); err != nil {
-					ctx.Warnf("Cannot write TLS response from mitm'd client %v",err)
+					ctx.Warnf("Cannot write TLS response from mitm'd client %v", err)
 					return
 				}
 			}

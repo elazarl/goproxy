@@ -1,4 +1,3 @@
-
 /*
 Package goproxy provides a customizable HTTP proxy,
 supporting hijacking HTTPS connection.

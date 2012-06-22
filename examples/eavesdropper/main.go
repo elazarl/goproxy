@@ -3,8 +3,8 @@ package main
 import (
 	"github.com/elazarl/goproxy"
 	"log"
-	"regexp"
 	"net/http"
+	"regexp"
 )
 
 func main() {

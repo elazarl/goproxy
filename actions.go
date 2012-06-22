@@ -8,15 +8,15 @@ import "net/http"
 // skip sending any requests, and will simply return the response `resp`
 // to the client.
 type ReqHandler interface {
-	Handle(req *http.Request, ctx *ProxyCtx) (*http.Request,*http.Response)
+	Handle(req *http.Request, ctx *ProxyCtx) (*http.Request, *http.Response)
 }
 
 // A wrapper that would convert a function to a ReqHandler interface type
-type FuncReqHandler func(req *http.Request, ctx *ProxyCtx) (*http.Request,*http.Response)
+type FuncReqHandler func(req *http.Request, ctx *ProxyCtx) (*http.Request, *http.Response)
 
 // FuncReqHandler.Handle(req,ctx) <=> FuncReqHandler(req,ctx)
-func (f FuncReqHandler) Handle(req *http.Request, ctx *ProxyCtx) (*http.Request,*http.Response) {
-	return f(req,ctx)
+func (f FuncReqHandler) Handle(req *http.Request, ctx *ProxyCtx) (*http.Request, *http.Response) {
+	return f(req, ctx)
 }
 
 // after the proxy have sent the request to the destination server, it will

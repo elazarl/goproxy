@@ -60,12 +60,12 @@ func UrlHasPrefix(prefix string) ReqConditionFunc {
 // any host, and requests of the form 'GET foo'.
 func UrlIs(urls ...string) ReqConditionFunc {
 	urlSet := make(map[string]bool)
-	for _,u := range urls {
+	for _, u := range urls {
 		urlSet[u] = true
 	}
 	return func(req *http.Request, ctx *ProxyCtx) bool {
-		_,pathOk    := urlSet[req.URL.Path]
-		_,hostAndOk := urlSet[req.URL.Host+req.URL.Path]
+		_, pathOk := urlSet[req.URL.Path]
+		_, hostAndOk := urlSet[req.URL.Host+req.URL.Path]
 		return pathOk || hostAndOk
 	}
 }
@@ -82,20 +82,22 @@ func ReqHostMatches(regexps ...*regexp.Regexp) ReqConditionFunc {
 		return false
 	}
 }
+
 // Returns a ReqCondition, testing whether the host to which the request is directed to equal
 // to one of the given strings
 func ReqHostIs(hosts ...string) ReqConditionFunc {
 	hostSet := make(map[string]bool)
-	for _,h := range hosts {
+	for _, h := range hosts {
 		hostSet[h] = true
 	}
 	return func(req *http.Request, ctx *ProxyCtx) bool {
-		_,ok    := hostSet[req.URL.Host]
+		_, ok := hostSet[req.URL.Host]
 		return ok
 	}
 }
 
 var localHostIpv4 = regexp.MustCompile(`127\.0\.0\.\d+`)
+
 // Checks whether the destination host is explicitly local host (buggy, there can be IPv6 addresses it doesn't catch)
 var IsLocalHost ReqConditionFunc = func(req *http.Request, ctx *ProxyCtx) bool {
 	return req.URL.Host == "::1" ||
@@ -166,10 +168,9 @@ type ReqProxyConds struct {
 }
 
 // equivalent to proxy.OnRequest().Do(FuncReqHandler(f))
-func (pcond *ReqProxyConds) DoFunc(f func(req *http.Request, ctx *ProxyCtx) (*http.Request,*http.Response)) {
+func (pcond *ReqProxyConds) DoFunc(f func(req *http.Request, ctx *ProxyCtx) (*http.Request, *http.Response)) {
 	pcond.Do(FuncReqHandler(f))
 }
-
 
 // Will register the ReqHandler on the proxy, the ReqHandler will handle the HTTP request if all the conditions
 // aggregated in the ReqProxyConds are met. Typical usage:
@@ -179,13 +180,13 @@ func (pcond *ReqProxyConds) DoFunc(f func(req *http.Request, ctx *ProxyCtx) (*ht
 //	// if they are, will call handler.Handle(req,ctx)
 func (pcond *ReqProxyConds) Do(h ReqHandler) {
 	pcond.proxy.reqHandlers = append(pcond.proxy.reqHandlers,
-		FuncReqHandler(func(r *http.Request, ctx *ProxyCtx) (*http.Request,*http.Response) {
+		FuncReqHandler(func(r *http.Request, ctx *ProxyCtx) (*http.Request, *http.Response) {
 			for _, cond := range pcond.reqConds {
 				if !cond.HandleReq(r, ctx) {
-					return r,nil
+					return r, nil
 				}
 			}
-			return h.Handle(r,ctx)
+			return h.Handle(r, ctx)
 		}))
 }
 
@@ -202,14 +203,15 @@ func (pcond *ReqProxyConds) Do(h ReqHandler) {
 func (pcond *ReqProxyConds) HandleConnect(h HttpsHandler) {
 	pcond.proxy.httpsHandlers = append(pcond.proxy.httpsHandlers,
 		FuncHttpsHandler(func(host string, ctx *ProxyCtx) *ConnectAction {
-			for _,cond := range pcond.reqConds {
-				if cond.HandleReq(ctx.Req,ctx) {
-					return h.HandleConnect(host,ctx)
+			for _, cond := range pcond.reqConds {
+				if cond.HandleReq(ctx.Req, ctx) {
+					return h.HandleConnect(host, ctx)
 				}
 			}
 			return OkConnect
 		}))
 }
+
 // See HandleConnect, for example, accepting CONNECT request if they contain a password in header
 //	io.WriteString(h,password)
 //	passHash := h.Sum(nil)
@@ -221,7 +223,7 @@ func (pcond *ReqProxyConds) HandleConnect(h HttpsHandler) {
 //		}
 //		return RejectConnect
 //	})
-func (pcond *ReqProxyConds) HandleConnectFunc(f func(host string, ctx *ProxyCtx)*ConnectAction) {
+func (pcond *ReqProxyConds) HandleConnectFunc(f func(host string, ctx *ProxyCtx) *ConnectAction) {
 	pcond.HandleConnect(FuncHttpsHandler(f))
 }
 
@@ -291,17 +293,16 @@ var AlwaysReject FuncHttpsHandler = func(host string, ctx *ProxyCtx) *ConnectAct
 // HandleBytes will return a RespHandler that read the entire body of the request
 // to a byte array in memory, would run the user supplied f function on the byte arra,
 // and will replace the body of the original response with the resulting byte array.
-func HandleBytes(f func(b []byte, ctx *ProxyCtx)[]byte) RespHandler {
+func HandleBytes(f func(b []byte, ctx *ProxyCtx) []byte) RespHandler {
 	return FuncRespHandler(func(resp *http.Response, ctx *ProxyCtx) *http.Response {
-		b,err := ioutil.ReadAll(resp.Body)
+		b, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			ctx.Warnf("Cannot read response %s",err)
+			ctx.Warnf("Cannot read response %s", err)
 			return resp
 		}
 		resp.Body.Close()
 
-		resp.Body = ioutil.NopCloser(bytes.NewBuffer(f(b,ctx)))
+		resp.Body = ioutil.NopCloser(bytes.NewBuffer(f(b, ctx)))
 		return resp
 	})
 }
-

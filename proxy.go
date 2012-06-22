@@ -13,7 +13,7 @@ import (
 // The basic proxy type. Implements http.Handler.
 type ProxyHttpServer struct {
 	// setting Verbose to true will log information on each request sent to the proxy
-	Verbose       bool
+	Verbose bool
 	// 
 	Logger        *log.Logger
 	reqHandlers   []ReqHandler
@@ -44,18 +44,17 @@ func copyHeaders(dst, src http.Header) {
 }
 
 func isEof(r *bufio.Reader) bool {
-	_,err := r.Peek(1)
+	_, err := r.Peek(1)
 	if err == io.EOF {
 		return true
 	}
 	return false
 }
 
-
-func (proxy *ProxyHttpServer) filterRequest(r *http.Request, ctx *ProxyCtx) (req *http.Request,resp *http.Response) {
+func (proxy *ProxyHttpServer) filterRequest(r *http.Request, ctx *ProxyCtx) (req *http.Request, resp *http.Response) {
 	req = r
 	for _, h := range proxy.reqHandlers {
-		req,resp = h.Handle(r,ctx)
+		req, resp = h.Handle(r, ctx)
 	}
 	return
 }
@@ -74,15 +73,15 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	if r.Method == "CONNECT" {
 		proxy.handleHttps(w, r)
 	} else {
-		ctx := &ProxyCtx{Req:r, sess:atomic.AddInt32(&proxy.sess,1), proxy: proxy}
+		ctx := &ProxyCtx{Req: r, sess: atomic.AddInt32(&proxy.sess, 1), proxy: proxy}
 
 		var err error
-		ctx.Logf("Got request %v %v",r.Method,r.URL.String())
-		r,resp := proxy.filterRequest(r,ctx)
+		ctx.Logf("Got request %v %v", r.Method, r.URL.String())
+		r, resp := proxy.filterRequest(r, ctx)
 
 		if resp == nil {
 			r.RequestURI = "" // this must be reset when serving a request with the client
-			ctx.Logf("Sending request %v %v",r.Method,r.URL.String())
+			ctx.Logf("Sending request %v %v", r.Method, r.URL.String())
 			// If no Accept-Encoding header exists, Transport will add the headers it can accept
 			// and would wrap the response body with the relevant reader.
 			r.Header.Del("Accept-Encoding")
@@ -91,22 +90,22 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 				ctx.Warnf("error read response %v %v:", r.URL.Host, err.Error())
 				return
 			}
-			ctx.Logf("Recieved response %v",resp.Status)
+			ctx.Logf("Recieved response %v", resp.Status)
 		}
 		resp = proxy.filterResponse(resp, ctx)
 
 		// http.ResponseWriter will take care of filling the correct response length
 		// Setting it now, might impose wrong value, contradicting the actual new
 		// body the user returned.
-		ctx.Logf("Copying response to client %v [%d]",resp.Status,resp.StatusCode)
+		ctx.Logf("Copying response to client %v [%d]", resp.Status, resp.StatusCode)
 		resp.Header.Del("Content-Length")
 		copyHeaders(w.Header(), resp.Header)
 		w.WriteHeader(resp.StatusCode)
-		nr,err := io.Copy(w, resp.Body)
+		nr, err := io.Copy(w, resp.Body)
 		if err := resp.Body.Close(); err != nil {
-			ctx.Warnf("Can't close response body %v",err)
+			ctx.Warnf("Can't close response body %v", err)
 		}
-		ctx.Logf("Copied %v bytes to client error=%v",nr,err)
+		ctx.Logf("Copied %v bytes to client error=%v", nr, err)
 	}
 }
 
@@ -117,7 +116,6 @@ func NewProxyHttpServer() *ProxyHttpServer {
 		reqHandlers:   []ReqHandler{},
 		respHandlers:  []RespHandler{},
 		httpsHandlers: []HttpsHandler{},
-		tr:            &http.Transport{TLSClientConfig:tlsClientSkipVerify},
+		tr:            &http.Transport{TLSClientConfig: tlsClientSkipVerify},
 	}
 }
-
