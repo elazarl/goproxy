@@ -8,7 +8,6 @@ import (
 	"github.com/elazarl/goproxy"
 	"github.com/elazarl/goproxy/ext/image"
 	"image"
-	"image/png"
 	"io"
 	"io/ioutil"
 	"net"
@@ -19,10 +18,6 @@ import (
 	"strings"
 	"testing"
 )
-
-var _ = bufio.ErrBufferFull
-var _ = base64.StdEncoding
-var _ = net.FlagUp
 
 var acceptAllCerts = &tls.Config{InsecureSkipVerify: true}
 
@@ -243,8 +238,6 @@ func panicOnErr(err error, msg string) {
 	}
 }
 
-var _ png.FormatError
-
 func compareImage(eImg, aImg image.Image, t *testing.T) {
 	if eImg.Bounds().Dx() != aImg.Bounds().Dx() || eImg.Bounds().Dy() != aImg.Bounds().Dy() {
 		t.Error("image sizes different")
@@ -264,7 +257,6 @@ func compareImage(eImg, aImg image.Image, t *testing.T) {
 
 func TestConstantImageHandler(t *testing.T) {
 	client, proxy, l := oneShotProxy(t)
-	var _ = client
 	defer l.Close()
 
 	//panda := getImage("panda.png", t)
@@ -289,7 +281,6 @@ func TestConstantImageHandler(t *testing.T) {
 
 func TestImageHandler(t *testing.T) {
 	client, proxy, l := oneShotProxy(t)
-	var _ = client
 	defer l.Close()
 
 	football := getImage("test_data/football.png", t)
@@ -326,7 +317,6 @@ func TestImageHandler(t *testing.T) {
 
 func TestChangeResp(t *testing.T) {
 	client, proxy, l := oneShotProxy(t)
-	var _ = client
 	defer l.Close()
 
 	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
@@ -377,7 +367,6 @@ func getCert(c *tls.Conn, t *testing.T) []byte {
 
 func TestSimpleMitm(t *testing.T) {
 	client, proxy, l := oneShotProxy(t)
-	var _ = l
 	defer l.Close()
 
 	proxy.OnRequest(goproxy.ReqHostIs(https.Listener.Addr().String())).HandleConnect(goproxy.AlwaysMitm)
@@ -420,7 +409,6 @@ func TestSimpleMitm(t *testing.T) {
 
 func TestMitmIsFiltered(t *testing.T) {
 	client, proxy, l := oneShotProxy(t)
-	var _ = l
 	defer l.Close()
 
 	//proxy.Verbose = true
@@ -435,6 +423,22 @@ func TestMitmIsFiltered(t *testing.T) {
 
 	if resp := string(getOrFail(https.URL+"/bobo", client, t)); resp != "bobo" {
 		t.Error("But still /bobo should be bobo and not", resp)
+	}
+}
+
+func TestFirstHandlerMatches(t *testing.T) {
+	client, proxy, l := oneShotProxy(t)
+	defer l.Close()
+
+	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		return nil, goproxy.TextResponse(req, "koko")
+	})
+	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		panic("should never get here, previous response is no null")
+		return nil, nil
+	})
+	if resp := string(getOrFail(srv.URL+"/", client, t)); resp != "koko" {
+		t.Error("should return always koko and not", resp)
 	}
 }
 

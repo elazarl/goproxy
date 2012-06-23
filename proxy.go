@@ -54,6 +54,11 @@ func (proxy *ProxyHttpServer) filterRequest(r *http.Request, ctx *ProxyCtx) (req
 	req = r
 	for _, h := range proxy.reqHandlers {
 		req, resp = h.Handle(r, ctx)
+		// non-nil resp means the handler decided to skip sending the request
+		// and return canned response instead.
+		if resp != nil {
+			break
+		}
 	}
 	return
 }
