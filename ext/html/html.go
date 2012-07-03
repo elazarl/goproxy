@@ -13,18 +13,18 @@ import (
 	"strings"
 )
 
-var IsHtml goproxy.RespConditionFunc = goproxy.ContentTypeIs("text/html")
+var IsHtml goproxy.RespCondition = goproxy.ContentTypeIs("text/html")
 
-var IsCss goproxy.RespConditionFunc = goproxy.ContentTypeIs("text/css")
+var IsCss goproxy.RespCondition = goproxy.ContentTypeIs("text/css")
 
-var IsJavaScript goproxy.RespConditionFunc = goproxy.ContentTypeIs("text/javascript",
+var IsJavaScript goproxy.RespCondition = goproxy.ContentTypeIs("text/javascript",
 	"application/javascript")
 
-var IsJson goproxy.RespConditionFunc = goproxy.ContentTypeIs("text/json")
+var IsJson goproxy.RespCondition = goproxy.ContentTypeIs("text/json")
 
-var IsXml goproxy.RespConditionFunc = goproxy.ContentTypeIs("text/xml")
+var IsXml goproxy.RespCondition = goproxy.ContentTypeIs("text/xml")
 
-var IsWebRelatedText goproxy.RespConditionFunc = goproxy.ContentTypeIs("text/html",
+var IsWebRelatedText goproxy.RespCondition = goproxy.ContentTypeIs("text/html",
 	"text/css",
 	"text/javascript", "application/javascript",
 	"text/xml",

@@ -11,13 +11,13 @@ import (
 // ReqCondition.HandleReq will decide whether or not to use the ReqHandler on an HTTP request
 // before sending it to the remote server
 type ReqCondition interface {
+	RespCondition
 	HandleReq(req *http.Request, ctx *ProxyCtx) bool
 }
 
 // ReqCondition.HandleReq will decide whether or not to use the RespHandler on an HTTP response
 // before sending it to the proxy client
 type RespCondition interface {
-	ReqCondition
 	HandleResp(resp *http.Response, ctx *ProxyCtx) bool
 }
 
@@ -33,9 +33,8 @@ func (c ReqConditionFunc) HandleReq(req *http.Request, ctx *ProxyCtx) bool {
 
 // RespConditionFunc cannot test requests. It only satisfies ReqCondition interface so that
 // RespCondition and ReqCondition will be of the same type.
-func (c RespConditionFunc) HandleReq(req *http.Request, ctx *ProxyCtx) bool {
-	panic("RespCondition should never handle request, " +
-		"it is of the same type just to have poor man's algebraid data types")
+func (c ReqConditionFunc) HandleResp(resp *http.Response, ctx *ProxyCtx) bool {
+	return c(ctx.Req, ctx)
 }
 
 func (c RespConditionFunc) HandleResp(resp *http.Response, ctx *ProxyCtx) bool {
@@ -124,10 +123,10 @@ func DstHostIs(host string) ReqConditionFunc {
 }
 
 // SrcIpIs returns a ReqCondtion testing wether the source IP of the request is the given string
-func SrcIpIs(ip string) ReqConditionFunc {
-	return func(req *http.Request, ctx *ProxyCtx) bool {
+func SrcIpIs(ip string) ReqCondition {
+	return ReqConditionFunc(func(req *http.Request, ctx *ProxyCtx) bool {
 		return strings.HasPrefix(req.RemoteAddr, ip+":")
-	}
+	})
 }
 
 // Not returns a ReqCondtion negating the given ReqCondition
@@ -139,9 +138,9 @@ func Not(r ReqCondition) ReqConditionFunc {
 
 // ContentTypeIs returns a RespCondition testing whether the HTTP response has Content-Type header equal
 // to one of the given strings.
-func ContentTypeIs(typ string, types ...string) RespConditionFunc {
+func ContentTypeIs(typ string, types ...string) RespCondition {
 	types = append(types, typ)
-	return func(resp *http.Response, ctx *ProxyCtx) bool {
+	return RespConditionFunc(func(resp *http.Response, ctx *ProxyCtx) bool {
 		contentType := resp.Header.Get("Content-Type")
 		for _, typ := range types {
 			if contentType == typ || strings.HasPrefix(contentType, typ+";") {
@@ -149,7 +148,7 @@ func ContentTypeIs(typ string, types ...string) RespConditionFunc {
 			}
 		}
 		return false
-	}
+	})
 }
 
 // ProxyHttpServer.OnRequest Will return a temporary ReqProxyConds struct, aggregating the given condtions.
@@ -267,17 +266,8 @@ func (pcond *ProxyConds) Do(h RespHandler) {
 // OnResponse is used when adding a response-filter to the HTTP proxy, usual pattern is
 //	proxy.OnResponse(cond1,cond2).Do(handler) // handler.Handle(resp,ctx) will be used
 //				// if cond1.HandleResp(resp) && cond2.HandleResp(resp)
-func (proxy *ProxyHttpServer) OnResponse(conds ...ReqCondition) *ProxyConds {
-	pconds := &ProxyConds{proxy, make([]ReqCondition, 0), make([]RespCondition, 0)}
-	for _, cond := range conds {
-		switch cond := cond.(type) {
-		case RespCondition:
-			pconds.respCond = append(pconds.respCond, cond)
-		case ReqCondition:
-			pconds.reqConds = append(pconds.reqConds, cond)
-		}
-	}
-	return pconds
+func (proxy *ProxyHttpServer) OnResponse(conds ...RespCondition) *ProxyConds {
+	return &ProxyConds{proxy, make([]ReqCondition, 0), conds}
 }
 
 // AlwaysMitm is a HttpsHandler that always eavesdrop https connections, for example to
