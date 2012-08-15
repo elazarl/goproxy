@@ -90,7 +90,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			// If no Accept-Encoding header exists, Transport will add the headers it can accept
 			// and would wrap the response body with the relevant reader.
 			r.Header.Del("Accept-Encoding")
-			resp, err = proxy.tr.RoundTrip(r)
+			ctx.roundTrip, resp, err = proxy.tr.DetailedRoundTrip(r)
 			if err != nil {
 				ctx.Warnf("error read response %v %v:", r.URL.Host, err.Error())
 				return
