@@ -8,6 +8,7 @@ import (
 	"os"
 	"regexp"
 	"sync/atomic"
+	"github.com/elazarl/goproxy/transport"
 )
 
 // The basic proxy type. Implements http.Handler.
@@ -19,7 +20,7 @@ type ProxyHttpServer struct {
 	respHandlers  []RespHandler
 	httpsHandlers []HttpsHandler
 	sess          int32
-	tr            *http.Transport
+	tr            *transport.Transport
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
@@ -120,6 +121,6 @@ func NewProxyHttpServer() *ProxyHttpServer {
 		reqHandlers:   []ReqHandler{},
 		respHandlers:  []RespHandler{},
 		httpsHandlers: []HttpsHandler{},
-		tr:            &http.Transport{TLSClientConfig: tlsClientSkipVerify},
+		tr:            &transport.Transport{TLSClientConfig: tlsClientSkipVerify},
 	}
 }
