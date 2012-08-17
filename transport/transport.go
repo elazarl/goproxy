@@ -125,7 +125,7 @@ func (tr *transportRequest) extraHeaders() http.Header {
 
 type RoundTripDetails struct {
 	Host string
-	Ip net.IP
+	TCPAddr *net.TCPAddr
 	IsProxy bool
 }
 
@@ -305,14 +305,12 @@ func (t *Transport) getIdleConn(cm *connectMethod) (pconn *persistConn) {
 	return
 }
 
-func (t *Transport) dial(network, addr string) (c net.Conn, raddr string, ip net.IP, err error) {
+func (t *Transport) dial(network, addr string) (c net.Conn, raddr string, ip *net.TCPAddr, err error) {
 	if t.Dial != nil {
-		var ipaddr *net.IPAddr
-		ipaddr, err = net.ResolveIPAddr("tcp", addr)
+		ip, err = net.ResolveTCPAddr("tcp", addr)
 		if err!=nil {
 			return
 		}
-		ip = ipaddr.IP
 		c, err = t.Dial(network, addr)
 		raddr = addr
 		return
@@ -323,7 +321,7 @@ func (t *Transport) dial(network, addr string) (c net.Conn, raddr string, ip net
 	}
 	c, err = net.DialTCP("tcp", nil, addri)
 	raddr = addr
-	ip = addri.IP
+	ip = addri
 	return
 }
 
@@ -525,7 +523,7 @@ type persistConn struct {
 	broken               bool // an error has happened on this connection; marked broken so it's not reused.
 
 	host string
-	ip net.IP
+	ip *net.TCPAddr
 }
 
 func (pc *persistConn) isBroken() bool {

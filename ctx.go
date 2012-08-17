@@ -13,7 +13,7 @@ type ProxyCtx struct {
 	Req *http.Request
 	// Will contain the remote server's response (if available. nil if the request wasn't send yet)
 	Resp  *http.Response
-	roundTrip *transport.RoundTripDetails
+	RoundTrip *transport.RoundTripDetails
 	sess  int32
 	proxy *ProxyHttpServer
 }
