@@ -92,8 +92,11 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			r.Header.Del("Accept-Encoding")
 			ctx.RoundTrip, resp, err = proxy.tr.DetailedRoundTrip(r)
 			if err != nil {
-				ctx.Warnf("error read response %v %v:", r.URL.Host, err.Error())
-				return
+				resp = proxy.filterResponse(resp, ctx)
+				if resp==nil {
+					ctx.Logf("error read response %v %v:", r.URL.Host, err.Error())
+					return
+				}
 			}
 			ctx.Logf("Recieved response %v", resp.Status)
 		}

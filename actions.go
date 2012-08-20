@@ -22,6 +22,7 @@ func (f FuncReqHandler) Handle(req *http.Request, ctx *ProxyCtx) (*http.Request,
 // after the proxy have sent the request to the destination server, it will
 // "filter" the response through the RespHandlers it has.
 // The proxy server will send to the client the response returned by the RespHandler.
+// In case of error, resp will be nil, and ctx.RoundTrip.Error will contain the error
 type RespHandler interface {
 	Handle(resp *http.Response, ctx *ProxyCtx) *http.Response
 }
