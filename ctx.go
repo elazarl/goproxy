@@ -12,13 +12,15 @@ type ProxyCtx struct {
 	// Will contain the client request from the proxy
 	Req *http.Request
 	// Will contain the remote server's response (if available. nil if the request wasn't send yet)
-	Resp  *http.Response
+	Resp      *http.Response
 	RoundTrip *transport.RoundTripDetails
+	// will contain the recent error that occured while trying to send receive or parse traffic
+	Error error
 	// A handle for the user to keep data in the context, from the call of ReqHandler to the
 	// call of RespHandler
 	UserData interface{}
-	sess  int32
-	proxy *ProxyHttpServer
+	sess     int32
+	proxy    *ProxyHttpServer
 }
 
 func (ctx *ProxyCtx) printf(msg string, argv ...interface{}) {
