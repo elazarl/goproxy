@@ -14,6 +14,9 @@ type ProxyCtx struct {
 	// Will contain the remote server's response (if available. nil if the request wasn't send yet)
 	Resp  *http.Response
 	RoundTrip *transport.RoundTripDetails
+	// A handle for the user to keep data in the context, from the call of ReqHandler to the
+	// call of RespHandler
+	UserData interface{}
 	sess  int32
 	proxy *ProxyHttpServer
 }
