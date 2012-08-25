@@ -23,16 +23,23 @@ type RegretOnceBuffer struct {
 type RegretOnceBufferCloser struct {
 	RegretOnceBuffer
 	c io.Closer
+	closed bool
 }
 
-// Closes the underlying readCloser
+// Closes the underlying readCloser, if we've already closed the
+// underlying readCloser, and issued a Regret, we will not close it
+// again.
 func (rbc *RegretOnceBufferCloser) Close() error {
+	if rbc.closed {
+		return nil
+	}
+	rbc.closed = true
 	return rbc.c.Close()
 }
 
 // initialize a RegretOnceBufferCloser with underlying readCloser rc
 func NewRegretOnceBufferCloser(rc io.ReadCloser) *RegretOnceBufferCloser {
-	return &RegretOnceBufferCloser{*NewRegretOnceBuffer(rc), rc}
+	return &RegretOnceBufferCloser{*NewRegretOnceBuffer(rc), rc, false}
 }
 
 // The next read from the RegretOnceBuffer will be as if the underlying reader

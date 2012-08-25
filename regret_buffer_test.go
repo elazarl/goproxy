@@ -2,6 +2,7 @@ package goproxy
 
 import (
 	"bytes"
+	"io"
 	"io/ioutil"
 	"testing"
 )
@@ -73,6 +74,7 @@ func TestRegretBufferRegretBeforeRead(t *testing.T) {
 		t.Error("Uncommited read is gone", string(s), len(string(s)), "expected", "678", len("678"))
 	}
 }
+
 func TestRegretBufferFullRead(t *testing.T) {
 	buf := new(bytes.Buffer)
 	mb := NewRegretOnceBuffer(buf)
@@ -107,4 +109,38 @@ func TestRegretBufferRegretTwice(t *testing.T) {
 	if !hasPaniced {
 		t.Error("Regretted twice with no panic")
 	}
+}
+
+type CloseCounter struct {
+	r io.Reader
+	closed int
+}
+
+func (cc *CloseCounter) Read(b []byte) (int, error) {
+	return cc.r.Read(b)
+}
+
+func (cc *CloseCounter) Close() error {
+	cc.closed++
+	return nil
+}
+
+func TestRegretBufferCloserRegretsClose(t *testing.T) {
+	buf := new(bytes.Buffer)
+	cc := &CloseCounter{buf, 0}
+	mb := NewRegretOnceBufferCloser(cc)
+	word := "12345678"
+	buf.WriteString(word)
+
+	mb.Read([]byte{0})
+	mb.Close()
+	if cc.closed!=1 {
+		t.Error("RegretOnceBufferCloser ignores Close")
+	}
+	mb.Regret()
+	mb.Close()
+	if cc.closed!=1 {
+		t.Error("RegretOnceBufferCloser does not ignore Close after regret")
+	}
+	// TODO(elazar): return an error if client issues Close more than once after regret
 }
