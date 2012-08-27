@@ -2,6 +2,7 @@ package goproxy
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"testing"
@@ -123,6 +124,34 @@ func (cc *CloseCounter) Read(b []byte) (int, error) {
 func (cc *CloseCounter) Close() error {
 	cc.closed++
 	return nil
+}
+
+func assert(t *testing.T, b bool, msg string) {
+	if !b {
+		t.Errorf("Assertion Error: %s", msg)
+	}
+}
+
+func TestRegretBufferCloserEOF(t *testing.T) {
+	buf := new(bytes.Buffer)
+	cc := &CloseCounter{buf, 0}
+	mb := NewRegretOnceBufferCloser(cc)
+	word := "123"
+	buf.WriteString(word)
+
+	n, err := mb.Read([]byte{0,1})
+	assert(t, n==2 && err==nil, fmt.Sprint("unregreted read should work ",n, err))
+	mb.Close()
+	mb.Regret()
+
+	b := make([]byte, 10)
+	n, err = mb.Read(b)
+	assert(t, bytes.Equal(b[:2], []byte{'1', '2'}),
+		"read after regret should return all data until close")
+	assert(t, err==nil, fmt.Sprint("valid read return non nil", err))
+	n, err = mb.Read(b[2:])
+	assert(t, n==0, "reading after close should be zero length")
+	assert(t, err==io.EOF, fmt.Sprint("reading after close should be EOF ", err))
 }
 
 func TestRegretBufferCloserRegretsClose(t *testing.T) {
