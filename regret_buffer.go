@@ -22,7 +22,7 @@ type RegretOnceBuffer struct {
 // Same as RegretOnceBuffer, but allows closing the underlying reader
 type RegretOnceBufferCloser struct {
 	RegretOnceBuffer
-	c io.Closer
+	c      io.Closer
 	closed bool
 }
 
@@ -40,13 +40,13 @@ func (rbc *RegretOnceBufferCloser) Close() error {
 func (rbc *RegretOnceBufferCloser) Read(p []byte) (n int, err error) {
 	if rbc.regret {
 		n, err = rbc.buf.Read(p)
-		if err != nil {
+		if err != nil && err != io.EOF {
 			return
 		}
-	}
-	// don't read stream if already closed
-	if rbc.regret && rbc.closed {
-		return
+		// don't read stream if already closed
+		if rbc.closed {
+			return
+		}
 	}
 
 	en, err := rbc.r.Read(p[n:])
@@ -92,7 +92,7 @@ func NewRegretOnceBuffer(r io.Reader) *RegretOnceBuffer {
 func (rb *RegretOnceBuffer) Read(p []byte) (n int, err error) {
 	if rb.regret {
 		n, err = rb.buf.Read(p)
-		if err != nil {
+		if err != nil && err != io.EOF {
 			return
 		}
 	}

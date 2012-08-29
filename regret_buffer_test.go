@@ -34,9 +34,9 @@ func TestRegretBufferEmptyRead(t *testing.T) {
 	mb.Read(zero)
 	mb.Regret()
 
-	s, _ := ioutil.ReadAll(mb)
+	s, err := ioutil.ReadAll(mb)
 	if string(s) != word {
-		t.Error("Uncommited read is gone", string(s), "expected", word)
+		t.Error("Uncommited read is gone, actual:", string(s), "expected:", word, "err:", err)
 	}
 }
 
@@ -70,9 +70,9 @@ func TestRegretBufferRegretBeforeRead(t *testing.T) {
 	mb.Regret()
 	mb.Read(five)
 
-	s, _ := ioutil.ReadAll(mb)
+	s, err := ioutil.ReadAll(mb)
 	if string(s) != "678" {
-		t.Error("Uncommited read is gone", string(s), len(string(s)), "expected", "678", len("678"))
+		t.Error("Uncommited read is gone", string(s), len(string(s)), "expected", "678", len("678"), "err:", err)
 	}
 }
 
@@ -113,7 +113,7 @@ func TestRegretBufferRegretTwice(t *testing.T) {
 }
 
 type CloseCounter struct {
-	r io.Reader
+	r      io.Reader
 	closed int
 }
 
@@ -139,8 +139,8 @@ func TestRegretBufferCloserEOF(t *testing.T) {
 	word := "123"
 	buf.WriteString(word)
 
-	n, err := mb.Read([]byte{0,1})
-	assert(t, n==2 && err==nil, fmt.Sprint("unregreted read should work ",n, err))
+	n, err := mb.Read([]byte{0, 1})
+	assert(t, n == 2 && err == nil, fmt.Sprint("unregreted read should work ", n, err))
 	mb.Close()
 	mb.Regret()
 
@@ -148,10 +148,10 @@ func TestRegretBufferCloserEOF(t *testing.T) {
 	n, err = mb.Read(b)
 	assert(t, bytes.Equal(b[:2], []byte{'1', '2'}),
 		"read after regret should return all data until close")
-	assert(t, err==nil, fmt.Sprint("valid read return non nil", err))
+	assert(t, err == nil, fmt.Sprint("valid read return non nil", err))
 	n, err = mb.Read(b[2:])
-	assert(t, n==0, "reading after close should be zero length")
-	assert(t, err==io.EOF, fmt.Sprint("reading after close should be EOF ", err))
+	assert(t, n == 0, "reading after close should be zero length")
+	assert(t, err == io.EOF, fmt.Sprint("reading after close should be EOF ", err))
 }
 
 func TestRegretBufferCloserRegretsClose(t *testing.T) {
@@ -163,12 +163,12 @@ func TestRegretBufferCloserRegretsClose(t *testing.T) {
 
 	mb.Read([]byte{0})
 	mb.Close()
-	if cc.closed!=1 {
+	if cc.closed != 1 {
 		t.Error("RegretOnceBufferCloser ignores Close")
 	}
 	mb.Regret()
 	mb.Close()
-	if cc.closed!=1 {
+	if cc.closed != 1 {
 		t.Error("RegretOnceBufferCloser does not ignore Close after regret")
 	}
 	// TODO(elazar): return an error if client issues Close more than once after regret
