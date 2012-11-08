@@ -82,3 +82,10 @@ return a response. If the time is between 8:00am and 17:00pm, we will neglect th
 return a precanned text response saying "do not waste your time".
 
 See additional examples in the examples directory.
+
+# License
+
+I put the software temporarily under the Go-compatible BSD license,
+if this prevents someone from using the software, do let mee know and I'll consider changing it.
+
+At any rate, user feedback is very important for me, so I'll be delighted to know if you're using this package.
