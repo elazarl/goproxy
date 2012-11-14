@@ -99,7 +99,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 					return
 				}
 			}
-			ctx.Logf("Recieved response %v", resp.Status)
+			ctx.Logf("Received response %v", resp.Status)
 		}
 		resp = proxy.filterResponse(resp, ctx)
 
