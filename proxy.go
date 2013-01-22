@@ -19,7 +19,7 @@ type ProxyHttpServer struct {
 	reqHandlers   []ReqHandler
 	respHandlers  []RespHandler
 	httpsHandlers []HttpsHandler
-	sess          int32
+	sess          int64
 	tr            *transport.Transport
 }
 
@@ -78,7 +78,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	if r.Method == "CONNECT" {
 		proxy.handleHttps(w, r)
 	} else {
-		ctx := &ProxyCtx{Req: r, sess: atomic.AddInt32(&proxy.sess, 1), proxy: proxy}
+		ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy}
 
 		var err error
 		ctx.Logf("Got request %v %v", r.Method, r.URL.String())

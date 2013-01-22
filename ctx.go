@@ -19,12 +19,13 @@ type ProxyCtx struct {
 	// A handle for the user to keep data in the context, from the call of ReqHandler to the
 	// call of RespHandler
 	UserData interface{}
-	sess     int32
+	// Will connect a request to a response
+	Session  int64
 	proxy    *ProxyHttpServer
 }
 
 func (ctx *ProxyCtx) printf(msg string, argv ...interface{}) {
-	ctx.proxy.Logger.Printf("[%03d] "+msg+"\n", append([]interface{}{ctx.sess & 0xFF}, argv...)...)
+	ctx.proxy.Logger.Printf("[%03d] "+msg+"\n", append([]interface{}{ctx.Session & 0xFF}, argv...)...)
 }
 
 // Logf prints a message to the proxy's log. Should be used in a ProxyHttpServer's filter

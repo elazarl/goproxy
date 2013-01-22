@@ -29,7 +29,7 @@ type ConnectAction struct {
 }
 
 func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request) {
-	ctx := &ProxyCtx{Req: r, sess: atomic.AddInt32(&proxy.sess, 1), proxy: proxy}
+	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy}
 
 	hij, ok := w.(http.Hijacker)
 	if !ok {
