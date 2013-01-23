@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/elazarl/goproxy"
+	"net"
+	"os/signal"
 )
 
 type FileStream struct {
@@ -101,8 +103,9 @@ func (m *Meta) WriteTo(w io.Writer) (nr int64, err error) {
 }
 
 type HttpLogger struct {
-	path string
-	c    chan *Meta
+	path  string
+	c     chan *Meta
+	errch chan error
 }
 
 func NewLogger(basepath string) (*HttpLogger, error) {
@@ -110,13 +113,14 @@ func NewLogger(basepath string) (*HttpLogger, error) {
 	if err != nil {
 		return nil, err
 	}
-	logger := &HttpLogger{basepath, make(chan *Meta)}
+	logger := &HttpLogger{basepath, make(chan *Meta), make(chan error)}
 	go func() {
 		for m := range logger.c {
 			if _, err := m.WriteTo(f); err != nil {
 				log.Println("Can't write meta", err)
 			}
 		}
+		logger.errch <- f.Close()
 	}()
 	return logger, nil
 }
@@ -160,6 +164,11 @@ func (logger *HttpLogger) LogReq(req *http.Request, ctx *goproxy.ProxyCtx) {
 
 func (logger *HttpLogger) LogMeta(m *Meta) {
 	logger.c <- m
+}
+
+func (logger *HttpLogger) Close() error {
+	close(logger.c)
+	return <-logger.errch
 }
 
 type TeeReadCloser struct {
@@ -209,5 +218,18 @@ func main() {
 		logger.LogResp(resp, ctx)
 		return resp
 	})
-	log.Fatal(http.ListenAndServe(*addr, proxy))
+	l, err := net.Listen("tcp", *addr)
+	if err != nil {
+		log.Fatal("listen:", err)
+	}
+	ch := make(chan os.Signal)
+	signal.Notify(ch, os.Interrupt)
+	go func() {
+		<-ch
+		logger.Close()
+		l.Close()
+		log.Println("Done")
+	}()
+	log.Println("Starting Proxy")
+	http.Serve(l, proxy)
 }
