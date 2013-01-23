@@ -80,7 +80,8 @@ func (m *Meta) WriteTo(w io.Writer) (nr int64, err error) {
 	fprintf(&nr, &err, w, "Session: %d\r\n", m.sess)
 	fprintf(&nr, &err, w, "From: %v\r\n", m.from)
 	if m.err != nil {
-		fprintf(&nr, &err, w, "Error: %v\r\n\r\n", m.err)
+		// note the empty response
+		fprintf(&nr, &err, w, "Error: %v\r\n\r\n\r\n\r\n", m.err)
 	} else if m.req != nil {
 		fprintf(&nr, &err, w, "\r\n")
 		buf, err2 := httputil.DumpRequest(m.req, false)
