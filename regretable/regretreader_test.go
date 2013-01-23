@@ -8,9 +8,9 @@ import (
 	"testing"
 )
 
-func TestRegretBuffer(t *testing.T) {
+func TestRegretableReader(t *testing.T) {
 	buf := new(bytes.Buffer)
-	mb := NewRegretOnceBuffer(buf)
+	mb := NewRegretableReader(buf)
 	word := "12345678"
 	buf.WriteString(word)
 
@@ -24,9 +24,9 @@ func TestRegretBuffer(t *testing.T) {
 	}
 }
 
-func TestRegretBufferEmptyRead(t *testing.T) {
+func TestRegretableEmptyRead(t *testing.T) {
 	buf := new(bytes.Buffer)
-	mb := NewRegretOnceBuffer(buf)
+	mb := NewRegretableReader(buf)
 	word := "12345678"
 	buf.WriteString(word)
 
@@ -40,9 +40,9 @@ func TestRegretBufferEmptyRead(t *testing.T) {
 	}
 }
 
-func TestRegretBufferAlsoEmptyRead(t *testing.T) {
+func TestRegretableAlsoEmptyRead(t *testing.T) {
 	buf := new(bytes.Buffer)
-	mb := NewRegretOnceBuffer(buf)
+	mb := NewRegretableReader(buf)
 	word := "12345678"
 	buf.WriteString(word)
 
@@ -60,9 +60,9 @@ func TestRegretBufferAlsoEmptyRead(t *testing.T) {
 	}
 }
 
-func TestRegretBufferRegretBeforeRead(t *testing.T) {
+func TestRegretableRegretBeforeRead(t *testing.T) {
 	buf := new(bytes.Buffer)
-	mb := NewRegretOnceBuffer(buf)
+	mb := NewRegretableReader(buf)
 	word := "12345678"
 	buf.WriteString(word)
 
@@ -76,9 +76,9 @@ func TestRegretBufferRegretBeforeRead(t *testing.T) {
 	}
 }
 
-func TestRegretBufferFullRead(t *testing.T) {
+func TestRegretableFullRead(t *testing.T) {
 	buf := new(bytes.Buffer)
-	mb := NewRegretOnceBuffer(buf)
+	mb := NewRegretableReader(buf)
 	word := "12345678"
 	buf.WriteString(word)
 
@@ -106,9 +106,9 @@ func assertReadAll(t *testing.T, r io.Reader) string {
 	return string(s)
 }
 
-func TestRegretBufferRegretTwice(t *testing.T) {
+func TestRegretableRegretTwice(t *testing.T) {
 	buf := new(bytes.Buffer)
-	mb := NewRegretOnceBuffer(buf)
+	mb := NewRegretableReader(buf)
 	word := "12345678"
 	buf.WriteString(word)
 
@@ -139,22 +139,22 @@ func assert(t *testing.T, b bool, msg string) {
 	}
 }
 
-func TestRegretBufferCloserRegretsClose(t *testing.T) {
+func TestRegretableCloserRegretsClose(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cc := &CloseCounter{buf, 0}
-	mb := NewRegretOnceBufferCloser(cc)
+	mb := NewRegretableReaderCloser(cc)
 	word := "12345678"
 	buf.WriteString(word)
 
 	mb.Read([]byte{0})
 	mb.Close()
 	if cc.closed != 1 {
-		t.Error("RegretOnceBufferCloser ignores Close")
+		t.Error("RegretableReaderCloser ignores Close")
 	}
 	mb.Regret()
 	mb.Close()
 	if cc.closed != 2 {
-		t.Error("RegretOnceBufferCloser does ignore Close after regret")
+		t.Error("RegretableReaderCloser does ignore Close after regret")
 	}
 	// TODO(elazar): return an error if client issues Close more than once after regret
 }
