@@ -1,8 +1,8 @@
-package goproxy
+package regretable_test
 
 import (
+	. "github.com/elazarl/goproxy/regretable"
 	"bytes"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"testing"
@@ -20,7 +20,7 @@ func TestRegretBuffer(t *testing.T) {
 
 	s, _ := ioutil.ReadAll(mb)
 	if string(s) != word {
-		t.Error("Uncommited read is gone", string(s), "expected", word)
+		t.Errorf("Uncommited read is gone, [%d,%d] actual '%v' expected '%v'\n", len(s), len(word), string(s), word)
 	}
 }
 
@@ -92,24 +92,31 @@ func TestRegretBufferFullRead(t *testing.T) {
 	}
 }
 
+func assertEqual(t *testing.T, expected, actual string) {
+	if expected!=actual {
+		t.Fatal("Expected", expected, "actual", actual)
+	}
+}
+
+func assertReadAll(t *testing.T, r io.Reader) string {
+	s, err := ioutil.ReadAll(r)
+	if err!=nil {
+		t.Fatal("error when reading", err)
+	}
+	return string(s)
+}
+
 func TestRegretBufferRegretTwice(t *testing.T) {
 	buf := new(bytes.Buffer)
 	mb := NewRegretOnceBuffer(buf)
 	word := "12345678"
 	buf.WriteString(word)
 
-	hasPaniced := false
-	defer func() {
-		if recover() != nil {
-			hasPaniced = true
-		}
-	}()
+	assertEqual(t, word, assertReadAll(t, mb))
 	mb.Regret()
+	assertEqual(t, word, assertReadAll(t, mb))
 	mb.Regret()
-
-	if !hasPaniced {
-		t.Error("Regretted twice with no panic")
-	}
+	assertEqual(t, word, assertReadAll(t, mb))
 }
 
 type CloseCounter struct {
@@ -132,28 +139,6 @@ func assert(t *testing.T, b bool, msg string) {
 	}
 }
 
-func TestRegretBufferCloserEOF(t *testing.T) {
-	buf := new(bytes.Buffer)
-	cc := &CloseCounter{buf, 0}
-	mb := NewRegretOnceBufferCloser(cc)
-	word := "123"
-	buf.WriteString(word)
-
-	n, err := mb.Read([]byte{0, 1})
-	assert(t, n == 2 && err == nil, fmt.Sprint("unregreted read should work ", n, err))
-	mb.Close()
-	mb.Regret()
-
-	b := make([]byte, 10)
-	n, err = mb.Read(b)
-	assert(t, bytes.Equal(b[:2], []byte{'1', '2'}),
-		"read after regret should return all data until close")
-	assert(t, err == nil, fmt.Sprint("valid read return non nil", err))
-	n, err = mb.Read(b[2:])
-	assert(t, n == 0, "reading after close should be zero length")
-	assert(t, err == io.EOF, fmt.Sprint("reading after close should be EOF ", err))
-}
-
 func TestRegretBufferCloserRegretsClose(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cc := &CloseCounter{buf, 0}
@@ -168,8 +153,8 @@ func TestRegretBufferCloserRegretsClose(t *testing.T) {
 	}
 	mb.Regret()
 	mb.Close()
-	if cc.closed != 1 {
-		t.Error("RegretOnceBufferCloser does not ignore Close after regret")
+	if cc.closed != 2 {
+		t.Error("RegretOnceBufferCloser does ignore Close after regret")
 	}
 	// TODO(elazar): return an error if client issues Close more than once after regret
 }

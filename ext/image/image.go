@@ -3,6 +3,7 @@ package goproxy_image
 import (
 	"bytes"
 	. "github.com/elazarl/goproxy"
+	"github.com/elazarl/goproxy/regretable"
 	"image"
 	_ "image/gif"
 	"image/jpeg"
@@ -30,7 +31,7 @@ func HandleImage(f func(img image.Image, ctx *ProxyCtx) image.Image) RespHandler
 		}
 		contentType := resp.Header.Get("Content-Type")
 
-		regret := NewRegretOnceBufferCloser(resp.Body)
+		regret := regretable.NewRegretOnceBufferCloser(resp.Body)
 		resp.Body = regret
 		img, imgType, err := image.Decode(resp.Body)
 		if err != nil {
