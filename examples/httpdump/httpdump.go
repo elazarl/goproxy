@@ -6,15 +6,16 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"os"
+	"os/signal"
 	"path"
+	"sync"
 	"time"
 
 	"github.com/elazarl/goproxy"
-	"net"
-	"os/signal"
 )
 
 type FileStream struct {
@@ -197,6 +198,34 @@ func (t *TeeReadCloser) Close() error {
 	return err1
 }
 
+type stoppableListener struct {
+	net.Listener
+	sync.WaitGroup
+}
+
+type stoppableConn struct {
+	net.Conn
+	wg *sync.WaitGroup
+}
+
+func newStoppableListener(l net.Listener) *stoppableListener {
+	return &stoppableListener{l, sync.WaitGroup{}}
+}
+
+func (sl *stoppableListener) Accept() (net.Conn, error) {
+	c, err := sl.Listener.Accept()
+	if err != nil {
+		return c, err
+	}
+	sl.Add(1)
+	return &stoppableConn{c, &sl.WaitGroup}, nil
+}
+
+func (sc *stoppableConn) Close() error {
+	sc.wg.Done()
+	return sc.Conn.Close()
+}
+
 func main() {
 	verbose := flag.Bool("v", false, "should every proxy request be logged to stdout")
 	addr := flag.String("l", ":8080", "on which address should the proxy listen")
@@ -222,14 +251,19 @@ func main() {
 	if err != nil {
 		log.Fatal("listen:", err)
 	}
+	sl := newStoppableListener(l)
 	ch := make(chan os.Signal)
 	signal.Notify(ch, os.Interrupt)
 	go func() {
 		<-ch
+		log.Println("Got SIGINT exiting")
+		sl.Add(1)
+		sl.Close()
 		logger.Close()
-		l.Close()
-		log.Println("Done")
+		sl.Done()
 	}()
 	log.Println("Starting Proxy")
-	http.Serve(l, proxy)
+	http.Serve(sl, proxy)
+	sl.Wait()
+	log.Println("All connections closed - exit")
 }
