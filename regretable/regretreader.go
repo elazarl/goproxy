@@ -37,6 +37,11 @@ func NewRegretableReaderCloser(rc io.ReadCloser) *RegretableReaderCloser {
 	return &RegretableReaderCloser{*NewRegretableReader(rc), rc}
 }
 
+// initialize a RegretableReaderCloser with underlying readCloser rc
+func NewRegretableReaderCloserSize(rc io.ReadCloser, size int) *RegretableReaderCloser {
+	return &RegretableReaderCloser{*NewRegretableReaderSize(rc, size), rc}
+}
+
 // The next read from the RegretableReader will be as if the underlying reader
 // was never read (or from the last point forget is called).
 func (rb *RegretableReader) Regret() {

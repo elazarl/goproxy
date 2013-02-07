@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"io"
 	"io/ioutil"
+	"strings"
 	"testing"
 )
 
@@ -137,6 +138,19 @@ func assert(t *testing.T, b bool, msg string) {
 	if !b {
 		t.Errorf("Assertion Error: %s", msg)
 	}
+}
+
+func TestRegretableCloserSizeRegrets(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil || !strings.Contains(r.(string), "regret") {
+			t.Error("Did not panic when regretting overread buffer:", r)
+		}
+	}()
+	buf := new(bytes.Buffer)
+	buf.WriteString("123456")
+	mb := NewRegretableReaderCloserSize(ioutil.NopCloser(buf), 3)
+	mb.Read(make([]byte, 4))
+	mb.Regret()
 }
 
 func TestRegretableCloserRegretsClose(t *testing.T) {
