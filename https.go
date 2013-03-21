@@ -40,12 +40,6 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 	if !hasPort.MatchString(host) {
 		host += ":80"
 	}
-	targetSiteCon, e := net.Dial("tcp", host)
-	if e != nil {
-		// trying to mimic the behaviour of the offending website
-		// don't answer at all
-		return
-	}
 	proxyClient, _, e := hij.Hijack()
 	if e != nil {
 		panic("Cannot hijack connection " + e.Error())
@@ -60,6 +54,12 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 	}
 	switch todo.Action {
 	case ConnectAccept:
+		targetSiteCon, e := net.Dial("tcp", host)
+		if e != nil {
+			// trying to mimic the behaviour of the offending website
+			// don't answer at all
+			return
+		}
 		ctx.Logf("Accepting CONNECT")
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 		go proxy.copyAndClose(targetSiteCon, proxyClient)
@@ -114,7 +114,6 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			ctx.Logf("Exiting on EOF")
 		}()
 	case ConnectReject:
-		targetSiteCon.Close()
 		proxyClient.Close()
 	}
 }
