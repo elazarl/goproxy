@@ -204,13 +204,13 @@ func (pcond *ReqProxyConds) Do(h ReqHandler) {
 //	proxy.OnRequest().HandleConnect(goproxy.AlwaysReject) // rejects all CONNECT requests
 func (pcond *ReqProxyConds) HandleConnect(h HttpsHandler) {
 	pcond.proxy.httpsHandlers = append(pcond.proxy.httpsHandlers,
-		FuncHttpsHandler(func(host string, ctx *ProxyCtx) *ConnectAction {
+		FuncHttpsHandler(func(host string, ctx *ProxyCtx) (*ConnectAction, string) {
 			for _, cond := range pcond.reqConds {
-				if cond.HandleReq(ctx.Req, ctx) {
-					return h.HandleConnect(host, ctx)
+				if !cond.HandleReq(ctx.Req, ctx) {
+					return OkConnect, host
 				}
 			}
-			return OkConnect
+			return h.HandleConnect(host, ctx)
 		}))
 }
 
@@ -218,15 +218,15 @@ func (pcond *ReqProxyConds) HandleConnect(h HttpsHandler) {
 // for example, accepting CONNECT request if they contain a password in header
 //	io.WriteString(h,password)
 //	passHash := h.Sum(nil)
-//	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *ProxyCtx)*ConnectAction {
+//	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *ProxyCtx) (*ConnectAction, string) {
 //		c := sha1.New()
 //		io.WriteString(c,ctx.Req.Header.Get("X-GoProxy-Auth"))
 //		if c.Sum(nil) == passHash {
-//			return OkConnect
+//			return OkConnect, host
 //		}
-//		return RejectConnect
+//		return RejectConnect, host
 //	})
-func (pcond *ReqProxyConds) HandleConnectFunc(f func(host string, ctx *ProxyCtx) *ConnectAction) {
+func (pcond *ReqProxyConds) HandleConnectFunc(f func(host string, ctx *ProxyCtx) (*ConnectAction, string)) {
 	pcond.HandleConnect(FuncHttpsHandler(f))
 }
 
@@ -273,16 +273,16 @@ func (proxy *ProxyHttpServer) OnResponse(conds ...RespCondition) *ProxyConds {
 // AlwaysMitm is a HttpsHandler that always eavesdrop https connections, for example to
 // eavesdrop all https connections to www.google.com, we can use
 //	proxy.OnRequest(goproxy.ReqHostIs("www.google.com")).HandleConnect(goproxy.AlwaysMitm)
-var AlwaysMitm FuncHttpsHandler = func(host string, ctx *ProxyCtx) *ConnectAction {
-	return MitmConnect
+var AlwaysMitm FuncHttpsHandler = func(host string, ctx *ProxyCtx) (*ConnectAction, string) {
+	return MitmConnect, host
 }
 
 // AlwaysReject is a HttpsHandler that drops any CONNECT request, for example, this code will disallow
 // connections to hosts on any other port than 443
 //	proxy.OnRequest(goproxy.Not(goproxy.ReqHostMatches(regexp.MustCompile(":443$"))).
 //		HandleConnect(goproxy.AlwaysReject)
-var AlwaysReject FuncHttpsHandler = func(host string, ctx *ProxyCtx) *ConnectAction {
-	return RejectConnect
+var AlwaysReject FuncHttpsHandler = func(host string, ctx *ProxyCtx) (*ConnectAction, string) {
+	return RejectConnect, host
 }
 
 // HandleBytes will return a RespHandler that read the entire body of the request

@@ -45,13 +45,13 @@ func (f FuncRespHandler) Handle(resp *http.Response, ctx *ProxyCtx) *http.Respon
 // through th eusual flow (request and response filtered through the ReqHanlders
 // and RespHandlers)
 type HttpsHandler interface {
-	HandleConnect(host string, ctx *ProxyCtx) *ConnectAction
+	HandleConnect(req string, ctx *ProxyCtx) (*ConnectAction, string)
 }
 
 // A wrapper that would convert a function to a HttpsHandler interface type
-type FuncHttpsHandler func(host string, ctx *ProxyCtx) *ConnectAction
+type FuncHttpsHandler func(host string, ctx *ProxyCtx) (*ConnectAction, string)
 
 // FuncHttpsHandler should implement the RespHandler interface 
-func (f FuncHttpsHandler) HandleConnect(host string, ctx *ProxyCtx) *ConnectAction {
+func (f FuncHttpsHandler) HandleConnect(host string, ctx *ProxyCtx) (*ConnectAction, string) {
 	return f(host, ctx)
 }

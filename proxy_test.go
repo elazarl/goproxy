@@ -407,6 +407,19 @@ func TestSimpleMitm(t *testing.T) {
 	}
 }
 
+func TestConnectHandler(t *testing.T) {
+	client, proxy, l := oneShotProxy(t)
+	defer l.Close()
+	althttps := httptest.NewTLSServer(ConstantHanlder("althttps"))
+	proxy.OnRequest().HandleConnectFunc(func (host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+		u, _ := url.Parse(althttps.URL)
+		return goproxy.OkConnect, u.Host
+	})
+	if resp := string(getOrFail(https.URL+"/alturl", client, t)); resp != "althttps" {
+		t.Error("Proxy should redirect CONNECT requests to local althttps server, expected 'althttps' got ", resp)
+	}
+}
+
 func TestMitmIsFiltered(t *testing.T) {
 	client, proxy, l := oneShotProxy(t)
 	defer l.Close()

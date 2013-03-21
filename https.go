@@ -36,31 +36,30 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		panic("httpserver does not support hijacking")
 	}
 
-	host := r.URL.Host
-	if !hasPort.MatchString(host) {
-		host += ":80"
-	}
 	proxyClient, _, e := hij.Hijack()
 	if e != nil {
 		panic("Cannot hijack connection " + e.Error())
 	}
 
 	ctx.Logf("Running %d CONNECT handlers", len(proxy.httpsHandlers))
-	todo := OkConnect
+	todo, host := OkConnect, r.URL.Host
 	ctx.Req = r
 	for _, h := range proxy.httpsHandlers {
-		todo = h.HandleConnect(r.Host, ctx)
-		ctx.Logf("handler: %v", todo)
+		todo, host = h.HandleConnect(host, ctx)
+		ctx.Logf("handler: %v %s", todo, host)
 	}
 	switch todo.Action {
 	case ConnectAccept:
+		if !hasPort.MatchString(host) {
+			host += ":80"
+		}
 		targetSiteCon, e := net.Dial("tcp", host)
 		if e != nil {
 			// trying to mimic the behaviour of the offending website
 			// don't answer at all
 			return
 		}
-		ctx.Logf("Accepting CONNECT")
+		ctx.Logf("Accepting CONNECT to %s", host)
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 		go proxy.copyAndClose(targetSiteCon, proxyClient)
 		go proxy.copyAndClose(proxyClient, targetSiteCon)
