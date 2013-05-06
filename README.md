@@ -1,9 +1,10 @@
-# Alpha Software
+# Beta Software
 
-This software is still in alpha state. In the sense that the API may not be stable.
+I've received a positive feedback from a few people who use goproxy in production settings.
+I believe it is good enough for usage.
 
-I plan to stabilize the base module (package goproxy) within a month or so, after
-taking user's feedback into account.
+I'll try to keep reasonable backwards compatability. In case of a major API change,
+I'll change the import path.
 
 # Introduction
 
