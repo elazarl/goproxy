@@ -115,10 +115,13 @@ func TestBasicAuth(t *testing.T) {
 
 func TestWithBrowser(t *testing.T) {
 	// an easy way to check if auth works with webserver
-	// to test, uncomment return, run with go test -run TestWithBrowser
+	// to test, run with
+	// $ go test -run TestWithBrowser -- server
 	// configure a browser to use the printed proxy address, use the proxy
 	// and exit with Ctrl-C. It will throw error if your haven't acutally used the proxy
-	return
+	if os.Args[len(os.Args)-1] != "server" {
+		return
+	}
 	proxy := goproxy.NewProxyHttpServer()
 	println("proxy localhost port 8082")
 	access := int32(0)

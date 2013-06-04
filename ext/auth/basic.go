@@ -1,32 +1,26 @@
 package auth
 
 import (
+	"bytes"
 	"encoding/base64"
 	"github.com/elazarl/goproxy"
-	"io"
+	"io/ioutil"
 	"net/http"
 	"strings"
 )
 
-type EmptyReader struct{}
-
-func (EmptyReader) Read([]byte) (int, error) {
-	return 0, io.EOF
-}
-
-func (EmptyReader) Close() error {
-	return nil
-}
+var unauthorizedMsg = []byte("407 Proxy Authentication Required")
 
 func BasicUnauthorized(req *http.Request, realm string) *http.Response {
 	// TODO(elazar): verify realm is well formed
 	return &http.Response{
-		StatusCode: 407,
-		ProtoMajor: 1,
-		ProtoMinor: 1,
-		Request:    req,
-		Header:     http.Header{"Proxy-Authenticate": []string{"Basic realm=" + realm}},
-		Body:       EmptyReader{},
+		StatusCode:    407,
+		ProtoMajor:    1,
+		ProtoMinor:    1,
+		Request:       req,
+		Header:        http.Header{"Proxy-Authenticate": []string{"Basic realm=" + realm}},
+		Body:          ioutil.NopCloser(bytes.NewBuffer(unauthorizedMsg)),
+		ContentLength: int64(len(unauthorizedMsg)),
 	}
 }
 
