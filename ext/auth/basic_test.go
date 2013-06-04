@@ -4,10 +4,14 @@ import (
 	"encoding/base64"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"os/exec"
+	"os/signal"
+	"sync/atomic"
 	"testing"
 
 	"github.com/elazarl/goproxy"
@@ -106,5 +110,34 @@ func TestBasicAuth(t *testing.T) {
 	}
 	if string(msg) != "hello" {
 		t.Errorf("Expected '%s', actual '%s'", expected, string(msg))
+	}
+}
+
+func TestWithBrowser(t *testing.T) {
+	// an easy way to check if auth works with webserver
+	// to test, uncomment return, run with go test -run TestWithBrowser
+	// configure a browser to use the printed proxy address, use the proxy
+	// and exit with Ctrl-C. It will throw error if your haven't acutally used the proxy
+	return
+	proxy := goproxy.NewProxyHttpServer()
+	println("proxy localhost port 8082")
+	access := int32(0)
+	proxy.OnRequest().Do(auth.Basic("my_realm", func(user, passwd string) bool {
+		atomic.AddInt32(&access, 1)
+		return user == "user" && passwd == "1234"
+	}))
+	l, err := net.Listen("tcp", "localhost:8082")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ch := make(chan os.Signal)
+	signal.Notify(ch, os.Interrupt)
+	go func() {
+		<-ch
+		l.Close()
+	}()
+	http.Serve(l, proxy)
+	if access <= 0 {
+		t.Error("No one accessed the proxy")
 	}
 }
