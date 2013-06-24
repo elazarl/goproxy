@@ -1,11 +1,3 @@
-# Beta Software
-
-I've received a positive feedback from a few people who use goproxy in production settings.
-I believe it is good enough for usage.
-
-I'll try to keep reasonable backwards compatability. In case of a major API change,
-I'll change the import path.
-
 # Introduction
 
 Package goproxy provides a customizable HTTP proxy library for Go (golang),
@@ -17,6 +9,13 @@ The intent of the proxy, is to be usable with reasonable amount of traffic
 yet, customizable and programable.
 
 The proxy itself is simply a `net/http` handler.
+
+In order to use goproxy, one should set his browser to use goproxy as an HTTP
+proxy. Here is how you do that [in Chrome](https://support.google.com/chrome/answer/96815?hl=en)
+and [in Firefox](http://www.wikihow.com/Enter-Proxy-Settings-in-Firefox).
+
+For example, the URL you should use as proxy when running `./bin/basic` is
+`localhost:8080`, as this is the default binding for the basic proxy.
 
 # Why not Fiddler2?
 
@@ -90,3 +89,11 @@ I put the software temporarily under the Go-compatible BSD license,
 if this prevents someone from using the software, do let mee know and I'll consider changing it.
 
 At any rate, user feedback is very important for me, so I'll be delighted to know if you're using this package.
+
+# Beta Software
+
+I've received a positive feedback from a few people who use goproxy in production settings.
+I believe it is good enough for usage.
+
+I'll try to keep reasonable backwards compatability. In case of a major API change,
+I'll change the import path.
