@@ -514,6 +514,18 @@ func TestNoProxyHeaders(t *testing.T) {
 	client.Do(req)
 }
 
+func TestNoProxyHeadersHttps(t *testing.T) {
+	s := httptest.NewTLSServer(VerifyNoProxyHeaders{t})
+	client, proxy, l := oneShotProxy(t)
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	defer l.Close()
+	req, err := http.NewRequest("GET", s.URL, nil)
+	panicOnErr(err, "bad request")
+	req.Header.Add("Connection", "close")
+	req.Header.Add("Proxy-Connection", "close")
+	client.Do(req)
+}
+
 func TestChunkedResponse(t *testing.T) {
 	l, err := net.Listen("tcp", ":10234")
 	panicOnErr(err, "listen")

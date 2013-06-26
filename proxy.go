@@ -72,6 +72,24 @@ func (proxy *ProxyHttpServer) filterResponse(respOrig *http.Response, ctx *Proxy
 	return
 }
 
+func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
+	r.RequestURI = "" // this must be reset when serving a request with the client
+	ctx.Logf("Sending request %v %v", r.Method, r.URL.String())
+	// If no Accept-Encoding header exists, Transport will add the headers it can accept
+	// and would wrap the response body with the relevant reader.
+	r.Header.Del("Accept-Encoding")
+	// curl can add that, see
+	// http://homepage.ntlworld.com/jonathan.deboynepollard/FGA/web-proxy-connection-header.html
+	r.Header.Del("Proxy-Connection")
+	// Connection is single hop Header:
+	// http://www.w3.org/Protocols/rfc2616/rfc2616.txt
+	// 14.10 Connection
+	//   The Connection general-header field allows the sender to specify
+	//   options that are desired for that particular connection and MUST NOT
+	//   be communicated by proxies over further connections.
+	r.Header.Del("Connection")
+}
+
 // Standard net/http function. Shouldn't be used directly, http.Serve will use it.
 func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	//r.Header["X-Forwarded-For"] = w.RemoteAddr()
@@ -85,21 +103,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		r, resp := proxy.filterRequest(r, ctx)
 
 		if resp == nil {
-			r.RequestURI = "" // this must be reset when serving a request with the client
-			ctx.Logf("Sending request %v %v", r.Method, r.URL.String())
-			// If no Accept-Encoding header exists, Transport will add the headers it can accept
-			// and would wrap the response body with the relevant reader.
-			r.Header.Del("Accept-Encoding")
-			// curl can add that, see
-			// http://homepage.ntlworld.com/jonathan.deboynepollard/FGA/web-proxy-connection-header.html
-			r.Header.Del("Proxy-Connection")
-			// Connection is single hop Header:
-			// http://www.w3.org/Protocols/rfc2616/rfc2616.txt
-			// 14.10 Connection
-			//   The Connection general-header field allows the sender to specify
-			//   options that are desired for that particular connection and MUST NOT
-			//   be communicated by proxies over further connections.
-			r.Header.Del("Connection")
+			removeProxyHeaders(ctx, r)
 			ctx.RoundTrip, resp, err = proxy.tr.DetailedRoundTrip(r)
 			if err != nil {
 				ctx.Error = err
