@@ -3,9 +3,12 @@ package goproxy
 import (
 	"bufio"
 	"crypto/tls"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
+	"strings"
 	"sync/atomic"
 )
 
@@ -106,10 +109,40 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					ctx.Logf("resp %v", resp.Status)
 				}
 				resp = proxy.filterResponse(resp, ctx)
-				if err := resp.Write(rawClientTls); err != nil {
-					ctx.Warnf("Cannot write TLS response from mitm'd client %v", err)
+				text := resp.Status
+				protoMajor, protoMinor := strconv.Itoa(resp.ProtoMajor), strconv.Itoa(resp.ProtoMinor)
+				statusCode := strconv.Itoa(resp.StatusCode) + " "
+				if strings.HasPrefix(text, statusCode) {
+					text = text[len(statusCode):]
+				}
+				if _, err := io.WriteString(rawClientTls, "HTTP/"+protoMajor+"."+protoMinor+" "+statusCode+text+"\r\n"); err != nil {
+					ctx.Warnf("Cannot write TLS response HTTP status from mitm'd client: %v", err)
 					return
 				}
+				// Since we don't know the length of resp, return chunked encoded response
+				resp.Header.Set("Transfer-Encoding", "chunked")
+				if err := resp.Header.Write(rawClientTls); err != nil {
+					ctx.Warnf("Cannot write TLS response header from mitm'd client: %v", err)
+					return
+				}
+				if _, err = io.WriteString(rawClientTls, "\r\n"); err != nil {
+					ctx.Warnf("Cannot write TLS response header end from mitm'd client: %v", err)
+					return
+				}
+				chunked := newChunkedWriter(rawClientTls)
+				if _, err := io.Copy(chunked, resp.Body); err != nil {
+					ctx.Warnf("Cannot write TLS response body from mitm'd client: %v", err)
+					return
+				}
+				if err := chunked.Close(); err != nil {
+					ctx.Warnf("Cannot write TLS chunked EOF from mitm'd client: %v", err)
+					return
+				}
+				if _, err = io.WriteString(rawClientTls, "\r\n"); err != nil {
+					ctx.Warnf("Cannot write TLS response chunked trailer from mitm'd client: %v", err)
+					return
+				}
+				//resp.Body.Close()
 			}
 			ctx.Logf("Exiting on EOF")
 		}()
