@@ -117,13 +117,19 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			}
 			ctx.Logf("Received response %v", resp.Status)
 		}
+		origBody := resp.Body
 		resp = proxy.filterResponse(resp, ctx)
 
+		ctx.Logf("Copying response to client %v [%d]", resp.Status, resp.StatusCode)
 		// http.ResponseWriter will take care of filling the correct response length
 		// Setting it now, might impose wrong value, contradicting the actual new
 		// body the user returned.
-		ctx.Logf("Copying response to client %v [%d]", resp.Status, resp.StatusCode)
-		resp.Header.Del("Content-Length")
+		// We keep the original body to remove the header only if things changed.
+		// This will prevent problems with HEAD requests where there's no body, yet,
+		// the Content-Length header should be set.
+		if origBody != resp.Body {
+			resp.Header.Del("Content-Length")
+		}
 		copyHeaders(w.Header(), resp.Header)
 		w.WriteHeader(resp.StatusCode)
 		nr, err := io.Copy(w, resp.Body)

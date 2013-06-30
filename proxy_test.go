@@ -526,6 +526,17 @@ func TestNoProxyHeadersHttps(t *testing.T) {
 	client.Do(req)
 }
 
+func TestHeadReqHasContentLength(t *testing.T) {
+	client, _, l := oneShotProxy(t)
+	defer l.Close()
+
+	resp, err := client.Head(localFile("test_data/panda.png"))
+	panicOnErr(err, "resp to HEAD")
+	if resp.Header.Get("Content-Length") == "" {
+		t.Error("Content-Length should exist on HEAD requests")
+	}
+}
+
 func TestChunkedResponse(t *testing.T) {
 	l, err := net.Listen("tcp", ":10234")
 	panicOnErr(err, "listen")
