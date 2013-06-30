@@ -13,13 +13,15 @@ import (
 
 // The basic proxy type. Implements http.Handler.
 type ProxyHttpServer struct {
+	// session variable must be aligned in i386 
+	// see http://golang.org/src/pkg/sync/atomic/doc.go#L41
+	sess          int64
 	// setting Verbose to true will log information on each request sent to the proxy
 	Verbose       bool
 	Logger        *log.Logger
 	reqHandlers   []ReqHandler
 	respHandlers  []RespHandler
 	httpsHandlers []HttpsHandler
-	sess          int64
 	tr            *transport.Transport
 }
 
