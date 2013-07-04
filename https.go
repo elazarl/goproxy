@@ -48,7 +48,10 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 	todo, host := OkConnect, r.URL.Host
 	ctx.Req = r
 	for _, h := range proxy.httpsHandlers {
-		todo, host = h.HandleConnect(host, ctx)
+		newtodo, newhost := h.HandleConnect(host, ctx)
+		if newtodo != nil {
+			todo, host = newtodo, newhost
+		}
 		ctx.Logf("handler: %v %s", todo, host)
 	}
 	switch todo.Action {

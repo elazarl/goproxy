@@ -207,7 +207,7 @@ func (pcond *ReqProxyConds) HandleConnect(h HttpsHandler) {
 		FuncHttpsHandler(func(host string, ctx *ProxyCtx) (*ConnectAction, string) {
 			for _, cond := range pcond.reqConds {
 				if !cond.HandleReq(ctx.Req, ctx) {
-					return OkConnect, host
+					return nil, ""
 				}
 			}
 			return h.HandleConnect(host, ctx)
