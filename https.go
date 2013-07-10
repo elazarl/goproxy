@@ -113,16 +113,18 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				}
 				resp = proxy.filterResponse(resp, ctx)
 				text := resp.Status
-				protoMajor, protoMinor := strconv.Itoa(resp.ProtoMajor), strconv.Itoa(resp.ProtoMinor)
 				statusCode := strconv.Itoa(resp.StatusCode) + " "
 				if strings.HasPrefix(text, statusCode) {
 					text = text[len(statusCode):]
 				}
-				if _, err := io.WriteString(rawClientTls, "HTTP/"+protoMajor+"."+protoMinor+" "+statusCode+text+"\r\n"); err != nil {
+				// always use 1.1 to support encoding
+				if _, err := io.WriteString(rawClientTls, "HTTP/1.1"+" "+statusCode+text+"\r\n"); err != nil {
 					ctx.Warnf("Cannot write TLS response HTTP status from mitm'd client: %v", err)
 					return
 				}
 				// Since we don't know the length of resp, return chunked encoded response
+				// TODO: use a more reasonable scheme
+				resp.Header.Del("Content-Length")
 				resp.Header.Set("Transfer-Encoding", "chunked")
 				if err := resp.Header.Write(rawClientTls); err != nil {
 					ctx.Warnf("Cannot write TLS response header from mitm'd client: %v", err)
@@ -145,7 +147,6 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					ctx.Warnf("Cannot write TLS response chunked trailer from mitm'd client: %v", err)
 					return
 				}
-				//resp.Body.Close()
 			}
 			ctx.Logf("Exiting on EOF")
 		}()
