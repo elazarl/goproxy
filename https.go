@@ -29,6 +29,15 @@ var (
 type ConnectAction struct {
 	Action    ConnectActionLiteral
 	TlsConfig *tls.Config
+	Ca *tls.Certificate
+}
+
+func stripPort(s string) string {
+	ix := strings.IndexRune(s, ':')
+	if ix == -1 {
+		return s
+	}
+	return s[:ix]
 }
 
 func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request) {
@@ -76,16 +85,28 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		// still handling the request even after hijacking the connection. Those HTTP CONNECT
 		// request can take forever, and the server will be stuck when "closed".
 		// TODO: Allow Server.Close() mechanism to shut down this connection as nicely as possible
-		tlsConfig := todo.TlsConfig
-		if tlsConfig == nil {
-			tlsConfig = defaultTlsConfig
+		ca := todo.Ca
+		if ca == nil {
+			ca = &GoproxyCa
 		}
+		cert, err := signHost(*ca, []string{stripPort(host)})
+		if err != nil {
+			ctx.Warnf("Cannot sign host certificate with provided CA: %s", err)
+			return
+		}
+		tlsConfig := tls.Config{}
+		if todo.TlsConfig != nil {
+			tlsConfig = *todo.TlsConfig
+		} else {
+			tlsConfig = *defaultTlsConfig
+		}
+		tlsConfig.Certificates = append(tlsConfig.Certificates, cert)
 		go func() {
-
 			//TODO: cache connections to the remote website
-			rawClientTls := tls.Server(proxyClient, tlsConfig)
+			rawClientTls := tls.Server(proxyClient, &tlsConfig)
 			if err := rawClientTls.Handshake(); err != nil {
 				ctx.Warnf("Cannot handshake client %v %v", r.Host, err)
+				return
 			}
 			defer rawClientTls.Close()
 			clientTlsReader := bufio.NewReader(rawClientTls)

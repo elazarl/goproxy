@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha1"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -27,7 +28,21 @@ func hashSorted(lst []string) *big.Int {
 	return rv
 }
 
-func SignHost(ca *x509.Certificate, capriv interface{}, hosts []string) (pemCert []byte, pemKey []byte, err error) {
+func signHost(ca tls.Certificate, hosts []string) (cert tls.Certificate, err error) {
+	x509ca, err := x509.ParseCertificate(GoproxyCa.Certificate[0])
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	// TODO(elazar): the hops I'm going through to use X509KeyPair method are ridiculous, and on the verge of absurd,
+	// yet, CPU is cheap nowadays, and we're going to cache it anyhow, so whatever...
+	pemCert, pemKey, err := signHostX509(x509ca, ca.PrivateKey, hosts)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	return tls.X509KeyPair(pemCert, pemKey)
+}
+
+func signHostX509(ca *x509.Certificate, capriv interface{}, hosts []string) (pemCert []byte, pemKey []byte, err error) {
 	now := time.Now()
 	template := x509.Certificate{
 		SerialNumber: hashSorted(hosts),
