@@ -12,8 +12,8 @@ Typical usage is
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.OnRequest(..conditions..).Do(..requesthandler..)
 	proxy.OnRequest(..conditions..).DoFunc(..requesthandlerFunction..)
-	proxy.OnReponse(..conditions..).Do(..responesHandler..)
-	proxy.OnReponse(..conditions..).DoFunc(..responesHandlerFunction..)
+	proxy.OnResponse(..conditions..).Do(..responesHandler..)
+	proxy.OnResponse(..conditions..).DoFunc(..responesHandlerFunction..)
 	http.ListenAndServe(":8080", proxy)
 
 Adding a header to each request
@@ -27,7 +27,7 @@ Note that the function is called before the proxy sends the request to the serve
 
 For printing the content type of all incoming responses
 
-	proxy.OnReponse().DoFunc(func(r *http.Response, ctx *goproxy.ProxyCtx)*http.Response{
+	proxy.OnResponse().DoFunc(func(r *http.Response, ctx *goproxy.ProxyCtx)*http.Response{
 		println(ctx.Req.Host,"->",r.Header.Get("Content-Type"))
 		return r
 	})
@@ -39,7 +39,7 @@ interaction with the proxy.
 To print the content type of all responses from a certain url, we'll add a
 ReqCondition to the OnResponse function:
 
-	proxy.OnReponse(goproxy.UrlIs("golang.org/pkg")).DoFunc(func(r *http.Response, ctx *goproxy.ProxyCtx)*http.Response{
+	proxy.OnResponse(goproxy.UrlIs("golang.org/pkg")).DoFunc(func(r *http.Response, ctx *goproxy.ProxyCtx)*http.Response{
 		println(ctx.Req.Host,"->",r.Header.Get("Content-Type"))
 		return r
 	})
