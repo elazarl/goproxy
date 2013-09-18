@@ -16,7 +16,7 @@ type CounterEncryptorRand struct {
 	ix int
 }
 
-func NewCounterEncryptorRandFromKey(key interface{}, counter []byte) (r CounterEncryptorRand, err error) {
+func NewCounterEncryptorRandFromKey(key interface{}, seed []byte) (r CounterEncryptorRand, err error) {
 	var keyBytes []byte
 	switch key := key.(type) {
 	case *rsa.PrivateKey:
@@ -29,10 +29,20 @@ func NewCounterEncryptorRandFromKey(key interface{}, counter []byte) (r CounterE
 	if r.cipher, err = aes.NewCipher(h.Sum(keyBytes)[:aes.BlockSize]); err != nil {
 		return
 	}
-	r.counter = h.Sum(counter)[:r.cipher.BlockSize()]
+	r.counter = make([]byte, r.cipher.BlockSize())
+	if seed != nil {
+		copy(r.counter, h.Sum(seed)[:r.cipher.BlockSize()])
+	}
 	r.rand = make([]byte, r.cipher.BlockSize())
 	r.ix = len(r.rand)
 	return
+}
+
+func (c *CounterEncryptorRand) Seed(b []byte) {
+	if len(b) != len(c.counter) {
+		panic("SetCounter: wrong counter size")
+	}
+	copy(c.counter, b)
 }
 
 func (c *CounterEncryptorRand) refill() {
