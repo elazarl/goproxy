@@ -675,9 +675,9 @@ func (pc *persistConn) roundTrip(req *transportRequest) (resp *http.Response, er
 
 	// orig: err = req.Request.write(pc.bw, pc.isProxy, req.extra)
 	if pc.isProxy {
-		req.Request.WriteProxy(pc.bw)
+		err = req.Request.WriteProxy(pc.bw)
 	} else {
-		req.Request.Write(pc.bw)
+		err = req.Request.Write(pc.bw)
 	}
 	if err != nil {
 		pc.close()
