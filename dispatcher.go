@@ -15,8 +15,9 @@ type ReqCondition interface {
 	HandleReq(req *http.Request, ctx *ProxyCtx) bool
 }
 
-// ReqCondition.HandleReq will decide whether or not to use the RespHandler on an HTTP response
-// before sending it to the proxy client
+// RespCondition.HandleReq will decide whether or not to use the RespHandler on an HTTP response
+// before sending it to the proxy client. Note that resp might be nil, in case there was an
+// error sending the request.
 type RespCondition interface {
 	HandleResp(resp *http.Response, ctx *ProxyCtx) bool
 }
@@ -31,8 +32,8 @@ func (c ReqConditionFunc) HandleReq(req *http.Request, ctx *ProxyCtx) bool {
 	return c(req, ctx)
 }
 
-// RespConditionFunc cannot test requests. It only satisfies ReqCondition interface so that
-// RespCondition and ReqCondition will be of the same type.
+// ReqConditionFunc cannot test responses. It only satisfies RespCondition interface so that
+// to be usable as RespCondition.
 func (c ReqConditionFunc) HandleResp(resp *http.Response, ctx *ProxyCtx) bool {
 	return c(ctx.Req, ctx)
 }
@@ -141,6 +142,9 @@ func Not(r ReqCondition) ReqConditionFunc {
 func ContentTypeIs(typ string, types ...string) RespCondition {
 	types = append(types, typ)
 	return RespConditionFunc(func(resp *http.Response, ctx *ProxyCtx) bool {
+		if resp == nil {
+			return false
+		}
 		contentType := resp.Header.Get("Content-Type")
 		for _, typ := range types {
 			if contentType == typ || strings.HasPrefix(contentType, typ+";") {
