@@ -112,6 +112,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 				resp = proxy.filterResponse(nil, ctx)
 				if resp == nil {
 					ctx.Logf("error read response %v %v:", r.URL.Host, err.Error())
+					http.Error(w, err.Error(), 500)
 					return
 				}
 			}
