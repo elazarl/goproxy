@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // HTTP client implementation. See RFC 2616.
-// 
+//
 // This is the low-level Transport implementation of RoundTripper.
 // The high-level interface is in client.go.
 
@@ -72,6 +72,10 @@ type Transport struct {
 	// (keep-alive) to keep to keep per-host.  If zero,
 	// DefaultMaxIdleConnsPerHost is used.
 	MaxIdleConnsPerHost int
+
+	// SoKeepAlive, if true, periodically check by operating system
+	// the health of backend connection
+	SoKeepAlive bool
 }
 
 // ProxyFromEnvironment returns the URL of the proxy to use for a
@@ -323,6 +327,11 @@ func (t *Transport) dial(network, addr string) (c net.Conn, raddr string, ip *ne
 	c, err = net.DialTCP("tcp", nil, addri)
 	raddr = addr
 	ip = addri
+
+	if err == nil {
+		c.(*net.TCPConn).SetKeepAlive(t.SoKeepAlive)
+	}
+
 	return
 }
 
@@ -662,7 +671,7 @@ func (pc *persistConn) roundTrip(req *transportRequest) (resp *http.Response, er
 	// requested it.
 	requestedGzip := false
 	if !pc.t.DisableCompression && req.Header.Get("Accept-Encoding") == "" {
-		// Request gzip only, not deflate. Deflate is ambiguous and 
+		// Request gzip only, not deflate. Deflate is ambiguous and
 		// not as universally supported anyway.
 		// See: http://www.gzip.org/zlib/zlib_faq.html#faq38
 		requestedGzip = true
@@ -679,11 +688,16 @@ func (pc *persistConn) roundTrip(req *transportRequest) (resp *http.Response, er
 	} else {
 		err = req.Request.Write(pc.bw)
 	}
+
 	if err != nil {
 		pc.close()
 		return
 	}
-	pc.bw.Flush()
+
+	if err = pc.bw.Flush(); err != nil {
+		pc.close()
+		return
+	}
 
 	ch := make(chan responseAndError, 1)
 	pc.reqch <- requestAndChan{req.Request, ch, requestedGzip}
