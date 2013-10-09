@@ -22,7 +22,7 @@ type ProxyHttpServer struct {
 	reqHandlers   []ReqHandler
 	respHandlers  []RespHandler
 	httpsHandlers []HttpsHandler
-	tr            *transport.Transport
+	Tr            *transport.Transport
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
@@ -106,7 +106,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 		if resp == nil {
 			removeProxyHeaders(ctx, r)
-			ctx.RoundTrip, resp, err = proxy.tr.DetailedRoundTrip(r)
+			ctx.RoundTrip, resp, err = proxy.Tr.DetailedRoundTrip(r)
 			if err != nil {
 				ctx.Error = err
 				resp = proxy.filterResponse(nil, ctx)
@@ -148,6 +148,7 @@ func NewProxyHttpServer() *ProxyHttpServer {
 		reqHandlers:   []ReqHandler{},
 		respHandlers:  []RespHandler{},
 		httpsHandlers: []HttpsHandler{},
-		tr:            &transport.Transport{TLSClientConfig: tlsClientSkipVerify},
+		Tr:            &transport.Transport{TLSClientConfig: tlsClientSkipVerify,
+						    Proxy: transport.ProxyFromEnvironment},
 	}
 }

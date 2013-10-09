@@ -125,7 +125,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						return
 					}
 					removeProxyHeaders(ctx, req)
-					resp, err = proxy.tr.RoundTrip(req)
+					resp, err = proxy.Tr.RoundTrip(req)
 					if err != nil {
 						ctx.Warnf("Cannot read TLS response from mitm'd server %v", err)
 						return
