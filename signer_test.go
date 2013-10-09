@@ -38,14 +38,10 @@ func getBrowser(args []string) string {
 }
 
 func TestSingerTls(t *testing.T) {
-	ca, err := x509.ParseCertificate(GoproxyCa.Certificate[0])
+	cert, err := signHost(GoproxyCa, []string{"example.com", "1.1.1.1", "localhost"})
+	orFatal("singHost", err, t)
+	cert.Leaf, err = x509.ParseCertificate(cert.Certificate[0])
 	orFatal("ParseCertificate", err, t)
-	certPem, keyPem, err := signHostX509(ca, GoproxyCa.PrivateKey, []string{"example.com", "1.1.1.1", "localhost"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	cert, err := tls.X509KeyPair(certPem, keyPem)
-	orFatal("X509KeyPair", err, t)
 	expected := "key verifies with Go"
 	server := httptest.NewUnstartedServer(ConstantHanlder(expected))
 	defer server.Close()
@@ -53,7 +49,7 @@ func TestSingerTls(t *testing.T) {
 	server.TLS.BuildNameToCertificate()
 	server.StartTLS()
 	certpool := x509.NewCertPool()
-	certpool.AddCert(ca)
+	certpool.AddCert(GoproxyCa.Leaf)
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{RootCAs: certpool},
 	}
@@ -75,19 +71,15 @@ func TestSingerTls(t *testing.T) {
 }
 
 func TestSingerX509(t *testing.T) {
-	ca, err := x509.ParseCertificate(GoproxyCa.Certificate[0])
-	orFatal("ParseCertificate", err, t)
-	certPem, keyPem, err := signHostX509(ca, GoproxyCa.PrivateKey, []string{"example.com", "1.1.1.1", "localhost"})
-	orFatal("SignHost", err, t)
-	tlsCert, err := tls.X509KeyPair(certPem, keyPem)
-	orFatal("X509KeyPair", err, t)
-	cert, err := x509.ParseCertificate(tlsCert.Certificate[0])
+	cert, err := signHost(GoproxyCa, []string{"example.com", "1.1.1.1", "localhost"})
+	orFatal("singHost", err, t)
+	cert.Leaf, err = x509.ParseCertificate(cert.Certificate[0])
 	orFatal("ParseCertificate", err, t)
 	certpool := x509.NewCertPool()
-	certpool.AddCert(ca)
-	orFatal("VerifyHostname", cert.VerifyHostname("example.com"), t)
-	orFatal("CheckSignatureFrom", cert.CheckSignatureFrom(ca), t)
-	_, err = cert.Verify(x509.VerifyOptions{
+	certpool.AddCert(GoproxyCa.Leaf)
+	orFatal("VerifyHostname", cert.Leaf.VerifyHostname("example.com"), t)
+	orFatal("CheckSignatureFrom", cert.Leaf.CheckSignatureFrom(GoproxyCa.Leaf), t)
+	_, err = cert.Leaf.Verify(x509.VerifyOptions{
 		DNSName: "example.com",
 		Roots: certpool,
 	})
