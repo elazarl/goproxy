@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -68,11 +69,48 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		if !hasPort.MatchString(host) {
 			host += ":80"
 		}
-		targetSiteCon, e := net.Dial("tcp", host)
+		https_proxy := os.Getenv("https_proxy")
+		if https_proxy == "" {
+			https_proxy = os.Getenv("HTTPS_PROXY")
+		}
+		var targetSiteCon net.Conn
+		var e error
+		if https_proxy != "" {
+			targetSiteCon, e = net.Dial("tcp", https_proxy)
+		} else {
+			targetSiteCon, e = net.Dial("tcp", host)
+		}
 		if e != nil {
 			// trying to mimic the behaviour of the offending website
 			// don't answer at all
 			return
+		}
+		if https_proxy != "" {
+			connectReq := &http.Request{
+				Method: "CONNECT",
+				URL:    &url.URL{Opaque: host},
+				Host:   host,
+				Header: make(http.Header),
+			}
+			connectReq.Write(targetSiteCon)
+
+			// Read response.
+			// Okay to use and discard buffered reader here, because
+			// TLS server will not speak until spoken to.
+			br := bufio.NewReader(targetSiteCon)
+			resp, err := http.ReadResponse(br, connectReq)
+			if err != nil {
+				targetSiteCon.Close()
+				w.WriteHeader(500)
+				return
+			}
+			if resp.StatusCode != 200 {
+				targetSiteCon.Close()
+				w.WriteHeader(resp.StatusCode)
+				io.Copy(w, resp.Body)
+				resp.Body.Close()
+				return
+			}
 		}
 		ctx.Logf("Accepting CONNECT to %s", host)
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
