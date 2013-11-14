@@ -1,12 +1,12 @@
 package goproxy
 
 import (
-	"math/big"
 	"crypto/rsa"
 	"crypto/sha1"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"math/big"
 	"net"
 	"runtime"
 	"sort"
@@ -15,7 +15,7 @@ import (
 
 func hashSorted(lst []string) []byte {
 	c := make([]string, len(lst))
-	copy(c,lst)
+	copy(c, lst)
 	sort.Strings(c)
 	h := sha1.New()
 	for _, s := range c {
@@ -32,7 +32,6 @@ func hashSortedBigInt(lst []string) *big.Int {
 
 var goproxySignerVersion = ":goroxy1"
 
-
 func signHost(ca tls.Certificate, hosts []string) (cert tls.Certificate, err error) {
 	var x509ca *x509.Certificate
 	if x509ca, err = x509.ParseCertificate(GoproxyCa.Certificate[0]); err != nil {
@@ -43,13 +42,13 @@ func signHost(ca tls.Certificate, hosts []string) (cert tls.Certificate, err err
 	if err != nil {
 		panic(err)
 	}
-	hash := hashSorted(append(hosts, goproxySignerVersion, ":" + runtime.Version()))
+	hash := hashSorted(append(hosts, goproxySignerVersion, ":"+runtime.Version()))
 	serial := new(big.Int)
 	serial.SetBytes(hash)
 	template := x509.Certificate{
 		// TODO(elazar): instead of this ugly hack, just encode the certificate and hash the binary form.
 		SerialNumber: serial,
-		Issuer: x509ca.Subject,
+		Issuer:       x509ca.Subject,
 		Subject: pkix.Name{
 			Organization: []string{"GoProxy untrusted MITM proxy Inc"},
 		},
@@ -81,6 +80,6 @@ func signHost(ca tls.Certificate, hosts []string) (cert tls.Certificate, err err
 	}
 	return tls.Certificate{
 		Certificate: [][]byte{derBytes, ca.Certificate[0]},
-		PrivateKey: certpriv,
+		PrivateKey:  certpriv,
 	}, nil
 }

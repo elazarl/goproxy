@@ -412,7 +412,7 @@ func TestConnectHandler(t *testing.T) {
 	client, proxy, l := oneShotProxy(t)
 	defer l.Close()
 	althttps := httptest.NewTLSServer(ConstantHanlder("althttps"))
-	proxy.OnRequest().HandleConnectFunc(func (host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
 		u, _ := url.Parse(althttps.URL)
 		return goproxy.OkConnect, u.Host
 	})
@@ -482,14 +482,14 @@ func TestIcyResponse(t *testing.T) {
 	req, err := http.NewRequest("GET", "http://"+s, nil)
 	panicOnErr(err, "newReq")
 	proxyip := l.URL[len("http://"):]
-	println("got ip: "+proxyip)
+	println("got ip: " + proxyip)
 	c, err := net.Dial("tcp", proxyip)
 	panicOnErr(err, "dial")
 	defer c.Close()
 	req.WriteProxy(c)
 	raw, err := ioutil.ReadAll(c)
 	panicOnErr(err, "readAll")
-	if string(raw)!="ICY 200 OK\r\n\r\nblablabla" {
+	if string(raw) != "ICY 200 OK\r\n\r\nblablabla" {
 		t.Error("Proxy did not send the malformed response received")
 	}
 }
@@ -499,7 +499,7 @@ type VerifyNoProxyHeaders struct {
 }
 
 func (v VerifyNoProxyHeaders) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("Connection")!="" || r.Header.Get("Proxy-Connection")!="" {
+	if r.Header.Get("Connection") != "" || r.Header.Get("Proxy-Connection") != "" {
 		v.Error("Got Connection header from goproxy", r.Header)
 	}
 }

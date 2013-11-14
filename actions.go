@@ -51,7 +51,7 @@ type HttpsHandler interface {
 // A wrapper that would convert a function to a HttpsHandler interface type
 type FuncHttpsHandler func(host string, ctx *ProxyCtx) (*ConnectAction, string)
 
-// FuncHttpsHandler should implement the RespHandler interface 
+// FuncHttpsHandler should implement the RespHandler interface
 func (f FuncHttpsHandler) HandleConnect(host string, ctx *ProxyCtx) (*ConnectAction, string) {
 	return f(host, ctx)
 }

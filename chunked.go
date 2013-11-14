@@ -57,4 +57,3 @@ func (cw *chunkedWriter) Close() error {
 	_, err := io.WriteString(cw.Wire, "0\r\n")
 	return err
 }
-

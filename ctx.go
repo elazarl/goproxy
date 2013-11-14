@@ -20,8 +20,8 @@ type ProxyCtx struct {
 	// call of RespHandler
 	UserData interface{}
 	// Will connect a request to a response
-	Session  int64
-	proxy    *ProxyHttpServer
+	Session int64
+	proxy   *ProxyHttpServer
 }
 
 func (ctx *ProxyCtx) printf(msg string, argv ...interface{}) {
@@ -30,7 +30,7 @@ func (ctx *ProxyCtx) printf(msg string, argv ...interface{}) {
 
 // Logf prints a message to the proxy's log. Should be used in a ProxyHttpServer's filter
 // This message will be printed only if the Verbose field of the ProxyHttpServer is set to true
-// 
+//
 //	proxy.OnRequest().DoFunc(func(r *http.Request,ctx *goproxy.ProxyCtx) *http.Request{
 //		nr := atomic.AddInt32(&counter,1)
 //		ctx.Printf("So far %d requests",nr)
@@ -44,7 +44,7 @@ func (ctx *ProxyCtx) Logf(msg string, argv ...interface{}) {
 
 // Warnf prints a message to the proxy's log. Should be used in a ProxyHttpServer's filter
 // This message will always be printed.
-// 
+//
 //	proxy.OnRequest().DoFunc(func(r *http.Request,ctx *goproxy.ProxyCtx) *http.Request{
 //		f,err := os.OpenFile(cachedContent)
 //		if err != nil {

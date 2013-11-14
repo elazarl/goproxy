@@ -66,7 +66,7 @@ func TestSingerTls(t *testing.T) {
 	browser := getBrowser(os.Args)
 	if browser != "" {
 		exec.Command(browser, asLocalhost).Run()
-		time.Sleep(10*time.Second)
+		time.Sleep(10 * time.Second)
 	}
 }
 
@@ -81,8 +81,7 @@ func TestSingerX509(t *testing.T) {
 	orFatal("CheckSignatureFrom", cert.Leaf.CheckSignatureFrom(GoproxyCa.Leaf), t)
 	_, err = cert.Leaf.Verify(x509.VerifyOptions{
 		DNSName: "example.com",
-		Roots: certpool,
+		Roots:   certpool,
 	})
 	orFatal("Verify", err, t)
 }
-

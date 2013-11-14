@@ -10,10 +10,10 @@ import (
 )
 
 type CounterEncryptorRand struct {
-	cipher cipher.Block
+	cipher  cipher.Block
 	counter []byte
-	rand []byte
-	ix int
+	rand    []byte
+	ix      int
 }
 
 func NewCounterEncryptorRandFromKey(key interface{}, seed []byte) (r CounterEncryptorRand, err error) {

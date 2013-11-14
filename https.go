@@ -30,7 +30,7 @@ var (
 type ConnectAction struct {
 	Action    ConnectActionLiteral
 	TlsConfig *tls.Config
-	Ca *tls.Certificate
+	Ca        *tls.Certificate
 }
 
 func stripPort(s string) string {

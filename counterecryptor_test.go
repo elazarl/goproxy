@@ -67,10 +67,10 @@ func stddev(data []int) float64 {
 	var sum, sum_sqr float64 = 0, 0
 	for _, h := range data {
 		sum += float64(h)
-		sum_sqr += float64(h)*float64(h)
+		sum_sqr += float64(h) * float64(h)
 	}
 	n := float64(len(data))
-	variance := (sum_sqr - ((sum*sum)/n))/(n - 1)
+	variance := (sum_sqr - ((sum * sum) / n)) / (n - 1)
 	return math.Sqrt(variance)
 }
 
@@ -79,7 +79,7 @@ func TestCounterEncStreamHistogram(t *testing.T) {
 	fatalOnErr(err, "rsa.GenerateKey", t)
 	c, err := goproxy.NewCounterEncryptorRandFromKey(k, []byte("the quick brown fox run over the lazy dog"))
 	fatalOnErr(err, "NewCounterEncryptorRandFromKey", t)
-	nout := 100*1000
+	nout := 100 * 1000
 	out := make([]byte, nout)
 	io.ReadFull(&c, out)
 	refhist := make([]int, 256)
@@ -92,8 +92,8 @@ func TestCounterEncStreamHistogram(t *testing.T) {
 	}
 	refstddev, stddev := stddev(refhist), stddev(hist)
 	// due to lack of time, I guestimate
-	t.Logf("ref:%v - act:%v = %v", refstddev, stddev, math.Abs(refstddev - stddev))
-	if math.Abs(refstddev - stddev) >= 1 {
+	t.Logf("ref:%v - act:%v = %v", refstddev, stddev, math.Abs(refstddev-stddev))
+	if math.Abs(refstddev-stddev) >= 1 {
 		t.Errorf("stddev of ref histogram different than regular PRNG: %v %v", refstddev, stddev)
 	}
 }

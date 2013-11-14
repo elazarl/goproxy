@@ -13,9 +13,9 @@ import (
 
 // The basic proxy type. Implements http.Handler.
 type ProxyHttpServer struct {
-	// session variable must be aligned in i386 
+	// session variable must be aligned in i386
 	// see http://golang.org/src/pkg/sync/atomic/doc.go#L41
-	sess          int64
+	sess int64
 	// setting Verbose to true will log information on each request sent to the proxy
 	Verbose       bool
 	Logger        *log.Logger
@@ -148,7 +148,7 @@ func NewProxyHttpServer() *ProxyHttpServer {
 		reqHandlers:   []ReqHandler{},
 		respHandlers:  []RespHandler{},
 		httpsHandlers: []HttpsHandler{},
-		Tr:            &transport.Transport{TLSClientConfig: tlsClientSkipVerify,
-						    Proxy: transport.ProxyFromEnvironment},
+		Tr: &transport.Transport{TLSClientConfig: tlsClientSkipVerify,
+			Proxy: transport.ProxyFromEnvironment},
 	}
 }
