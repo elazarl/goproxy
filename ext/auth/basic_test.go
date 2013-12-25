@@ -42,6 +42,33 @@ func times(n int, s string) string {
 	return string(r)
 }
 
+func TestBasicConnectAuthWithCurl(t *testing.T) {
+	expected := ":c>"
+	background := httptest.NewServer(ConstantHanlder(expected))
+	defer background.Close()
+	_, proxy, proxyserver := oneShotProxy()
+	defer proxyserver.Close()
+	proxy.OnRequest().Do(auth.Basic("my_realm", func(user, passwd string) bool {
+		return user == "user" && passwd == "open sesame"
+	}))
+
+	cmd := exec.Command("curl",
+		"--silent", "--show-error",
+		"-x", proxyserver.URL,
+		"-U", "user:open sesame",
+		"-p",
+		"--url", background.URL+"/[1-3]",
+	)
+	out, err := cmd.CombinedOutput() // if curl got error, it'll show up in stderr
+	if err != nil {
+		t.Fatal(err)
+	}
+	finalexpected := times(3, expected)
+	if string(out) != finalexpected {
+		t.Error("Expected", finalexpected, "got", string(out))
+	}
+}
+
 func TestBasicAuthWithCurl(t *testing.T) {
 	expected := ":c>"
 	background := httptest.NewServer(ConstantHanlder(expected))
@@ -56,7 +83,7 @@ func TestBasicAuthWithCurl(t *testing.T) {
 		"--silent", "--show-error",
 		"-x", proxyserver.URL,
 		"-U", "user:open sesame",
-		"--url", background.URL + "/[1-3]",
+		"--url", background.URL+"/[1-3]",
 	)
 	out, err := cmd.CombinedOutput() // if curl got error, it'll show up in stderr
 	if err != nil {
@@ -96,7 +123,7 @@ func TestBasicAuth(t *testing.T) {
 		t.Fatal(err)
 	}
 	req.Header.Set("Proxy-Authorization",
-		"Basic " + base64.StdEncoding.EncodeToString([]byte("user:open sesame")))
+		"Basic "+base64.StdEncoding.EncodeToString([]byte("user:open sesame")))
 	resp, err = client.Do(req)
 	if err != nil {
 		t.Fatal(err)

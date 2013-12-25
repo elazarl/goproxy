@@ -44,6 +44,17 @@ func stripPort(s string) string {
 func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request) {
 	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy}
 
+	r, resp := proxy.filterRequest(r, ctx)
+	if resp != nil {
+		if err := resp.Write(w); err != nil {
+			ctx.Warnf("Can't write response body %v", err)
+		}
+		if err := resp.Body.Close(); err != nil {
+			ctx.Warnf("Can't close response body %v", err)
+		}
+		return
+	}
+
 	hij, ok := w.(http.Hijacker)
 	if !ok {
 		panic("httpserver does not support hijacking")
