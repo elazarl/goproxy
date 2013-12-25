@@ -26,24 +26,38 @@ func BasicUnauthorized(req *http.Request, realm string) *http.Response {
 
 var proxyAuthorizatonHeader = "Proxy-Authorization"
 
+func auth(req *http.Request, f func(user, passwd string) bool) bool {
+	authheader := strings.SplitN(req.Header.Get(proxyAuthorizatonHeader), " ", 2)
+	req.Header.Del(proxyAuthorizatonHeader)
+	if len(authheader) != 2 || authheader[0] != "Basic" {
+		return false
+	}
+	userpassraw, err := base64.StdEncoding.DecodeString(authheader[1])
+	if err != nil {
+		return false
+	}
+	userpass := strings.SplitN(string(userpassraw), ":", 2)
+	if len(userpass) != 2 {
+		return false
+	}
+	return f(userpass[0], userpass[1])
+}
+
 func Basic(realm string, f func(user, passwd string) bool) goproxy.ReqHandler {
 	return goproxy.FuncReqHandler(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-		authheader := strings.SplitN(req.Header.Get(proxyAuthorizatonHeader), " ", 2)
-		req.Header.Del(proxyAuthorizatonHeader)
-		if len(authheader) != 2 || authheader[0] != "Basic" {
-			return nil, BasicUnauthorized(req, realm)
-		}
-		userpassraw, err := base64.StdEncoding.DecodeString(authheader[1])
-		if err != nil {
-			return nil, BasicUnauthorized(req, realm)
-		}
-		userpass := strings.SplitN(string(userpassraw), ":", 2)
-		if len(userpass) != 2 {
-			return nil, BasicUnauthorized(req, realm)
-		}
-		if !f(userpass[0], userpass[1]) {
+		if !auth(req, f) {
 			return nil, BasicUnauthorized(req, realm)
 		}
 		return req, nil
+	})
+}
+
+func BasicConnect(realm string, f func(user, passwd string) bool) goproxy.HttpsHandler {
+	return goproxy.FuncHttpsHandler(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+		if !auth(ctx.Req, f) {
+			ctx.Resp = BasicUnauthorized(ctx.Req, realm)
+			return goproxy.RejectConnect, host
+		}
+		return goproxy.OkConnect, host
 	})
 }
