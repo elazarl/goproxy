@@ -27,8 +27,18 @@ var https = httptest.NewTLSServer(nil)
 var srv = httptest.NewServer(nil)
 var fs = httptest.NewServer(http.FileServer(http.Dir(".")))
 
+type QueryHandler struct{}
+
+func (QueryHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	if err := req.ParseForm(); err != nil {
+		panic(err)
+	}
+	io.WriteString(w, req.Form.Get("result"))
+}
+
 func init() {
 	http.DefaultServeMux.Handle("/bobo", ConstantHanlder("bobo"))
+	http.DefaultServeMux.Handle("/query", QueryHandler{})
 }
 
 type ConstantHanlder string
@@ -405,6 +415,9 @@ func TestSimpleMitm(t *testing.T) {
 
 	if resp := string(getOrFail(https.URL+"/bobo", client, t)); resp != "bobo" {
 		t.Error("Wrong response when mitm", resp, "expected bobo")
+	}
+	if resp := string(getOrFail(https.URL+"/query?result=bar", client, t)); resp != "bar" {
+		t.Error("Wrong response when mitm", resp, "expected bar")
 	}
 }
 
