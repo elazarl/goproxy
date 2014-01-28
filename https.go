@@ -48,7 +48,6 @@ func (proxy *ProxyHttpServer) dial(network, addr string) (c net.Conn, err error)
 	return net.Dial(network, addr)
 }
 
-
 func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request) {
 	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy}
 
@@ -91,6 +90,10 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		if e != nil {
 			// trying to mimic the behaviour of the offending website
 			// don't answer at all
+			proxy.Logger.Println("Error connecting to site", e)
+			if err := proxyClient.Close(); err != nil {
+				proxy.Logger.Println("Error closing", err)
+			}
 			return
 		}
 		if https_proxy != "" {
