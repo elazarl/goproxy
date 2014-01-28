@@ -41,6 +41,14 @@ func stripPort(s string) string {
 	return s[:ix]
 }
 
+func (proxy *ProxyHttpServer) dial(network, addr string) (c net.Conn, err error) {
+	if proxy.Tr.Dial != nil {
+		return proxy.Tr.Dial(network, addr)
+	}
+	return net.Dial(network, addr)
+}
+
+
 func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request) {
 	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy}
 
@@ -76,9 +84,9 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		var targetSiteCon net.Conn
 		var e error
 		if https_proxy != "" {
-			targetSiteCon, e = net.Dial("tcp", https_proxy)
+			targetSiteCon, e = proxy.dial("tcp", https_proxy)
 		} else {
-			targetSiteCon, e = net.Dial("tcp", host)
+			targetSiteCon, e = proxy.dial("tcp", host)
 		}
 		if e != nil {
 			// trying to mimic the behaviour of the offending website
