@@ -88,12 +88,6 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		} else {
 			targetSiteCon, e = proxy.dial("tcp", host)
 		}
-		if e, ok := e.(net.Error); ok && e.Timeout() {
-			// trying to mimic the behaviour of the offending website
-			// don't answer at all
-			ctx.Warnf("Timeout dialing to %s: %s", host, e.Error())
-			return
-		}
 		if e != nil {
 			if _, err := io.WriteString(proxyClient, "HTTP/1.1 502 Bad Gateway\r\n\r\n"); err != nil {
 				ctx.Warnf("Error responding to client: %s", err)
