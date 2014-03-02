@@ -1,3 +1,30 @@
+# Breaking Changes Ahead
+
+###  Rational
+
+Adding the `RoundTripDetails` to the `ProxyCtx` struct was a mistake.
+Sometimes one need to get the details of the roundtrip, but usually not.
+
+Instead of clobbering the entire library, we should have a way to
+use a custom HTTP `Transport`.
+
+As far as I know, no one is using the `RoundTripDetails` field in `ProxyCtx`.
+Thus, it will be removed in the next week (12/2/2014).
+
+Please open an issue to discuss the change if you think it's not necessary.
+
+The change will reside at the `customtransport` branch until it'll be merged
+back to master in a week or so.
+
+### Change
+
+  1. Field `ProxyHttpServer.Tr` will be a regular `*http.Transport`.
+  2. We'll add field `ProxyCtx.TrFunc func (ctx *ProxyCtx, req *http.Request) (*http.Response, error)`.
+  3. We'll keep the `goproxy/transport` package.
+
+In order to retain previous behavior, set `ProxyCtx.TrFunc` to a function using `goproxy/transport`
+and save the `RoundTripDetails` into the context for further usage.
+
 # Introduction
 
 Package goproxy provides a customizable HTTP proxy library for Go (golang),
