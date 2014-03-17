@@ -57,7 +57,7 @@ func (ctx *ProxyCtx) Warnf(msg string, argv ...interface{}) {
 	ctx.printf("WARN: "+msg, argv...)
 }
 
-var charsetFinder = regexp.MustCompile("charset=([^ ]*)")
+var charsetFinder = regexp.MustCompile("charset=([^ ;]*)")
 
 // Will try to infer the character set of the request from the headers.
 // Returns the empty string if we don't know which character set it used.
