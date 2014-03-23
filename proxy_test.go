@@ -559,6 +559,8 @@ func TestChunkedResponse(t *testing.T) {
 		for i := 0; i < 2; i++ {
 			c, err := l.Accept()
 			panicOnErr(err, "accept")
+			_, err = http.ReadRequest(bufio.NewReader(c))
+			panicOnErr(err, "readrequest")
 			io.WriteString(c, "HTTP/1.1 200 OK\r\n"+
 				"Content-Type: text/plain\r\n"+
 				"Transfer-Encoding: chunked\r\n\r\n"+
@@ -578,6 +580,7 @@ func TestChunkedResponse(t *testing.T) {
 	panicOnErr(err, "dial")
 	defer c.Close()
 	req, _ := http.NewRequest("GET", "/", nil)
+	req.Write(c)
 	resp, err := http.ReadResponse(bufio.NewReader(c), req)
 	panicOnErr(err, "readresp")
 	b, err := ioutil.ReadAll(resp.Body)
@@ -591,6 +594,7 @@ func TestChunkedResponse(t *testing.T) {
 	defer s.Close()
 
 	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		panicOnErr(ctx.Error, "error reading output")
 		b, err := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
 		panicOnErr(err, "readall onresp")

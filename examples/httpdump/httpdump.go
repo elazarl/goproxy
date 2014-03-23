@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/elazarl/goproxy"
+	"github.com/elazarl/goproxy/transport"
 )
 
 type FileStream struct {
@@ -129,8 +130,8 @@ func NewLogger(basepath string) (*HttpLogger, error) {
 func (logger *HttpLogger) LogResp(resp *http.Response, ctx *goproxy.ProxyCtx) {
 	body := path.Join(logger.path, fmt.Sprintf("%d_resp", ctx.Session))
 	from := ""
-	if ctx.RoundTrip != nil {
-		from = ctx.RoundTrip.TCPAddr.String()
+	if ctx.UserData != nil {
+		from = ctx.UserData.(*transport.RoundTripDetails).TCPAddr.String()
 	}
 	if resp == nil {
 		resp = emptyResp
@@ -239,7 +240,12 @@ func main() {
 	if err != nil {
 		log.Fatal("can't open log file", err)
 	}
+	tr := transport.Transport{Proxy: transport.ProxyFromEnvironment}
 	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		ctx.RoundTripper = goproxy.RoundTripperFunc(func (req *http.Request, ctx *goproxy.ProxyCtx) (resp *http.Response, err error) {
+			ctx.UserData, resp, err = tr.DetailedRoundTrip(req)
+			return
+		})
 		logger.LogReq(req, ctx)
 		return req, nil
 	})

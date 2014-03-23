@@ -2,7 +2,6 @@ package goproxy
 
 import (
 	"bufio"
-	"github.com/elazarl/goproxy/transport"
 	"io"
 	"log"
 	"net/http"
@@ -23,7 +22,7 @@ type ProxyHttpServer struct {
 	reqHandlers   []ReqHandler
 	respHandlers  []RespHandler
 	httpsHandlers []HttpsHandler
-	Tr            *transport.Transport
+	Tr            *http.Transport
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
@@ -120,7 +119,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 		if resp == nil {
 			removeProxyHeaders(ctx, r)
-			ctx.RoundTrip, resp, err = proxy.Tr.DetailedRoundTrip(r)
+			resp, err = ctx.RoundTrip(r)
 			if err != nil {
 				ctx.Error = err
 				resp = proxy.filterResponse(nil, ctx)
@@ -162,7 +161,7 @@ func NewProxyHttpServer() *ProxyHttpServer {
 		reqHandlers:   []ReqHandler{},
 		respHandlers:  []RespHandler{},
 		httpsHandlers: []HttpsHandler{},
-		Tr: &transport.Transport{TLSClientConfig: tlsClientSkipVerify,
-			Proxy: transport.ProxyFromEnvironment},
+		Tr: &http.Transport{TLSClientConfig: tlsClientSkipVerify,
+			Proxy: http.ProxyFromEnvironment},
 	}
 }
