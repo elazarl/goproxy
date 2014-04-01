@@ -84,7 +84,14 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		var targetSiteCon net.Conn
 		var e error
 		if https_proxy != "" {
-			targetSiteCon, e = proxy.dial("tcp", https_proxy)
+			u, err := url.Parse(https_proxy)
+			if err != nil {
+				panic("Cannot parse https proxy " + err.Error())
+			}
+			if !hasPort.MatchString(u.Host) {
+				panic("https proxy should has port, like 8080")
+			}
+			targetSiteCon, e = proxy.dial("tcp", u.Host)
 		} else {
 			targetSiteCon, e = proxy.dial("tcp", host)
 		}
