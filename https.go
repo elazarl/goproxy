@@ -91,7 +91,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			if !hasPort.MatchString(u.Host) {
 				panic("https proxy should has port, like 8080")
 			}
-			targetSiteCon, e = proxy.dial("tcp", https_proxy)
+			targetSiteCon, e = proxy.dial("tcp", u.Host)
 		} else {
 			targetSiteCon, e = proxy.dial("tcp", host)
 		}
