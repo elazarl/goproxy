@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -23,6 +24,9 @@ type ProxyHttpServer struct {
 	respHandlers  []RespHandler
 	httpsHandlers []HttpsHandler
 	Tr            *http.Transport
+	// ConnectDial will be used to create TCP connections for CONNECT requests
+	// if nil Tr.Dial will be used
+	ConnectDial func(network string, addr string) (net.Conn, error)
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
@@ -156,7 +160,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 // New proxy server, logs to StdErr by default
 func NewProxyHttpServer() *ProxyHttpServer {
-	return &ProxyHttpServer{
+	proxy := ProxyHttpServer{
 		Logger:        log.New(os.Stderr, "", log.LstdFlags),
 		reqHandlers:   []ReqHandler{},
 		respHandlers:  []RespHandler{},
@@ -164,4 +168,6 @@ func NewProxyHttpServer() *ProxyHttpServer {
 		Tr: &http.Transport{TLSClientConfig: tlsClientSkipVerify,
 			Proxy: http.ProxyFromEnvironment},
 	}
+	proxy.ConnectDial = dialerFromEnv(&proxy)
+	return &proxy
 }

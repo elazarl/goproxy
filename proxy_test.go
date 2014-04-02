@@ -5,8 +5,6 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/base64"
-	"github.com/elazarl/goproxy"
-	"github.com/elazarl/goproxy/ext/image"
 	"image"
 	"io"
 	"io/ioutil"
@@ -17,6 +15,9 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/elazarl/goproxy"
+	"github.com/elazarl/goproxy/ext/image"
 )
 
 var acceptAllCerts = &tls.Config{InsecureSkipVerify: true}
@@ -612,4 +613,25 @@ func TestChunkedResponse(t *testing.T) {
 	if string(b) != strings.Replace(expected, "e", "E", -1) {
 		t.Error("expected", expected, "w/ e->E. Got", string(b))
 	}
+}
+
+func TestGoproxyThroughProxy(t *testing.T) {
+	_, proxy, l := oneShotProxy(t)
+	defer l.Close()
+	client, proxy2, l2 := oneShotProxy(t)
+	defer l2.Close()
+	doubleString := func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		b, err := ioutil.ReadAll(resp.Body)
+		panicOnErr(err, "readAll resp")
+		resp.Body = ioutil.NopCloser(bytes.NewBufferString(string(b) + " " + string(b)))
+		return resp
+	}
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	proxy.OnResponse().DoFunc(doubleString)
+	proxy2.ConnectDial = proxy2.NewConnectDialToProxy(l.URL)
+
+	if r := string(getOrFail(https.URL+"/bobo", client, t)); r != "bobo bobo" {
+		t.Error("Expected bobo doubled twice, got", r)
+	}
+
 }
