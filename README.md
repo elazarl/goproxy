@@ -83,6 +83,11 @@ return a precanned text response saying "do not waste your time".
 
 See additional examples in the examples directory.
 
+# What's New
+
+  1. Ability to `Hijack` CONNECT requests. See
+[the eavesdropper example](https://github.com/elazarl/goproxy/blob/master/examples/eavesdropper/main.go#L17)
+
 # License
 
 I put the software temporarily under the Go-compatible BSD license,

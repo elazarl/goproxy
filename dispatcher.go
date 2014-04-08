@@ -3,6 +3,7 @@ package goproxy
 import (
 	"bytes"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -232,6 +233,18 @@ func (pcond *ReqProxyConds) HandleConnect(h HttpsHandler) {
 //	})
 func (pcond *ReqProxyConds) HandleConnectFunc(f func(host string, ctx *ProxyCtx) (*ConnectAction, string)) {
 	pcond.HandleConnect(FuncHttpsHandler(f))
+}
+
+func (pcond *ReqProxyConds) HijackConnect(f func(req *http.Request, client net.Conn, ctx *ProxyCtx)) {
+	pcond.proxy.httpsHandlers = append(pcond.proxy.httpsHandlers,
+		FuncHttpsHandler(func(host string, ctx *ProxyCtx) (*ConnectAction, string) {
+			for _, cond := range pcond.reqConds {
+				if !cond.HandleReq(ctx.Req, ctx) {
+					return nil, ""
+				}
+			}
+			return &ConnectAction{Action: ConnectHijack, Hijack: f}, host
+		}))
 }
 
 // ProxyConds is used to aggregate RespConditions for a ProxyHttpServer.

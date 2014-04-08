@@ -21,6 +21,7 @@ const (
 	ConnectAccept = iota
 	ConnectReject
 	ConnectMitm
+	ConnectHijack
 )
 
 var (
@@ -33,6 +34,7 @@ type ConnectAction struct {
 	Action    ConnectActionLiteral
 	TlsConfig *tls.Config
 	Ca        *tls.Certificate
+	Hijack    func(req *http.Request, client net.Conn, ctx *ProxyCtx)
 }
 
 func stripPort(s string) string {
@@ -100,6 +102,10 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 		go proxy.copyAndClose(targetSiteCon, proxyClient)
 		go proxy.copyAndClose(proxyClient, targetSiteCon)
+	case ConnectHijack:
+		ctx.Logf("Hijacking CONNECT to %s", host)
+		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+		todo.Hijack(r, proxyClient, ctx)
 	case ConnectMitm:
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 		ctx.Logf("Assuming CONNECT is TLS, mitm proxying it")

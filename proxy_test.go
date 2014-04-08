@@ -68,6 +68,7 @@ func getOrFail(url string, client *http.Client, t *testing.T) []byte {
 	}
 	return txt
 }
+
 func localFile(url string) string { return fs.URL + "/" + url }
 func localTls(url string) string  { return https.URL + url }
 
@@ -634,4 +635,56 @@ func TestGoproxyThroughProxy(t *testing.T) {
 		t.Error("Expected bobo doubled twice, got", r)
 	}
 
+}
+
+func TestGoproxyHijackConnect(t *testing.T) {
+	client, proxy, l := oneShotProxy(t)
+	defer l.Close()
+	proxy.OnRequest(goproxy.ReqHostIs(srv.Listener.Addr().String())).
+		HijackConnect(func(req *http.Request, client net.Conn, ctx *goproxy.ProxyCtx) {
+		t.Logf("URL %+#v\nSTR %s", req.URL, req.URL.String())
+		resp, err := http.Get("http:" + req.URL.String() + "/bobo")
+		panicOnErr(err, "http.Get(CONNECT url)")
+		panicOnErr(resp.Write(client), "resp.Write(client)")
+		resp.Body.Close()
+		client.Close()
+	})
+	proxyAddr := l.Listener.Addr().String()
+	conn, err := net.Dial("tcp", proxyAddr)
+	panicOnErr(err, "conn "+proxyAddr)
+	buf := bufio.NewReader(conn)
+	writeConnect(conn)
+	readConnectResponse(buf)
+	if txt := readResponse(buf); txt != "bobo" {
+		t.Error("Expected bobo for CONNECT /foo, got", txt)
+	}
+
+	if r := string(getOrFail(https.URL+"/bobo", client, t)); r != "bobo" {
+		t.Error("Expected bobo would keep working with CONNECT", r)
+	}
+}
+
+func readResponse(buf *bufio.Reader) string {
+	req, err := http.NewRequest("GET", srv.URL, nil)
+	panicOnErr(err, "NewRequest")
+	resp, err := http.ReadResponse(buf, req)
+	panicOnErr(err, "resp.Read")
+	defer resp.Body.Close()
+	txt, err := ioutil.ReadAll(resp.Body)
+	panicOnErr(err, "resp.Read")
+	return string(txt)
+}
+
+func writeConnect(w io.Writer) {
+	req, err := http.NewRequest("CONNECT", srv.URL[len("http://"):], nil)
+	panicOnErr(err, "NewRequest")
+	req.Write(w)
+	panicOnErr(err, "req(CONNECT).Write")
+}
+
+func readConnectResponse(buf *bufio.Reader) {
+	_, err := buf.ReadString('\n')
+	panicOnErr(err, "resp.Read connect resp")
+	_, err = buf.ReadString('\n')
+	panicOnErr(err, "resp.Read connect resp")
 }
