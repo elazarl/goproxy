@@ -28,6 +28,7 @@ var (
 	OkConnect     = &ConnectAction{Action: ConnectAccept}
 	MitmConnect   = &ConnectAction{Action: ConnectMitm}
 	RejectConnect = &ConnectAction{Action: ConnectReject}
+	HijackConnect = &ConnectAction{Action: ConnectHijack}
 )
 
 type ConnectAction struct {
@@ -160,7 +161,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					}
 					ctx.Logf("resp %v", resp.Status)
 				}
-				resp = proxy.filterResponse(resp, ctx)
+				resp = proxy.FilterResponse(resp, ctx)
 				text := resp.Status
 				statusCode := strconv.Itoa(resp.StatusCode) + " "
 				if strings.HasPrefix(text, statusCode) {
