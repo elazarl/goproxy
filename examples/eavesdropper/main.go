@@ -5,9 +5,10 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"regexp"
+	"strings"
 
 	"github.com/elazarl/goproxy"
+	"github.com/elazarl/goproxy/ext/html"
 )
 
 func orPanic(err error) {
@@ -18,13 +19,8 @@ func orPanic(err error) {
 
 func main() {
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.OnRequest(goproxy.ReqHostMatches(regexp.MustCompile("^.*baidu.com$"))).
-		HandleConnect(goproxy.AlwaysReject)
-	proxy.OnRequest(goproxy.ReqHostMatches(regexp.MustCompile("^.*$"))).
-		HandleConnect(goproxy.AlwaysMitm)
-	// enable curl -p for all hosts on port 80
-	proxy.OnRequest(goproxy.ReqHostMatches(regexp.MustCompile("^.*:80$"))).
-		HijackConnect(func(req *http.Request, client net.Conn, ctx *goproxy.ProxyCtx) {
+
+	goproxy.HijackConnect.Hijack = func(req *http.Request, client net.Conn, ctx *goproxy.ProxyCtx) {
 		defer func() {
 			if e := recover(); e != nil {
 				ctx.Logf("error connecting to remote: %v", e)
@@ -43,10 +39,28 @@ func main() {
 			orPanic(remoteBuf.Flush())
 			resp, err := http.ReadResponse(remoteBuf.Reader, req)
 			orPanic(err)
+
+			resp = proxy.FilterResponse(resp, ctx)
+
 			orPanic(resp.Write(clientBuf.Writer))
 			orPanic(clientBuf.Flush())
 		}
-	})
+	}
+
+	proxy.OnRequest().HandleConnectFunc(
+		func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+			// hijack all http connect
+			if !strings.HasSuffix(host, ":443") && ctx.Req.Method == "CONNECT" {
+				return goproxy.HijackConnect, host
+			}
+			if strings.HasSuffix(host, ":443") {
+				return goproxy.MitmConnect, host
+			}
+			return goproxy.OkConnect, host
+		})
+	proxy.OnResponse(goproxy_html.IsHtml).Do(goproxy_html.HandleString(func(s string, ctx *goproxy.ProxyCtx) string {
+		return s + "<script>alert(1)</script>"
+	}))
 	proxy.Verbose = true
-	log.Fatal(http.ListenAndServe(":8080", proxy))
+	log.Fatal(http.ListenAndServe(":7000", proxy))
 }
