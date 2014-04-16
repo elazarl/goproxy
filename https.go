@@ -171,6 +171,9 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			clientTlsReader := bufio.NewReader(rawClientTls)
 			for !isEof(clientTlsReader) {
 				req, err := http.ReadRequest(clientTlsReader)
+				if err != nil && err != io.EOF {
+					return
+				}
 				if err != nil {
 					ctx.Warnf("Cannot read TLS request from mitm'd client %v %v", r.Host, err)
 					return
