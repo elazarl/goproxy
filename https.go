@@ -91,13 +91,6 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		}
 		targetSiteCon, err := proxy.connectDial("tcp", host)
 		if err != nil {
-			if _, err := io.WriteString(proxyClient, "HTTP/1.1 502 Bad Gateway\r\n\r\n"); err != nil {
-				ctx.Warnf("Error responding to client: %s", err)
-			}
-			ctx.Warnf("Error dialing to %s: %s", host, err.Error())
-			if err := proxyClient.Close(); err != nil {
-				ctx.Warnf("Error closing client connection: %s", err)
-			}
 			return
 		}
 		ctx.Logf("Accepting CONNECT to %s", host)
@@ -113,13 +106,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		ctx.Logf("Assuming CONNECT is plain HTTP tunneling, mitm proxying it")
 		targetSiteCon, err := proxy.connectDial("tcp", host)
 		if err != nil {
-			if _, err := io.WriteString(proxyClient, "HTTP/1.1 502 Bad Gateway\r\n\r\n"); err != nil {
-				ctx.Warnf("Error responding to client: %s", err)
-			}
 			ctx.Warnf("Error dialing to %s: %s", host, err.Error())
-			if err := proxyClient.Close(); err != nil {
-				ctx.Warnf("Error closing client connection: %s", err)
-			}
 			return
 		}
 		for {
@@ -135,33 +122,18 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			req, resp := proxy.filterRequest(req, ctx)
 			if resp == nil {
 				if err := req.Write(targetSiteCon); err != nil {
-					if _, err := io.WriteString(proxyClient, "HTTP/1.1 502 Bad Gateway\r\n\r\n"); err != nil {
-						ctx.Warnf("Error writing to remote: %s", err)
-					}
-					if err := proxyClient.Close(); err != nil {
-						ctx.Warnf("Error closing client connection: %s", err)
-					}
+					httpError(proxyClient, ctx)
 					return
 				}
 				resp, err = http.ReadResponse(remote, req)
 				if err != nil {
-					if _, err := io.WriteString(proxyClient, "HTTP/1.1 502 Bad Gateway\r\n\r\n"); err != nil {
-						ctx.Warnf("Error reading from remote: %s", err)
-					}
-					if err := proxyClient.Close(); err != nil {
-						ctx.Warnf("Error closing client connection: %s", err)
-					}
+					httpError(proxyClient, ctx)
 					return
 				}
 			}
 			resp = proxy.filterResponse(resp, ctx)
 			if err := resp.Write(proxyClient); err != nil {
-				if _, err := io.WriteString(proxyClient, "HTTP/1.1 502 Bad Gateway\r\n\r\n"); err != nil {
-					ctx.Warnf("Error writing response to client: %s", err)
-				}
-				if err := proxyClient.Close(); err != nil {
-					ctx.Warnf("Error closing client connection: %s", err)
-				}
+				httpError(proxyClient, ctx)
 				return
 			}
 		}
@@ -265,6 +237,15 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			}
 		}
 		proxyClient.Close()
+	}
+}
+
+func httpError(w io.WriteCloser, ctx *ProxyCtx) {
+	if _, err := io.WriteString(w, "HTTP/1.1 502 Bad Gateway\r\n\r\n"); err != nil {
+		ctx.Warnf("Error responding to client: %s", err)
+	}
+	if err := w.Close(); err != nil {
+		ctx.Warnf("Error closing client connection: %s", err)
 	}
 }
 
