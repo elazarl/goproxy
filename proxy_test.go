@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -687,4 +688,28 @@ func readConnectResponse(buf *bufio.Reader) {
 	panicOnErr(err, "resp.Read connect resp")
 	_, err = buf.ReadString('\n')
 	panicOnErr(err, "resp.Read connect resp")
+}
+
+func TestCurlMinusP(t *testing.T) {
+	_, proxy, l := oneShotProxy(t)
+	defer l.Close()
+	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+		return goproxy.HTTPMitmConnect, host
+	})
+	called := false
+	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		called = true
+		return req, nil
+	})
+	cmd := exec.Command("curl", "-p", "-sS", "--proxy", l.URL, srv.URL+"/bobo")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(output) != "bobo" {
+		t.Error("Expected bobo, got", string(output))
+	}
+	if !called {
+		t.Error("handler not called")
+	}
 }

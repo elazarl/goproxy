@@ -22,12 +22,14 @@ const (
 	ConnectReject
 	ConnectMitm
 	ConnectHijack
+	ConnectHTTPMitm
 )
 
 var (
-	OkConnect     = &ConnectAction{Action: ConnectAccept}
-	MitmConnect   = &ConnectAction{Action: ConnectMitm}
-	RejectConnect = &ConnectAction{Action: ConnectReject}
+	OkConnect       = &ConnectAction{Action: ConnectAccept}
+	MitmConnect     = &ConnectAction{Action: ConnectMitm}
+	HTTPMitmConnect = &ConnectAction{Action: ConnectHTTPMitm}
+	RejectConnect   = &ConnectAction{Action: ConnectReject}
 )
 
 type ConnectAction struct {
@@ -106,6 +108,63 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		ctx.Logf("Hijacking CONNECT to %s", host)
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 		todo.Hijack(r, proxyClient, ctx)
+	case ConnectHTTPMitm:
+		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+		ctx.Logf("Assuming CONNECT is plain HTTP tunneling, mitm proxying it")
+		targetSiteCon, err := proxy.connectDial("tcp", host)
+		if err != nil {
+			if _, err := io.WriteString(proxyClient, "HTTP/1.1 502 Bad Gateway\r\n\r\n"); err != nil {
+				ctx.Warnf("Error responding to client: %s", err)
+			}
+			ctx.Warnf("Error dialing to %s: %s", host, err.Error())
+			if err := proxyClient.Close(); err != nil {
+				ctx.Warnf("Error closing client connection: %s", err)
+			}
+			return
+		}
+		for {
+			client := bufio.NewReader(proxyClient)
+			remote := bufio.NewReader(targetSiteCon)
+			req, err := http.ReadRequest(client)
+			if err != nil && err != io.EOF {
+				ctx.Warnf("cannot read request of MITM HTTP client: %+#v", err)
+			}
+			if err != nil {
+				return
+			}
+			req, resp := proxy.filterRequest(req, ctx)
+			if resp == nil {
+				if err := req.Write(targetSiteCon); err != nil {
+					if _, err := io.WriteString(proxyClient, "HTTP/1.1 502 Bad Gateway\r\n\r\n"); err != nil {
+						ctx.Warnf("Error writing to remote: %s", err)
+					}
+					if err := proxyClient.Close(); err != nil {
+						ctx.Warnf("Error closing client connection: %s", err)
+					}
+					return
+				}
+				resp, err = http.ReadResponse(remote, req)
+				if err != nil {
+					if _, err := io.WriteString(proxyClient, "HTTP/1.1 502 Bad Gateway\r\n\r\n"); err != nil {
+						ctx.Warnf("Error reading from remote: %s", err)
+					}
+					if err := proxyClient.Close(); err != nil {
+						ctx.Warnf("Error closing client connection: %s", err)
+					}
+					return
+				}
+			}
+			resp = proxy.filterResponse(resp, ctx)
+			if err := resp.Write(proxyClient); err != nil {
+				if _, err := io.WriteString(proxyClient, "HTTP/1.1 502 Bad Gateway\r\n\r\n"); err != nil {
+					ctx.Warnf("Error writing response to client: %s", err)
+				}
+				if err := proxyClient.Close(); err != nil {
+					ctx.Warnf("Error closing client connection: %s", err)
+				}
+				return
+			}
+		}
 	case ConnectMitm:
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 		ctx.Logf("Assuming CONNECT is TLS, mitm proxying it")
@@ -166,7 +225,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				if strings.HasPrefix(text, statusCode) {
 					text = text[len(statusCode):]
 				}
-				// always use 1.1 to support encoding
+				// always use 1.1 to support chunked encoding
 				if _, err := io.WriteString(rawClientTls, "HTTP/1.1"+" "+statusCode+text+"\r\n"); err != nil {
 					ctx.Warnf("Cannot write TLS response HTTP status from mitm'd client: %v", err)
 					return
