@@ -31,13 +31,6 @@ type ProxyHttpServer struct {
 
 var hasPort = regexp.MustCompile(`:\d+$`)
 
-func (proxy *ProxyHttpServer) copyAndClose(w io.WriteCloser, r io.Reader) {
-	io.Copy(w, r)
-	if err := w.Close(); err != nil {
-		proxy.Logger.Println("Error closing", err)
-	}
-}
-
 func copyHeaders(dst, src http.Header) {
 	for k, _ := range dst {
 		dst.Del(k)
