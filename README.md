@@ -52,8 +52,7 @@ This line will add `X-GoProxy: yxorPoG-X` header to all requests sent through th
         func(r *http.Request,ctx *goproxy.ProxyCtx)(*http.Request,*http.Response) {
             r.Header.Set("X-GoProxy","yxorPoG-X")
             return r,nil
-        }
-    )
+        })
 
 `DoFunc` will process all incoming requests to the proxy. It will add a header to the request
 and return it. The proxy will send the modified request.
