@@ -91,6 +91,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		}
 		targetSiteCon, err := proxy.connectDial("tcp", host)
 		if err != nil {
+			httpError(proxyClient, ctx, err)
 			return
 		}
 		ctx.Logf("Accepting CONNECT to %s", host)
@@ -122,18 +123,18 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			req, resp := proxy.filterRequest(req, ctx)
 			if resp == nil {
 				if err := req.Write(targetSiteCon); err != nil {
-					httpError(proxyClient, ctx)
+					httpError(proxyClient, ctx, err)
 					return
 				}
 				resp, err = http.ReadResponse(remote, req)
 				if err != nil {
-					httpError(proxyClient, ctx)
+					httpError(proxyClient, ctx, err)
 					return
 				}
 			}
 			resp = proxy.filterResponse(resp, ctx)
 			if err := resp.Write(proxyClient); err != nil {
-				httpError(proxyClient, ctx)
+				httpError(proxyClient, ctx, err)
 				return
 			}
 		}
@@ -243,7 +244,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 	}
 }
 
-func httpError(w io.WriteCloser, ctx *ProxyCtx) {
+func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
 	if _, err := io.WriteString(w, "HTTP/1.1 502 Bad Gateway\r\n\r\n"); err != nil {
 		ctx.Warnf("Error responding to client: %s", err)
 	}
