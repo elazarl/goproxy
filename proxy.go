@@ -6,7 +6,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"regexp"
 	"sync/atomic"
@@ -100,17 +99,9 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		var err error
 		ctx.Logf("Got request %v %v %v %v", r.URL.Path, r.Host, r.Method, r.URL.String())
 		if !r.URL.IsAbs() {
-			if r.Host == "" {
-				ctx.Warnf("non-proxy request received, without Host header")
-				http.Error(w, err.Error(), 500)
-				return
-			}
-			r.URL, err = url.Parse("http://" + r.Host + r.URL.Path)
-			if err != nil {
-				ctx.Warnf("unparsable path or host received, by non-proxy request: %+#v", r.URL.Path)
-				http.Error(w, err.Error(), 500)
-				return
-			}
+			ctx.Warnf("non-proxy request received, returning an error")
+			http.Error(w, "This is a proxy server, does not response to non-proxy requests", 500)
+			return
 		}
 		r, resp := proxy.filterRequest(r, ctx)
 
