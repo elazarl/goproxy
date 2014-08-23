@@ -253,14 +253,14 @@ func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
 	}
 }
 
-func copyAndClose(ctx *ProxyCtx, w net.Conn, r io.Reader) {
+func copyAndClose(ctx *ProxyCtx, w, r net.Conn) {
 	connOk := true
 	if _, err := io.Copy(w, r); err != nil {
 		connOk = false
-		ctx.Warnf("Error copying to client %s", err)
+		ctx.Warnf("Error copying to client: %s", err)
 	}
-	if err := w.Close(); err != nil && connOk {
-		ctx.Warnf("Error closing %s", err)
+	if err := r.Close(); err != nil && connOk {
+		ctx.Warnf("Error closing: %s", err)
 	}
 }
 
