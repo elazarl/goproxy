@@ -722,3 +722,13 @@ func TestSelfRequest(t *testing.T) {
 		t.Fatal("non proxy requests should fail")
 	}
 }
+
+func TestSelfRequestAllowedViaConfig(t *testing.T) {
+	_, proxy, l := oneShotProxy(t)
+	proxy.Verbose = true
+	proxy.AcceptDirect = true
+	defer l.Close()
+	if strings.Contains(string(getOrFail(l.URL, http.DefaultClient, t)), "non-proxy") {
+		t.Fatal("non proxy requests should NOT fail when set to AcceptDirect")
+	}
+}

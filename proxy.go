@@ -25,7 +25,8 @@ type ProxyHttpServer struct {
 	Tr            *http.Transport
 	// ConnectDial will be used to create TCP connections for CONNECT requests
 	// if nil Tr.Dial will be used
-	ConnectDial func(network string, addr string) (net.Conn, error)
+	ConnectDial  func(network string, addr string) (net.Conn, error)
+	AcceptDirect bool
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
@@ -98,7 +99,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 		var err error
 		ctx.Logf("Got request %v %v %v %v", r.URL.Path, r.Host, r.Method, r.URL.String())
-		if !r.URL.IsAbs() {
+		if !r.URL.IsAbs() && !proxy.AcceptDirect {
 			ctx.Warnf("non-proxy request received, returning an error")
 			http.Error(w, "This is a proxy server, does not response to non-proxy requests", 500)
 			return
