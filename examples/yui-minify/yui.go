@@ -13,6 +13,7 @@ package main
 
 import (
 	"flag"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -64,9 +65,25 @@ func main() {
 				ctx.Warnf("Cannot minify content in %v: %v", ctx.Req.URL, err)
 				return goproxy.TextResponse(ctx.Req, "Error getting stdout pipe")
 			}
+			stderr, err := cmd.StderrPipe()
+			if err != nil {
+				ctx.Logf("Error obtaining stderr from yuicompress: %s", err)
+				return goproxy.TextResponse(ctx.Req, "Error getting stderr pipe")
+			}
 			if err := cmd.Start(); err != nil {
 				ctx.Warnf("Cannot minify content in %v: %v", ctx.Req.URL, err)
 			}
+			go func() {
+				defer stderr.Close()
+				const kb = 1024
+				msg, err := ioutil.ReadAll(&io.LimitedReader{stderr, 50 * kb})
+				if len(msg) != 0 {
+					ctx.Logf("Error executing yuicompress: %s", string(msg))
+				}
+				if err != nil {
+					ctx.Logf("Error reading stderr from yuicompress: %s", string(msg))
+				}
+			}()
 		}
 		return resp
 	})
