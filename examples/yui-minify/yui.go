@@ -1,13 +1,14 @@
 // This example would minify standalone Javascript files (identified by their content type)
 // using the command line utility YUI compressor http://yui.github.io/yuicompressor/
 // Example usage:
-// ./yui -java /usr/local/bin/java -yuicompressor ~/Downloads/yuicompressor-2.4.8.jar
-// $ curl -vx localhost:8080  http://golang.org/lib/godoc/godocs.js
-// (function(){function g(){var u=$("#search");if(u.length===0){return}function t(){if(....
-// $ curl http://golang.org/lib/godoc/godocs.js | head -n 3
-// // Copyright 2012 The Go Authors. All rights reserved.
-// // Use of this source code is governed by a BSD-style
-// // license that can be found in the LICENSE file.
+//
+//    ./yui -java /usr/local/bin/java -yuicompressor ~/Downloads/yuicompressor-2.4.8.jar
+//    $ curl -vx localhost:8080  http://golang.org/lib/godoc/godocs.js
+//    (function(){function g(){var u=$("#search");if(u.length===0){return}function t(){if(....
+//    $ curl http://golang.org/lib/godoc/godocs.js | head -n 3
+//    // Copyright 2012 The Go Authors. All rights reserved.
+//    // Use of this source code is governed by a BSD-style
+//    // license that can be found in the LICENSE file.
 package main
 
 import (
@@ -15,6 +16,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
 	"path"
 	"strings"
@@ -41,6 +43,12 @@ func main() {
 				break
 			}
 		}
+	}
+	if *yuicompressor == "" {
+		log.Fatal("Can't find yuicompressor jar, searched yuicompressor*.jar in dir ", *yuicompressordir)
+	}
+	if _, err := os.Stat(*yuicompressor); os.IsNotExist(err) {
+		log.Fatal("Can't find yuicompressor jar specified ", *yuicompressor)
 	}
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.Verbose = *verbose
