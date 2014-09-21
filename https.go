@@ -82,7 +82,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		// If found a result, break the loop immediately
 		if newtodo != nil {
 			todo, host = newtodo, newhost
-			ctx.Logf("Handler on order %d: %v %s", i, todo, host)
+			ctx.Logf("on %dth handler: %v %s", i, todo, host)
 			break
 		}
 	}
