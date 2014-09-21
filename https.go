@@ -76,13 +76,15 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 
 	ctx.Logf("Running %d CONNECT handlers", len(proxy.httpsHandlers))
 	todo, host := OkConnect, r.URL.Host
-	ctx.Req = r
-	for _, h := range proxy.httpsHandlers {
+	for i, h := range proxy.httpsHandlers {
 		newtodo, newhost := h.HandleConnect(host, ctx)
+		
+		// If found a result, break the loop immediately
 		if newtodo != nil {
 			todo, host = newtodo, newhost
+			ctx.Logf("Handler on order %d: %v %s", i, todo, host)
+			break
 		}
-		ctx.Logf("handler: %v %s", todo, host)
 	}
 	switch todo.Action {
 	case ConnectAccept:
