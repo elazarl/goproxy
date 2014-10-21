@@ -722,3 +722,13 @@ func TestSelfRequest(t *testing.T) {
 		t.Fatal("non proxy requests should fail")
 	}
 }
+
+func TestSelfRequestTransparent(t *testing.T) {
+	_, proxy, l := oneShotProxy(t)
+	proxy.Transparent = true
+	defer l.Close()
+	proxyUrl, _ := url.Parse(l.URL)
+	if strings.Contains(string(getOrFail(proxyUrl.String(), http.DefaultClient, t)), "non-proxy") {
+		t.Fatal("non proxy requests should not fail")
+	}
+}

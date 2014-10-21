@@ -2,10 +2,12 @@ package goproxy
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"sync/atomic"
@@ -17,7 +19,9 @@ type ProxyHttpServer struct {
 	// see http://golang.org/src/pkg/sync/atomic/doc.go#L41
 	sess int64
 	// setting Verbose to true will log information on each request sent to the proxy
-	Verbose         bool
+	Verbose bool
+	// setting Transparent to true will allow relative URLs
+	Transparent     bool
 	Logger          *log.Logger
 	NonproxyHandler http.Handler
 	reqHandlers     []ReqHandler
@@ -97,16 +101,60 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	} else {
 		ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy}
 
-		var err error
 		ctx.Logf("Got request %v %v %v %v", r.URL.Path, r.Host, r.Method, r.URL.String())
 		if !r.URL.IsAbs() {
-			proxy.NonproxyHandler.ServeHTTP(w, r)
-			return
+			if !proxy.Transparent { // proxies configured in explicit mode require an absolute URL be provided
+				proxy.NonproxyHandler.ServeHTTP(w, r)
+				return
+			}
+			if r.Host == "" {
+				ctx.Warnf("non-proxy request received has empty Host header")
+				http.Error(w, "non-proxy request received has empty Host header", 500)
+				return
+			}
+			var err error
+			r.URL, err = url.Parse("http://" + r.Host + r.URL.Path)
+			if err != nil {
+				ctx.Warnf("unparsable path or host received, by non-proxy request: path=%s, host=%s, , error=%v", r.URL.Path, r.Host, err)
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			addrs, err := net.InterfaceAddrs()
+			if err != nil {
+				ctx.Warnf("Unable to fetch local network addresses - %v", err)
+			} else {
+				hostOnly, _, err := net.SplitHostPort(r.Host) // usually the host won't have a port included
+				if err != nil {
+					hostOnly = r.Host
+				}
+				hostIPs := []string{hostOnly}     // initialize the hostIPs list on the chance that request was for an IP and not a host
+				if net.ParseIP(hostOnly) == nil { // must be hostname and not an IPv4/6 address
+					hostIPs, err = net.LookupHost(hostOnly)
+					if err != nil {
+						ctx.Logf("Unable to lookup host %s - %v", hostOnly, err)
+						// since there was an error looking up the destination host, let this fall through and let the request fail naturally
+					}
+				}
+				for _, host := range hostIPs {
+					for _, addr := range addrs {
+						ipaddr, ok := addr.(*net.IPNet)
+						if !ok {
+							continue // don't care about non-IP addresses
+						}
+						if ipaddr.IP.String() == host {
+							ctx.Warnf("proxy in transparent mode received request to itself at %s", hostOnly)
+							http.Error(w, fmt.Sprintf("proxy in transparent mode received request to itself at %s", hostOnly), 500)
+							return
+						}
+					}
+				}
+			}
 		}
 		r, resp := proxy.filterRequest(r, ctx)
 
 		if resp == nil {
 			removeProxyHeaders(ctx, r)
+			var err error
 			resp, err = ctx.RoundTrip(r)
 			if err != nil {
 				ctx.Error = err
