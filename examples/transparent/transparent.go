@@ -10,6 +10,7 @@ import (
 
 func main() {
 	proxy := goproxy.NewProxyHttpServer()
+	proxy.Verbose = true
 	proxy.NonproxyHandler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if req.Host == "" {
 			fmt.Fprintln(w, "Cannot handle requests without Host header, e.g., HTTP 1.0")
