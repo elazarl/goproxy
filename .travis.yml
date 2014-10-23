@@ -1,3 +1,7 @@
 language: go
-before_script: mv $GOPATH/github.com/mzimmerman $GOPATH/github.com/elazarl
+before_script:
+- ls -l
+- pwd
+- ls -l $HOME/gopath/github.com/*
+- mv $HOME/gopath/github.com/mzimmerman $HOME/gopath/github.com/elazarl
 script: go test $GOPATH/github.com/elazarl
