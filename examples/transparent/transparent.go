@@ -54,7 +54,7 @@ func main() {
 			client.Close()
 		}()
 		clientBuf := bufio.NewReadWriter(bufio.NewReader(client), bufio.NewWriter(client))
-		remote, err := net.Dial("tcp", req.URL.Host)
+		remote, err := connectDial(proxy,"tcp", req.URL.Host)
 		orPanic(err)
 		remoteBuf := bufio.NewReadWriter(bufio.NewReader(remote), bufio.NewWriter(remote))
 		for {
@@ -108,6 +108,22 @@ func main() {
 	}
 }
 
+// copied/converted from https.go
+func dial(proxy *goproxy.ProxyHttpServer, network, addr string) (c net.Conn, err error) {
+	if proxy.Tr.Dial != nil {
+		return proxy.Tr.Dial(network, addr)
+	}
+	return net.Dial(network, addr)
+}
+
+// copied/converted from https.go
+func connectDial(proxy *goproxy.ProxyHttpServer, network, addr string) (c net.Conn, err error) {
+	if proxy.ConnectDial == nil {
+		return dial(proxy, network, addr)
+	}
+	return proxy.ConnectDial(network, addr)
+}
+
 type dumbResponseWriter struct {
 	net.Conn
 }
@@ -128,6 +144,5 @@ func (dumb dumbResponseWriter) WriteHeader(code int) {
 }
 
 func (dumb dumbResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	log.Printf("Connection Hijacked")
 	return dumb, bufio.NewReadWriter(bufio.NewReader(dumb), bufio.NewWriter(dumb)), nil
 }
