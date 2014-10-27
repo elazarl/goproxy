@@ -1,3 +1,0 @@
-language: go
-before_script: mv $HOME/gopath/src/github.com/mzimmerman $HOME/gopath/src/github.com/elazarl
-script: go test github.com/elazarl/goproxy
