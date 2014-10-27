@@ -8,6 +8,8 @@ Transparent proxies are more difficult to maintain and setup from a server side,
 
 ## Potential Issues
 
+Support for very old clients using HTTPS will fail.  Clients need to send the SNI value in the TLS ClientHello which most modern clients do these days, but old clients will break.
+
 If you're routing table allows for it, an explicit http request to goproxy will cause it to fail in an endless loop since it will try to request resources from itself repeatedly.  This could be solved in the goproxy code by looking up the hostnames, but it adds a delay that is much easier/faster to handle on the routing side.
 
 ## Routing Rules
