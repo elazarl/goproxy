@@ -54,7 +54,7 @@ func main() {
 			client.Close()
 		}()
 		clientBuf := bufio.NewReadWriter(bufio.NewReader(client), bufio.NewWriter(client))
-		remote, err := connectDial(proxy,"tcp", req.URL.Host)
+		remote, err := connectDial(proxy, "tcp", req.URL.Host)
 		orPanic(err)
 		remoteBuf := bufio.NewReadWriter(bufio.NewReader(remote), bufio.NewWriter(remote))
 		for {
