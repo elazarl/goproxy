@@ -76,13 +76,15 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 
 	ctx.Logf("Running %d CONNECT handlers", len(proxy.httpsHandlers))
 	todo, host := OkConnect, r.URL.Host
-	ctx.Req = r
-	for _, h := range proxy.httpsHandlers {
+	for i, h := range proxy.httpsHandlers {
 		newtodo, newhost := h.HandleConnect(host, ctx)
+		
+		// If found a result, break the loop immediately
 		if newtodo != nil {
 			todo, host = newtodo, newhost
+			ctx.Logf("on %dth handler: %v %s", i, todo, host)
+			break
 		}
-		ctx.Logf("handler: %v %s", todo, host)
 	}
 	switch todo.Action {
 	case ConnectAccept:
@@ -253,14 +255,14 @@ func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
 	}
 }
 
-func copyAndClose(ctx *ProxyCtx, w net.Conn, r io.Reader) {
+func copyAndClose(ctx *ProxyCtx, w, r net.Conn) {
 	connOk := true
 	if _, err := io.Copy(w, r); err != nil {
 		connOk = false
-		ctx.Warnf("Error copying to client %s", err)
+		ctx.Warnf("Error copying to client: %s", err)
 	}
-	if err := w.Close(); err != nil && connOk {
-		ctx.Warnf("Error closing %s", err)
+	if err := r.Close(); err != nil && connOk {
+		ctx.Warnf("Error closing: %s", err)
 	}
 }
 

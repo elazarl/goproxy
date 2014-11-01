@@ -17,12 +17,13 @@ type ProxyHttpServer struct {
 	// see http://golang.org/src/pkg/sync/atomic/doc.go#L41
 	sess int64
 	// setting Verbose to true will log information on each request sent to the proxy
-	Verbose       bool
-	Logger        *log.Logger
-	reqHandlers   []ReqHandler
-	respHandlers  []RespHandler
-	httpsHandlers []HttpsHandler
-	Tr            *http.Transport
+	Verbose         bool
+	Logger          *log.Logger
+	NonproxyHandler http.Handler
+	reqHandlers     []ReqHandler
+	respHandlers    []RespHandler
+	httpsHandlers   []HttpsHandler
+	Tr              *http.Transport
 	// ConnectDial will be used to create TCP connections for CONNECT requests
 	// if nil Tr.Dial will be used
 	ConnectDial func(network string, addr string) (net.Conn, error)
@@ -99,8 +100,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		var err error
 		ctx.Logf("Got request %v %v %v %v", r.URL.Path, r.Host, r.Method, r.URL.String())
 		if !r.URL.IsAbs() {
-			ctx.Warnf("non-proxy request received, returning an error")
-			http.Error(w, "This is a proxy server, does not response to non-proxy requests", 500)
+			proxy.NonproxyHandler.ServeHTTP(w, r)
 			return
 		}
 		r, resp := proxy.filterRequest(r, ctx)
@@ -149,6 +149,9 @@ func NewProxyHttpServer() *ProxyHttpServer {
 		reqHandlers:   []ReqHandler{},
 		respHandlers:  []RespHandler{},
 		httpsHandlers: []HttpsHandler{},
+		NonproxyHandler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			http.Error(w, "This is a proxy server, does not response to non-proxy requests", 500)
+		}),
 		Tr: &http.Transport{TLSClientConfig: tlsClientSkipVerify,
 			Proxy: http.ProxyFromEnvironment},
 	}

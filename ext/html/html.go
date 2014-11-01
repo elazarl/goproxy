@@ -3,14 +3,15 @@ package goproxy_html
 
 import (
 	"bytes"
-	"code.google.com/p/go-charset/charset"
-	_ "code.google.com/p/go-charset/data"
 	"errors"
-	"github.com/elazarl/goproxy"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"strings"
+
+	"code.google.com/p/go-charset/charset"
+	_ "code.google.com/p/go-charset/data"
+	"github.com/elazarl/goproxy"
 )
 
 var IsHtml goproxy.RespCondition = goproxy.ContentTypeIs("text/html")
@@ -49,6 +50,9 @@ func HandleString(f func(s string, ctx *goproxy.ProxyCtx) string) goproxy.RespHa
 // The given function must close the reader r, in order to close the response body.
 func HandleStringReader(f func(r io.Reader, ctx *goproxy.ProxyCtx) io.Reader) goproxy.RespHandler {
 	return goproxy.FuncRespHandler(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		if ctx.Error != nil {
+			return nil
+		}
 		charsetName := ctx.Charset()
 		if charsetName == "" {
 			charsetName = "utf-8"
