@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"image"
 	"io"
@@ -742,5 +743,22 @@ func TestSelfRequest(t *testing.T) {
 	defer l.Close()
 	if !strings.Contains(string(getOrFail(l.URL, http.DefaultClient, t)), "non-proxy") {
 		t.Fatal("non proxy requests should fail")
+	}
+}
+
+func TestHasGoproxyCA(t *testing.T) {
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	s := httptest.NewServer(proxy)
+
+	proxyUrl, _ := url.Parse(s.URL)
+	goproxyCA := x509.NewCertPool()
+	goproxyCA.AddCert(goproxy.GoproxyCa.Leaf)
+
+	tr := &http.Transport{TLSClientConfig: &tls.Config{RootCAs: goproxyCA}, Proxy: http.ProxyURL(proxyUrl)}
+	client := &http.Client{Transport: tr}
+
+	if resp := string(getOrFail(https.URL+"/bobo", client, t)); resp != "bobo" {
+		t.Error("Wrong response when mitm", resp, "expected bobo")
 	}
 }
