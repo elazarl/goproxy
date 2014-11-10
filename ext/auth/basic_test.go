@@ -24,8 +24,7 @@ func (h ConstantHanlder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, string(h))
 }
 
-func oneShotProxy() (client *http.Client, proxy *goproxy.ProxyHttpServer, s *httptest.Server) {
-	proxy = goproxy.NewProxyHttpServer()
+func oneShotProxy(proxy *goproxy.ProxyHttpServer) (client *http.Client, s *httptest.Server) {
 	s = httptest.NewServer(proxy)
 
 	proxyUrl, _ := url.Parse(s.URL)
@@ -46,11 +45,12 @@ func TestBasicConnectAuthWithCurl(t *testing.T) {
 	expected := ":c>"
 	background := httptest.NewTLSServer(ConstantHanlder(expected))
 	defer background.Close()
-	_, proxy, proxyserver := oneShotProxy()
-	defer proxyserver.Close()
+	proxy := goproxy.NewProxyHttpServer()
 	proxy.OnRequest().HandleConnect(auth.BasicConnect("my_realm", func(user, passwd string) bool {
 		return user == "user" && passwd == "open sesame"
 	}))
+	_, proxyserver := oneShotProxy(proxy)
+	defer proxyserver.Close()
 
 	cmd := exec.Command("curl",
 		"--silent", "--show-error", "--insecure",
@@ -73,11 +73,12 @@ func TestBasicAuthWithCurl(t *testing.T) {
 	expected := ":c>"
 	background := httptest.NewServer(ConstantHanlder(expected))
 	defer background.Close()
-	_, proxy, proxyserver := oneShotProxy()
-	defer proxyserver.Close()
+	proxy := goproxy.NewProxyHttpServer()
 	proxy.OnRequest().Do(auth.Basic("my_realm", func(user, passwd string) bool {
 		return user == "user" && passwd == "open sesame"
 	}))
+	_, proxyserver := oneShotProxy(proxy)
+	defer proxyserver.Close()
 
 	cmd := exec.Command("curl",
 		"--silent", "--show-error",
@@ -99,11 +100,12 @@ func TestBasicAuth(t *testing.T) {
 	expected := "hello"
 	background := httptest.NewServer(ConstantHanlder(expected))
 	defer background.Close()
-	client, proxy, proxyserver := oneShotProxy()
-	defer proxyserver.Close()
+	proxy := goproxy.NewProxyHttpServer()
 	proxy.OnRequest().Do(auth.Basic("my_realm", func(user, passwd string) bool {
 		return user == "user" && passwd == "open sesame"
 	}))
+	client, proxyserver := oneShotProxy(proxy)
+	defer proxyserver.Close()
 
 	// without auth
 	resp, err := client.Get(background.URL)

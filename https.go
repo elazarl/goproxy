@@ -26,17 +26,16 @@ const (
 )
 
 var (
-	OkConnect       = &ConnectAction{Action: ConnectAccept}
-	MitmConnect     = &ConnectAction{Action: ConnectMitm}
-	HTTPMitmConnect = &ConnectAction{Action: ConnectHTTPMitm}
-	RejectConnect   = &ConnectAction{Action: ConnectReject}
+	OkConnect       = &ConnectAction{Action: ConnectAccept, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
+	MitmConnect     = &ConnectAction{Action: ConnectMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
+	HTTPMitmConnect = &ConnectAction{Action: ConnectHTTPMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
+	RejectConnect   = &ConnectAction{Action: ConnectReject, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
 )
 
 type ConnectAction struct {
 	Action    ConnectActionLiteral
-	TlsConfig *tls.Config
-	Ca        *tls.Certificate
 	Hijack    func(req *http.Request, client net.Conn, ctx *ProxyCtx)
+	TLSConfig func(host string, ctx *ProxyCtx) (*tls.Config, error)
 }
 
 func stripPort(s string) string {
@@ -78,7 +77,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 	todo, host := OkConnect, r.URL.Host
 	for i, h := range proxy.httpsHandlers {
 		newtodo, newhost := h.HandleConnect(host, ctx)
-		
+
 		// If found a result, break the loop immediately
 		if newtodo != nil {
 			todo, host = newtodo, newhost
@@ -147,25 +146,18 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		// still handling the request even after hijacking the connection. Those HTTP CONNECT
 		// request can take forever, and the server will be stuck when "closed".
 		// TODO: Allow Server.Close() mechanism to shut down this connection as nicely as possible
-		ca := todo.Ca
-		if ca == nil {
-			ca = &GoproxyCa
+		tlsConfig := defaultTlsConfig
+		if todo.TLSConfig != nil {
+			var err error
+			tlsConfig, err = todo.TLSConfig(host, ctx)
+			if err != nil {
+				httpError(proxyClient, ctx, err)
+				return
+			}
 		}
-		cert, err := signHost(*ca, []string{stripPort(host)})
-		if err != nil {
-			ctx.Warnf("Cannot sign host certificate with provided CA: %s", err)
-			return
-		}
-		tlsConfig := tls.Config{}
-		if todo.TlsConfig != nil {
-			tlsConfig = *todo.TlsConfig
-		} else {
-			tlsConfig = *defaultTlsConfig
-		}
-		tlsConfig.Certificates = append(tlsConfig.Certificates, cert)
 		go func() {
 			//TODO: cache connections to the remote website
-			rawClientTls := tls.Server(proxyClient, &tlsConfig)
+			rawClientTls := tls.Server(proxyClient, tlsConfig)
 			if err := rawClientTls.Handshake(); err != nil {
 				ctx.Warnf("Cannot handshake client %v %v", r.Host, err)
 				return
@@ -351,4 +343,17 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxy(https_proxy string) func(net
 		}
 	}
 	return nil
+}
+
+func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls.Config, error) {
+	return func(host string, ctx *ProxyCtx) (*tls.Config, error) {
+		config := defaultTlsConfig
+		cert, err := signHost(*ca, []string{stripPort(host)})
+		if err != nil {
+			ctx.Warnf("Cannot sign host certificate with provided CA: %s", err)
+			return nil, err
+		}
+		config.Certificates = append(config.Certificates, cert)
+		return config, nil
+	}
 }
