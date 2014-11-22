@@ -18,9 +18,9 @@ Typical usage is
 
 Adding a header to each request
 
-	proxy.OnRequest().DoFunc(func(r *http.Request,ctx *goproxy.ProxyCtx)*http.Request{
+	proxy.OnRequest().DoFunc(func(r *http.Request,ctx *goproxy.ProxyCtx) (*http.Request, *http.Response){
 		r.Header.Set("X-GoProxy","1")
-		return r
+		return r, nil
 	})
 
 Note that the function is called before the proxy sends the request to the server
