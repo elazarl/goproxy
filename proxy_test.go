@@ -166,6 +166,44 @@ func TestReplaceReponseForUrl(t *testing.T) {
 	}
 }
 
+type spyingCloser struct {
+	io.Reader
+	didClose bool
+}
+
+func (s *spyingCloser) Close() error {
+	s.didClose = true
+	return nil
+}
+
+func SpyingCloser(r io.Reader) *spyingCloser {
+	return &spyingCloser{r, false}
+}
+
+func TestHTTPSResponseBodyClosed(t *testing.T) {
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+		return goproxy.MitmConnect, host
+	})
+	body := SpyingCloser(bytes.NewBufferString("chico"))
+	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		resp.StatusCode = http.StatusOK
+		resp.Body = body
+		return resp
+	})
+
+	client, l := oneShotProxy(proxy, t)
+	defer l.Close()
+
+	if result := string(getOrFail(https.URL+("/momo"), client, t)); result != "chico" {
+		t.Error("hooked response, should be chico, instead:", result)
+	}
+
+	if !body.didClose {
+		t.Error("didn't close response body")
+	}
+}
+
 func TestOneShotFileServer(t *testing.T) {
 	client, l := oneShotProxy(goproxy.NewProxyHttpServer(), t)
 	defer l.Close()
