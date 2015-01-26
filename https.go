@@ -217,6 +217,10 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					ctx.Warnf("Cannot write TLS response body from mitm'd client: %v", err)
 					return
 				}
+				if err := resp.Body.Close(); err != nil {
+					ctx.Warnf("Cannot close response body: %v", err)
+					return
+				}
 				if err := chunked.Close(); err != nil {
 					ctx.Warnf("Cannot write TLS chunked EOF from mitm'd client: %v", err)
 					return
