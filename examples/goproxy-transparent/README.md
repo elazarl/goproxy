@@ -4,7 +4,7 @@ This transparent example in goproxy is meant to show how to transparenty proxy a
 
 ## Why not explicit?
 
-Transparent proxies are more difficult to maintain and setup from a server side, but they require no configuration on the client(s) which could be in unmanaged systems or systems that don't support a proxy configuration.  See the [eavesdropper example](https://github.com/elazarl/goproxy/blob/master/examples/eavesdropper/main.go) if you want to see an explicit proxy example.
+Transparent proxies are more difficult to maintain and setup from a server side, but they require no configuration on the client(s) which could be in unmanaged systems or systems that don't support a proxy configuration.  See the [eavesdropper example](https://github.com/elazarl/goproxy/blob/master/examples/goproxy-eavesdropper/main.go) if you want to see an explicit proxy example.
 
 ## Potential Issues
 
@@ -14,4 +14,4 @@ If you're routing table allows for it, an explicit http request to goproxy will 
 
 ## Routing Rules
 
-Example routing rules are included in [proxy.sh](https://github.com/elazarl/goproxy/blob/master/examples/transparent/proxy.sh) but are best when setup using your distribution's configuration.
+Example routing rules are included in [proxy.sh](https://github.com/elazarl/goproxy/blob/master/examples/goproxy-transparent/proxy.sh) but are best when setup using your distribution's configuration.
