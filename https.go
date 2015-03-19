@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+
+	"github.com/inconshreveable/go-vhost"
 )
 
 type ConnectActionLiteral int
@@ -60,7 +62,7 @@ func (proxy *ProxyHttpServer) connectDial(network, addr string) (c net.Conn, err
 	return proxy.ConnectDial(network, addr)
 }
 
-func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request) {
+func (proxy *ProxyHttpServer) handleHttpsConnect(w http.ResponseWriter, r *http.Request) {
 	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy}
 
 	hij, ok := w.(http.Hijacker)
@@ -68,13 +70,23 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		panic("httpserver does not support hijacking")
 	}
 
-	proxyClient, _, e := hij.Hijack()
+	preTLSClient, _, e := hij.Hijack()
 	if e != nil {
 		panic("Cannot hijack connection " + e.Error())
 	}
 
+	preTLSClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+	proxyClient, vhostErr := vhost.TLS(preTLSClient) // try to sniff SNI
+	if vhostErr != nil{
+		ctx.Logf("Failed to sniff SNI (falling back to request Host): %s", vhostErr)
+	}
+
 	ctx.Logf("Running %d CONNECT handlers", len(proxy.httpsHandlers))
-	todo, host := OkConnect, r.URL.Host
+	host := proxyClient.Host()
+	if host == "" {
+		host = r.URL.Host
+	}
+	todo := OkConnect
 	for i, h := range proxy.httpsHandlers {
 		newtodo, newhost := h.HandleConnect(host, ctx)
 
@@ -92,19 +104,20 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		}
 		targetSiteCon, err := proxy.connectDial("tcp", host)
 		if err != nil {
-			httpError(proxyClient, ctx, err)
+			proxyClient.Close()
+			//httpError(proxyClient, ctx, err)
+			// .. previously, we would return
+			// an appropriate error if we weren't able to connect to the remote
+			// node.
 			return
 		}
 		ctx.Logf("Accepting CONNECT to %s", host)
-		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 		go copyAndClose(ctx, targetSiteCon, proxyClient)
 		go copyAndClose(ctx, proxyClient, targetSiteCon)
 	case ConnectHijack:
 		ctx.Logf("Hijacking CONNECT to %s", host)
-		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 		todo.Hijack(r, proxyClient, ctx)
 	case ConnectHTTPMitm:
-		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 		ctx.Logf("Assuming CONNECT is plain HTTP tunneling, mitm proxying it")
 		targetSiteCon, err := proxy.connectDial("tcp", host)
 		if err != nil {
@@ -140,7 +153,6 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			}
 		}
 	case ConnectMitm:
-		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 		ctx.Logf("Assuming CONNECT is TLS, mitm proxying it")
 		// this goes in a separate goroutine, so that the net/http server won't think we're
 		// still handling the request even after hijacking the connection. Those HTTP CONNECT
@@ -152,6 +164,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			tlsConfig, err = todo.TLSConfig(host, ctx)
 			if err != nil {
 				httpError(proxyClient, ctx, err)
+				ctx.Logf("Couldn't configure TLS: %s", err)
 				return
 			}
 		}
