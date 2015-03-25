@@ -86,9 +86,14 @@ See additional examples in the examples directory.
 
 # What's New
 
-  1. Ability to `Hijack` CONNECT requests. See
+  1. Major overhaul of API.  Pretty much everything will break if you merely try this version.
+
+  2. Ability to do optional SNI sniffing, and take action based on that information.
+
+  3. Ability to `Hijack` CONNECT requests. See
 [the eavesdropper example](https://github.com/elazarl/goproxy/blob/master/examples/goproxy-eavesdropper/main.go#L27)
-2.  Transparent proxy support for http/https including MITM certificate generation for TLS.  See the [transparent example.](https://github.com/elazarl/goproxy/tree/master/examples/goproxy-transparent)
+
+  4.  Transparent proxy support for http/https including MITM certificate generation for TLS.  See the [transparent example.](https://github.com/elazarl/goproxy/tree/master/examples/goproxy-transparent)
 
 # License
 
