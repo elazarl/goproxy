@@ -95,7 +95,12 @@ func (ctx *ProxyCtx) SNIHost() string {
 
 // Host will return the host without sniffing the SNI extension in the TLS negotiation.  You should use `SNIHost()` if you want to support that. Using this method ensures unaltered behavior for CONNECT calls to remote TCP endpoints.
 func (ctx *ProxyCtx) Host() string {
-	return ctx.Req.URL.Host
+	return ctx.host
+}
+
+func (ctx *ProxyCtx) SetDestinationHost(host string) {
+	ctx.Req.Host = host
+	ctx.host = host
 }
 
 // CONNECT handling methods
@@ -245,6 +250,8 @@ func (ctx *ProxyCtx) ForwardConnect(host string) error {
 	go ctx.copyAndClose(ctx.Conn, targetSiteConn)
 	return nil
 }
+
+var hasPort = regexp.MustCompile(`:\d+$`)
 
 func (ctx *ProxyCtx) RejectConnect() {
 	if ctx.Method != "CONNECT" {

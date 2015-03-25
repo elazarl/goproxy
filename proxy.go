@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"regexp"
 	"sync/atomic"
 )
 
@@ -23,18 +22,14 @@ type ProxyHttpServer struct {
 	SniffSNI bool
 	Logger   *log.Logger
 
+	// Registered handlers
+	connectHandlers  []ConnectHandler
+	requestHandlers  []RequestHandler
+	responseHandlers []ResponseHandler
 	// NonProxyHandler will be used to handle direct connections to the proxy. You can assign an `http.ServeMux` or some other routing libs here.  The default will return a 500 error saying this is a proxy and has nothing to serve by itself.
 	NonProxyHandler http.Handler
 
-	connectHandlers []ConnectHandler
-	requestHandlers []RequestHandler
-	responseHandlers []ResponseHandler
-
-	// old form of handlers
-	reqHandlers   []ReqHandler
-	respHandlers  []RespHandler
-	httpsHandlers []HttpsHandler
-
+	// Custom transport to be used
 	Transport *http.Transport
 
 	// Setting MITMCertAuth allows you to override the default CA cert/key used to sign MITM'd requests.
@@ -44,8 +39,6 @@ type ProxyHttpServer struct {
 	// if nil, .Transport.Dial will be used
 	ConnectDial func(network string, addr string) (net.Conn, error)
 }
-
-var hasPort = regexp.MustCompile(`:\d+$`)
 
 func copyHeaders(dst, src http.Header) {
 	for k, _ := range dst {
@@ -66,48 +59,6 @@ func isEof(r *bufio.Reader) bool {
 	return false
 }
 
-func (proxy *ProxyHttpServer) filterRequest(r *http.Request, ctx *ProxyCtx) (req *http.Request, resp *http.Response) {
-	req = r
-	for _, h := range proxy.reqHandlers {
-		req, resp = h.Handle(r, ctx)
-		// non-nil resp means the handler decided to skip sending the request
-		// and return canned response instead.
-		if resp != nil {
-			break
-		}
-	}
-	return
-}
-func (proxy *ProxyHttpServer) filterResponse(respOrig *http.Response, ctx *ProxyCtx) (resp *http.Response) {
-	resp = respOrig
-	for _, h := range proxy.respHandlers {
-		ctx.Resp = resp
-		resp = h.Handle(resp, ctx)
-	}
-	return
-}
-
-func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
-	r.RequestURI = "" // this must be reset when serving a request with the client
-	ctx.Logf("Sending request %v %v", r.Method, r.URL.String())
-
-	// If no Accept-Encoding header exists, Transport will add the headers it can accept
-	// and would wrap the response body with the relevant reader.
-	r.Header.Del("Accept-Encoding")
-
-	// curl can add that, see
-	// http://homepage.ntlworld.com/jonathan.deboynepollard/FGA/web-proxy-connection-header.html
-	r.Header.Del("Proxy-Connection")
-
-	// Connection is single hop Header:
-	// http://www.w3.org/Protocols/rfc2616/rfc2616.txt
-	// 14.10 Connection
-	//   The Connection general-header field allows the sender to specify
-	//   options that are desired for that particular connection and MUST NOT
-	//   be communicated by proxies over further connections.
-	r.Header.Del("Connection")
-}
-
 // Standard net/http function. Shouldn't be used directly, http.Serve will use it.
 func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	//r.Header["X-Forwarded-For"] = w.RemoteAddr()
@@ -122,7 +73,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		proxy:          proxy,
 		MITMCertAuth:   proxy.MITMCertAuth,
 	}
-	ctx.host = ctx.Host()
+	ctx.host = r.URL.Host
 
 	if r.Method == "CONNECT" {
 		proxy.dispatchConnectHandlers(ctx)
@@ -141,10 +92,10 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 // New proxy server, logs to StdErr by default
 func NewProxyHttpServer() *ProxyHttpServer {
 	proxy := ProxyHttpServer{
-		Logger:        log.New(os.Stderr, "", log.LstdFlags),
-		reqHandlers:   []ReqHandler{},
-		respHandlers:  []RespHandler{},
-		httpsHandlers: []HttpsHandler{},
+		Logger:           log.New(os.Stderr, "", log.LstdFlags),
+		requestHandlers:  []RequestHandler{},
+		responseHandlers: []ResponseHandler{},
+		connectHandlers:  []ConnectHandler{},
 		NonProxyHandler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, "This is a proxy server. Does not respond to non-proxy requests.", 500)
 		}),
