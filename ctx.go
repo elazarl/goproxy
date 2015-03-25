@@ -102,7 +102,7 @@ func (ctx *ProxyCtx) Host() string {
 }
 
 func (ctx *ProxyCtx) SetDestinationHost(host string) {
-	ctx.Req.Host = host
+	ctx.Req.URL.Host = host
 	ctx.host = host
 }
 
@@ -328,7 +328,7 @@ func (ctx *ProxyCtx) DispatchResponseHandlers() error {
 
 	if ctx.Resp == nil {
 		err := fmt.Errorf("Response nil: %s", ctx.ResponseError)
-		ctx.Logf("error read response %v: %v", ctx.Req.URL.Host, err.Error())
+		ctx.Logf("error reading response %v: %v", ctx.Req.URL.Host, err.Error())
 		http.Error(ctx.ResponseWriter, err.Error(), 500)
 		return err
 	}
