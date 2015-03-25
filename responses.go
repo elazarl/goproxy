@@ -10,11 +10,12 @@ import (
 // the given contentType, and http status.
 // Typical usage, refuse to process requests to local addresses:
 //
-//	proxy.OnRequest(IsLocalHost()).DoFunc(func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request,*http.Response) {
-//		return nil,NewResponse(r,goproxy.ContentTypeHtml,http.StatusUnauthorized,
-//			`<!doctype html><html><head><title>Can't use proxy for local addresses</title></head><body/></html>`)
-//	})
-func NewResponse(r *http.Request, contentType string, status int, body string) *http.Response {
+//  proxy.HandleRequest(IsLocalhost(HandlerFunc(func(ctx *ProxyCtx) Next {
+// 	    ctx.NewResponse(http.StatusUnauthorized, "text/html", "<html><body>Can't use proxy for local addresses</body></html>")
+// 	    return FORWARD
+//   })))
+//
+func NewResponse(r *http.Request, status int, contentType, body string) *http.Response {
 	resp := &http.Response{}
 	resp.Request = r
 	resp.TransferEncoding = r.TransferEncoding
@@ -25,14 +26,4 @@ func NewResponse(r *http.Request, contentType string, status int, body string) *
 	resp.ContentLength = int64(buf.Len())
 	resp.Body = ioutil.NopCloser(buf)
 	return resp
-}
-
-const (
-	ContentTypeText = "text/plain"
-	ContentTypeHtml = "text/html"
-)
-
-// Alias for NewResponse(r,ContentTypeText,http.StatusAccepted,text)
-func TextResponse(r *http.Request, text string) *http.Response {
-	return NewResponse(r, ContentTypeText, http.StatusAccepted, text)
 }

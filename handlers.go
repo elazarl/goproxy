@@ -10,32 +10,29 @@ const (
 	REJECT               // Reject the CONNECT attempt outright
 )
 
-type ConnectHandler interface {
+// About CONNECT requests
+
+type Handler interface {
 	Handle(ctx *ProxyCtx) Next
 }
 
-type ConnectHandlerFunc func(ctx *ProxyCtx) Next
+type HandlerFunc func(ctx *ProxyCtx) Next
 
-func (f ConnectHandlerFunc) Handle(ctx *ProxyCtx) Next {
+func (f HandlerFunc) Handle(ctx *ProxyCtx) Next {
 	return f(ctx)
 }
 
-type RequestHandler interface {
-	Handle(ctx *ProxyCtx) Next
-}
+type ChainedHandler func(Handler) Handler
 
-type RequestHandlerFunc func(ctx *ProxyCtx) Next
 
-func (f RequestHandlerFunc) Handle(ctx *ProxyCtx) Next {
-	return f(ctx)
-}
+var AlwaysMitm = HandlerFunc(func(ctx *ProxyCtx) Next {
+	return MITM
+})
 
-type ResponseHandler interface {
-	Handle(ctx *ProxyCtx) Next
-}
+var AlwaysReject = HandlerFunc(func(ctx *ProxyCtx) Next {
+	return REJECT
+})
 
-type ResponseHandlerFunc func(ctx *ProxyCtx) Next
-
-func (f ResponseHandlerFunc) Handle(ctx *ProxyCtx) Next {
-	return f(ctx)
-}
+var AlwaysForward = HandlerFunc(func(ctx *ProxyCtx) Next {
+	return FORWARD
+})

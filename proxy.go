@@ -23,9 +23,9 @@ type ProxyHttpServer struct {
 	Logger   *log.Logger
 
 	// Registered handlers
-	connectHandlers  []ConnectHandler
-	requestHandlers  []RequestHandler
-	responseHandlers []ResponseHandler
+	connectHandlers  []Handler
+	requestHandlers  []Handler
+	responseHandlers []Handler
 	// NonProxyHandler will be used to handle direct connections to the proxy. You can assign an `http.ServeMux` or some other routing libs here.  The default will return a 500 error saying this is a proxy and has nothing to serve by itself.
 	NonProxyHandler http.Handler
 
@@ -93,9 +93,9 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 func NewProxyHttpServer() *ProxyHttpServer {
 	proxy := ProxyHttpServer{
 		Logger:           log.New(os.Stderr, "", log.LstdFlags),
-		requestHandlers:  []RequestHandler{},
-		responseHandlers: []ResponseHandler{},
-		connectHandlers:  []ConnectHandler{},
+		requestHandlers:  []Handler{},
+		responseHandlers: []Handler{},
+		connectHandlers:  []Handler{},
 		NonProxyHandler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, "This is a proxy server. Does not respond to non-proxy requests.", 500)
 		}),

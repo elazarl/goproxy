@@ -39,7 +39,7 @@ interaction with the proxy.
 To print the content type of all responses from a certain url, we'll add a
 ReqCondition to the OnResponse function:
 
-	proxy.OnResponse(goproxy.UrlIs("golang.org/pkg")).DoFunc(func(r *http.Response, ctx *goproxy.ProxyCtx)*http.Response{
+	proxy.OnResponse(goproxy.UrlIsIn("golang.org/pkg")).DoFunc(func(r *http.Response, ctx *goproxy.ProxyCtx)*http.Response{
 		println(ctx.Req.Host,"->",r.Header.Get("Content-Type"))
 		return r
 	})

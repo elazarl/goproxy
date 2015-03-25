@@ -19,9 +19,9 @@ func orFatal(msg string, err error, t *testing.T) {
 	}
 }
 
-type ConstantHanlder string
+type ConstantHandler string
 
-func (h ConstantHanlder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h ConstantHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(h))
 }
 
@@ -43,7 +43,7 @@ func TestSingerTls(t *testing.T) {
 	cert.Leaf, err = x509.ParseCertificate(cert.Certificate[0])
 	orFatal("ParseCertificate", err, t)
 	expected := "key verifies with Go"
-	server := httptest.NewUnstartedServer(ConstantHanlder(expected))
+	server := httptest.NewUnstartedServer(ConstantHandler(expected))
 	defer server.Close()
 	server.TLS = &tls.Config{Certificates: []tls.Certificate{cert, *GoproxyCa}}
 	server.TLS.BuildNameToCertificate()

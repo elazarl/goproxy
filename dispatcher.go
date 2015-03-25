@@ -7,28 +7,28 @@ import (
 
 // HandleConnectFunc and HandleConnect mimic the `net/http` handlers, and register handlers for CONNECT proxy calls.
 func (proxy *ProxyHttpServer) HandleConnectFunc(f func(ctx *ProxyCtx) Next) {
-	proxy.connectHandlers = append(proxy.connectHandlers, ConnectHandlerFunc(f))
+	proxy.connectHandlers = append(proxy.connectHandlers, HandlerFunc(f))
 }
 
-func (proxy *ProxyHttpServer) HandleConnect(f ConnectHandler) {
+func (proxy *ProxyHttpServer) HandleConnect(f Handler) {
 	proxy.connectHandlers = append(proxy.connectHandlers, f)
 }
 
-// HandleRequestFunc and HandleRequest put hooks to handle certain requests. Note that MITM'd and HTTP requests that go through a CONNECT'd connection also go through those RequestHandlers.
+// HandleRequestFunc and HandleRequest put hooks to handle certain requests. Note that MITM'd and HTTP requests that go through a CONNECT'd connection also go through those Request Handlers.
 func (proxy *ProxyHttpServer) HandleRequestFunc(f func(ctx *ProxyCtx) Next) {
-	proxy.connectHandlers = append(proxy.connectHandlers, RequestHandlerFunc(f))
+	proxy.connectHandlers = append(proxy.connectHandlers, HandlerFunc(f))
 }
 
-func (proxy *ProxyHttpServer) HandleRequest(f RequestHandler) {
+func (proxy *ProxyHttpServer) HandleRequest(f Handler) {
 	proxy.connectHandlers = append(proxy.connectHandlers, f)
 }
 
-// HandleResponseFunc and HandleResponse put hooks to handle certain requests. Note that MITM'd and HTTP requests that go through a CONNECT'd connection also go through those ResponseHandlers.
+// HandleResponseFunc and HandleResponse put hooks to handle certain requests. Note that MITM'd and HTTP requests that go through a CONNECT'd connection also go through those Response Handlers.
 func (proxy *ProxyHttpServer) HandleResponseFunc(f func(ctx *ProxyCtx) Next) {
-	proxy.connectHandlers = append(proxy.connectHandlers, ResponseHandlerFunc(f))
+	proxy.connectHandlers = append(proxy.connectHandlers, HandlerFunc(f))
 }
 
-func (proxy *ProxyHttpServer) HandleResponse(f ResponseHandler) {
+func (proxy *ProxyHttpServer) HandleResponse(f Handler) {
 	proxy.connectHandlers = append(proxy.connectHandlers, f)
 }
 

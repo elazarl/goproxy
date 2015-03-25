@@ -9,14 +9,15 @@ import (
 
 func main() {
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.OnRequest(goproxy.DstHostIs("www.reddit.com")).DoFunc(
-		func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-			if h, _, _ := time.Now().Clock(); h >= 8 && h <= 17 {
-				return r, goproxy.NewResponse(r,
-					goproxy.ContentTypeText, http.StatusForbidden,
-					"Don't waste your time!")
-			}
-			return r, nil
-		})
+
+	blockReddit := goproxy.HandlerFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
+		if h, _, _ := time.Now().Clock(); h >= 8 && h <= 17 {
+			ctx.NewResponse(http.StatusForbidden, "text/plain", "Don't waste your time!")
+			return goproxy.FORWARD
+		}
+		return goproxy.NEXT
+	})
+	proxy.HandleRequest(goproxy.RequestHostIsIn("www.reddit.com")(blockReddit))
+
 	log.Fatalln(http.ListenAndServe(":8080", proxy))
 }

@@ -4,8 +4,8 @@
 
 Package goproxy provides a customizable HTTP proxy library for Go (golang),
 
-It supports regular HTTP proxy, HTTPS through CONNECT, and "hijacking" HTTPS
-connection using "Man in the Middle" style attack.
+It supports regular HTTP proxy, HTTPS through CONNECT, "hijacking" HTTPS
+connection using "Man in the Middle" style attack, and SNI sniffing.
 
 The intent of the proxy, is to be usable with reasonable amount of traffic
 yet, customizable and programable.
@@ -59,37 +59,28 @@ To get a taste of `goproxy`, a basic HTTP/HTTPS transparent proxy
 
 This line will add `X-GoProxy: yxorPoG-X` header to all requests sent through the proxy
 
-    proxy.OnRequest().DoFunc(
-        func(r *http.Request,ctx *goproxy.ProxyCtx)(*http.Request,*http.Response) {
-            r.Header.Set("X-GoProxy","yxorPoG-X")
-            return r,nil
-        })
-
-`DoFunc` will process all incoming requests to the proxy. It will add a header to the request
-and return it. The proxy will send the modified request.
-
-Note that we returned nil value as the response. Have we returned a response, goproxy would
-have discarded the request and sent the new response to the client.
-
-In order to refuse connections to reddit at work time
-
-    proxy.OnRequest(goproxy.DstHostIs("www.reddit.com")).DoFunc(
-        func(r *http.Request,ctx *goproxy.ProxyCtx)(*http.Request,*http.Response) {
-            if h,_,_ := time.Now().Clock(); h >= 8 && h <= 17 {
-                return r,goproxy.NewResponse(r,
-                        goproxy.ContentTypeText,http.StatusForbidden,
-                        "Don't waste your time!")
-            }
-            return r,nil
+    proxy.HandleRequestFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
+        ctx.Req.Header.Set("X-GoProxy","yxorPoG-X")
+        return goproxy.NEXT  // continue on with next handlers
+        // or, return goproxy.FORWARD  // to short circuit other handlers, and continue on with forwarding
     })
 
-`DstHostIs` returns a `ReqCondition`, that is a function receiving a `Request` and returning a boolean
-we will only process requests that matches the condition. `DstHostIs("www.reddit.com")` will return
-a `ReqCondition` accepting only requests directed to "www.reddit.com".
+Here is a more complex/complete example:
 
-`DoFunc` will recieve a function that will preprocess the request. We can change the request, or
-return a response. If the time is between 8:00am and 17:00pm, we will neglect the request, and
-return a precanned text response saying "do not waste your time".
+
+    proxy.HandleConnectFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
+        if ctx.SNIHost() == "secure.example.com" {
+            return goproxy.MITM
+        }
+        return goproxy.REJECT
+    })
+    proxy.HandleRequestFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
+        if ctx.IsThroughMITM {
+            ctx.Req.Header.Set("X-Snooped-On", "absolutely")
+        }
+        return goproxy.NEXT  // continue on with next handlers
+        // or, return goproxy.FORWARD  // to short circuit other handlers, and continue on with forwarding
+    })
 
 See additional examples in the examples directory.
 

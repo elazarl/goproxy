@@ -2,9 +2,11 @@ package goproxy
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/tls"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
@@ -18,10 +20,11 @@ import (
 // ProxyCtx is the Proxy context, contains useful information about every request. It is passed to
 // every user function. Also used as a logger.
 type ProxyCtx struct {
-	Method        string
-	SourceIP      string
-	IsSecure      bool // Whether we are handling an HTTPS request with the client
-	IsThroughMITM bool // Whether the current request is currently being MITM'd
+	Method          string
+	SourceIP        string
+	IsSecure        bool // Whether we are handling an HTTPS request with the client
+	IsThroughMITM   bool // Whether the current request is currently being MITM'd
+	IsThroughTunnel bool // Whether the current request is going through a CONNECT tunnel, doing HTTP calls (non-secure)
 
 	// Sniffed and non-sniffed hosts, cached here.
 	host         string
@@ -105,6 +108,7 @@ func (ctx *ProxyCtx) SetDestinationHost(host string) {
 
 // CONNECT handling methods
 
+// ManInTheMiddle triggers either a full-fledged MITM when done through HTTPS, otherwise, simply tunnels future HTTP requests through the CONNECT stream, dispatching calls to the Request Handlers
 func (ctx *ProxyCtx) ManInTheMiddle(host string) error {
 	if strings.HasSuffix(host, ":80") || strings.IndexRune(host, ':') == -1 {
 		return ctx.TunnelHTTP(host)
@@ -113,6 +117,11 @@ func (ctx *ProxyCtx) ManInTheMiddle(host string) error {
 	}
 }
 
+// TunnelHTTP assumes the current connection is a plain HTTP tunnel, with no security. It then dispatches all future requests in there through the registered Request Handlers.
+//
+// Requests flowing through this tunnel will be marked `ctx.IsThroughTunnel == true`.
+//
+// You can also find the original CONNECT request in `ctx.OriginalRequest`.
 func (ctx *ProxyCtx) TunnelHTTP(host string) error {
 	if !ctx.sniffedTLS {
 		ctx.Conn.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
@@ -128,6 +137,7 @@ func (ctx *ProxyCtx) TunnelHTTP(host string) error {
 	ctx.OriginalRequest = ctx.Req
 	ctx.targetSiteConn = targetSiteConn
 	ctx.RoundTripper = RoundTripperFunc(func(req *http.Request, ctx *ProxyCtx) (*http.Response, error) {
+		// Those requests will go through the CONNECT'ed tunnel, not Dial out directly on our own.
 		remote := bufio.NewReader(ctx.targetSiteConn)
 		resp := ctx.Resp
 		if err := req.Write(ctx.targetSiteConn); err != nil {
@@ -153,8 +163,7 @@ func (ctx *ProxyCtx) TunnelHTTP(host string) error {
 		}
 
 		ctx.Req = req
-		ctx.IsSecure = false
-		ctx.IsThroughMITM = true
+		ctx.IsThroughTunnel = true
 
 		ctx.proxy.dispatchRequestHandlers(ctx)
 	}
@@ -162,6 +171,18 @@ func (ctx *ProxyCtx) TunnelHTTP(host string) error {
 	return nil
 }
 
+// ManIntheMiddleHTTPS assumes we're dealing with an TLS-wrapped
+// CONNECT tunnel.  It will perform a full-blown man-in-the-middle
+// attack, and forward any future requests received from inside the
+// TSL tunnel to the Request Handlers.
+//
+// Requests in there will be marked `IsSecure = true` (although, you
+// and me know it's not *totally* secure, huh ?). They will also have
+// the `ctx.IsThroughMITM` flag set to true.
+//
+// The `ctx.OriginalRequest`
+// will also hold the original CONNECT request from which the tunnel
+// originated.
 func (ctx *ProxyCtx) ManInTheMiddleHTTPS(host string) error {
 	ctx.Logf("Assuming CONNECT is TLS, mitm proxying it")
 
@@ -387,6 +408,51 @@ func (ctx *ProxyCtx) ForwardMITMResponse(resp *http.Response) error {
 	}
 
 	return nil
+}
+
+// BufferResponse reads the whole Resp.Body and returns a byte array.
+// It is the caller,s responsibility to set a new Body with
+// `SetResponseBody` afterwards.  Otherwise, the Resp.Body will be in
+// a closed state and that is not fun for other parts of your program.
+// This replaces the need for goproxy's previous `HandleBytes`
+// implementation.
+func (ctx *ProxyCtx) BufferResponse() ([]byte, error) {
+	if ctx.Resp == nil {
+		return nil, fmt.Errorf("Response is nil")
+	}
+
+	b, err := ioutil.ReadAll(ctx.Resp.Body)
+	if err != nil {
+		ctx.Warnf("error reading response: %s", err)
+		return nil, err
+	}
+	ctx.Resp.Body.Close()
+
+	return b, nil
+}
+
+// SetResponseBody overwrites the Resp.Body with the given content.
+// It is the caller's responsibility to ensure the previous Body was
+// read and/or closed properly. Use `BufferResponse()` for that. This
+// call will fail if ctx.Resp is nil.
+func (ctx *ProxyCtx) SetResponseBody(content []byte) {
+	if ctx.Resp == nil {
+		ctx.Warnf("failed to SetResponseBody, the Response is nil")
+		return
+	}
+	ctx.Resp.Body = ioutil.NopCloser(bytes.NewBuffer(content))
+}
+
+func (ctx *ProxyCtx) NewResponse(status int, contentType, body string) {
+	ctx.Resp = NewResponse(ctx.Req, status, contentType, body)
+}
+
+func (ctx *ProxyCtx) NewTextResponse(body string) {
+	ctx.Resp = NewResponse(ctx.Req, http.StatusAccepted, "text/plain", body)
+}
+
+func (ctx *ProxyCtx) NewHTMLResponse(body string) {
+	ctx.Resp = NewResponse(ctx.Req, http.StatusAccepted, "text/html", body)
 }
 
 func (ctx *ProxyCtx) tlsConfig(host string) (*tls.Config, error) {

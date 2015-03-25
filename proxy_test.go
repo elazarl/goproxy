@@ -40,13 +40,13 @@ func (QueryHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 func init() {
-	http.DefaultServeMux.Handle("/bobo", ConstantHanlder("bobo"))
+	http.DefaultServeMux.Handle("/bobo", ConstantHandler("bobo"))
 	http.DefaultServeMux.Handle("/query", QueryHandler{})
 }
 
-type ConstantHanlder string
+type ConstantHandler string
 
-func (h ConstantHanlder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h ConstantHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, string(h))
 }
 
@@ -99,12 +99,14 @@ func oneShotProxy(proxy *goproxy.ProxyHttpServer, t *testing.T) (client *http.Cl
 	return
 }
 
-func TestSimpleHook(t *testing.T) {
+func TestSimpleConditionalHook(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.OnRequest(goproxy.SrcIpIs("127.0.0.1")).DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-		req.URL.Path = "/bobo"
-		return req, nil
+
+	mangleRequestPath := goproxy.HandlerFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
+		ctx.Req.URL.Path = "/bobo"
+		return goproxy.NEXT
 	})
+	proxy.HandleRequest(goproxy.RemoteAddrIs("127.0.0.1")(mangleRequestPath))
 	client, l := oneShotProxy(proxy, t)
 	defer l.Close()
 
@@ -117,9 +119,9 @@ func TestSimpleHook(t *testing.T) {
 
 func TestAlwaysHook(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-		req.URL.Path = "/bobo"
-		return req, nil
+	proxy.HandleRequestFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
+		ctx.Req.URL.Path = "/bobo"
+		return goproxy.NEXT
 	})
 	client, l := oneShotProxy(proxy, t)
 	defer l.Close()
@@ -131,29 +133,17 @@ func TestAlwaysHook(t *testing.T) {
 	}
 }
 
-func TestReplaceResponse(t *testing.T) {
-	proxy := goproxy.NewProxyHttpServer()
-	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
-		resp.StatusCode = http.StatusOK
-		resp.Body = ioutil.NopCloser(bytes.NewBufferString("chico"))
-		return resp
-	})
-
-	client, l := oneShotProxy(proxy, t)
-	defer l.Close()
-
-	if result := string(getOrFail(srv.URL+("/momo"), client, t)); result != "chico" {
-		t.Error("hooked response, should be chico, instead:", result)
-	}
-}
-
 func TestReplaceReponseForUrl(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.OnResponse(goproxy.UrlIs("/koko")).DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
-		resp.StatusCode = http.StatusOK
-		resp.Body = ioutil.NopCloser(bytes.NewBufferString("chico"))
-		return resp
-	})
+	proxy.HandleResponse(goproxy.UrlIsIn("/koko")(goproxy.HandlerFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
+		if ctx.Resp == nil {
+			return goproxy.NEXT
+		}
+		ctx.Resp.StatusCode = http.StatusOK
+		ctx.SetResponseBody([]byte("chico"))
+
+		return goproxy.NEXT
+	})))
 
 	client, l := oneShotProxy(proxy, t)
 	defer l.Close()
@@ -190,10 +180,12 @@ func TestOneShotFileServer(t *testing.T) {
 
 func TestContentType(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.OnResponse(goproxy.ContentTypeIs("image/png")).DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
-		resp.Header.Set("X-Shmoopi", "1")
-		return resp
+
+	mangleImage := goproxy.HandlerFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
+		ctx.Resp.Header.Set("X-Shmoopi", "1")
+		return goproxy.NEXT
 	})
+	proxy.HandleResponse(goproxy.RespContentTypeIs("image/png")(mangleImage))
 
 	client, l := oneShotProxy(proxy, t)
 	defer l.Close()
@@ -273,37 +265,13 @@ func compareImage(eImg, aImg image.Image, t *testing.T) {
 	}
 }
 
-func TestConstantImageHandler(t *testing.T) {
-	proxy := goproxy.NewProxyHttpServer()
-	//panda := getImage("panda.png", t)
-	football := getImage("test_data/football.png", t)
-	proxy.OnResponse().Do(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
-		return football
-	}))
-
-	client, l := oneShotProxy(proxy, t)
-	defer l.Close()
-
-	resp, err := client.Get(localFile("test_data/panda.png"))
-	if err != nil {
-		t.Fatal("Cannot get panda.png", err)
-	}
-
-	img, _, err := image.Decode(resp.Body)
-	if err != nil {
-		t.Error("decode", err)
-	} else {
-		compareImage(football, img, t)
-	}
-}
-
 func TestImageHandler(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
 	football := getImage("test_data/football.png", t)
 
-	proxy.OnResponse(goproxy.UrlIs("/test_data/panda.png")).Do(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
+	proxy.HandleResponse(goproxy.UrlIsIn("/test_data/panda.png")(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
 		return football
-	}))
+	})))
 
 	client, l := oneShotProxy(proxy, t)
 	defer l.Close()
@@ -336,10 +304,10 @@ func TestImageHandler(t *testing.T) {
 
 func TestChangeResp(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
-		resp.Body.Read([]byte{0})
-		resp.Body = ioutil.NopCloser(new(bytes.Buffer))
-		return resp
+	proxy.HandleResponseFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
+		ctx.Resp.Body.Read([]byte{0})
+		ctx.Resp.Body = ioutil.NopCloser(new(bytes.Buffer))
+		return goproxy.NEXT
 	})
 
 	client, l := oneShotProxy(proxy, t)
@@ -361,12 +329,13 @@ func TestReplaceImage(t *testing.T) {
 	panda := getImage("test_data/panda.png", t)
 	football := getImage("test_data/football.png", t)
 
-	proxy.OnResponse(goproxy.UrlIs("/test_data/panda.png")).Do(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
+	proxy.HandleResponse(goproxy.UrlIsIn("/test_data/panda.png")(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
 		return football
-	}))
-	proxy.OnResponse(goproxy.UrlIs("/test_data/football.png")).Do(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
+	})))
+
+	proxy.HandleResponse(goproxy.UrlIsIn("/test_data/football.png")(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
 		return panda
-	}))
+	})))
 
 	client, l := oneShotProxy(proxy, t)
 	defer l.Close()
@@ -389,8 +358,8 @@ func getCert(c *tls.Conn, t *testing.T) []byte {
 
 func TestSimpleMitm(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.OnRequest(goproxy.ReqHostIs(https.Listener.Addr().String())).HandleConnect(goproxy.AlwaysMitm)
-	proxy.OnRequest(goproxy.ReqHostIs("no such host exists")).HandleConnect(goproxy.AlwaysMitm)
+	proxy.HandleRequest(goproxy.RequestHostIsIn(https.Listener.Addr().String())(goproxy.AlwaysMitm))
+	proxy.HandleRequest(goproxy.RequestHostIsIn("no such host exists")(goproxy.AlwaysMitm))
 
 	client, l := oneShotProxy(proxy, t)
 	defer l.Close()
@@ -436,10 +405,11 @@ func TestSimpleMitm(t *testing.T) {
 
 func TestConnectHandler(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
-	althttps := httptest.NewTLSServer(ConstantHanlder("althttps"))
-	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+	althttps := httptest.NewTLSServer(ConstantHandler("althttps"))
+	proxy.HandleConnectFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
 		u, _ := url.Parse(althttps.URL)
-		return goproxy.OkConnect, u.Host
+		ctx.SetDestinationHost(u.Host)
+		return goproxy.FORWARD
 	})
 
 	client, l := oneShotProxy(proxy, t)
@@ -452,10 +422,12 @@ func TestConnectHandler(t *testing.T) {
 func TestMitmIsFiltered(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
 	//proxy.Verbose = true
-	proxy.OnRequest(goproxy.ReqHostIs(https.Listener.Addr().String())).HandleConnect(goproxy.AlwaysMitm)
-	proxy.OnRequest(goproxy.UrlIs("/momo")).DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-		return nil, goproxy.TextResponse(req, "koko")
-	})
+	proxy.HandleConnect(goproxy.AlwaysMitm)
+	// PREVIOUSLY: proxy.OnRequest(goproxy.ReqHostIs(https.Listener.Addr().String())).HandleConnect(goproxy.AlwaysMitm)
+	proxy.HandleRequest(goproxy.UrlIsIn("/momo")(goproxy.HandlerFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
+		ctx.NewTextResponse("koko")
+		return goproxy.NEXT
+	})))
 
 	client, l := oneShotProxy(proxy, t)
 	defer l.Close()
@@ -471,11 +443,12 @@ func TestMitmIsFiltered(t *testing.T) {
 
 func TestFirstHandlerMatches(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-		return nil, goproxy.TextResponse(req, "koko")
+	proxy.HandleRequestFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
+		ctx.NewTextResponse("koko")
+		return goproxy.FORWARD
 	})
-	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-		panic("should never get here, previous response is no null")
+	proxy.HandleRequestFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
+		panic("should never get here, because of the previous FORWARD")
 	})
 
 	client, l := oneShotProxy(proxy, t)
@@ -549,7 +522,7 @@ func TestNoProxyHeaders(t *testing.T) {
 func TestNoProxyHeadersHttps(t *testing.T) {
 	s := httptest.NewTLSServer(VerifyNoProxyHeaders{t})
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	proxy.HandleConnect(goproxy.AlwaysMitm)
 	client, l := oneShotProxy(proxy, t)
 	defer l.Close()
 	req, err := http.NewRequest("GET", s.URL, nil)
@@ -610,7 +583,8 @@ func TestChunkedResponse(t *testing.T) {
 	}
 
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+	proxy.HandleResponseFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
+		resp := ctx.Resp
 		panicOnErr(ctx.Error, "error reading output")
 		b, err := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
@@ -619,7 +593,7 @@ func TestChunkedResponse(t *testing.T) {
 			t.Fatal("Chunked response should be received as plaintext", enc)
 		}
 		resp.Body = ioutil.NopCloser(bytes.NewBufferString(strings.Replace(string(b), "e", "E", -1)))
-		return resp
+		return goproxy.NEXT
 	})
 
 	client, s := oneShotProxy(proxy, t)
@@ -637,14 +611,15 @@ func TestChunkedResponse(t *testing.T) {
 func TestGoproxyThroughProxy(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
 	proxy2 := goproxy.NewProxyHttpServer()
-	doubleString := func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+	doubleString := goproxy.HandlerFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
+		resp := ctx.Resp
 		b, err := ioutil.ReadAll(resp.Body)
 		panicOnErr(err, "readAll resp")
 		resp.Body = ioutil.NopCloser(bytes.NewBufferString(string(b) + " " + string(b)))
-		return resp
-	}
-	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
-	proxy.OnResponse().DoFunc(doubleString)
+		return goproxy.NEXT
+	})
+	proxy.HandleConnect(goproxy.AlwaysMitm)
+	proxy.HandleResponse(doubleString)
 
 	_, l := oneShotProxy(proxy, t)
 	defer l.Close()
@@ -661,15 +636,23 @@ func TestGoproxyThroughProxy(t *testing.T) {
 
 func TestGoproxyHijackConnect(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.OnRequest(goproxy.ReqHostIs(srv.Listener.Addr().String())).
-		HijackConnect(func(req *http.Request, client net.Conn, ctx *goproxy.ProxyCtx) {
+
+	hijackHandler := goproxy.HandlerFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
+		req := ctx.Req
+
+		client := ctx.HijackConnect()
+
 		t.Logf("URL %+#v\nSTR %s", req.URL, req.URL.String())
 		resp, err := http.Get("http:" + req.URL.String() + "/bobo")
 		panicOnErr(err, "http.Get(CONNECT url)")
 		panicOnErr(resp.Write(client), "resp.Write(client)")
 		resp.Body.Close()
 		client.Close()
+
+		return goproxy.DONE
 	})
+	proxy.HandleRequest(goproxy.RequestHostIsIn(srv.Listener.Addr().String())(hijackHandler))
+
 	client, l := oneShotProxy(proxy, t)
 	defer l.Close()
 	proxyAddr := l.Listener.Addr().String()
@@ -714,16 +697,18 @@ func readConnectResponse(buf *bufio.Reader) {
 
 func TestCurlMinusP(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
-		return goproxy.HTTPMitmConnect, host
+	proxy.HandleConnectFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
+		return goproxy.MITM  // default host
 	})
 	called := false
-	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+	proxy.HandleRequestFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
 		called = true
-		return req, nil
+		return goproxy.NEXT
 	})
+
 	_, l := oneShotProxy(proxy, t)
 	defer l.Close()
+
 	cmd := exec.Command("curl", "-p", "-sS", "--proxy", l.URL, srv.URL+"/bobo")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -748,7 +733,7 @@ func TestSelfRequest(t *testing.T) {
 
 func TestHasGoproxyCA(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	proxy.HandleConnect(goproxy.AlwaysMitm)
 	s := httptest.NewServer(proxy)
 
 	proxyUrl, _ := url.Parse(s.URL)
