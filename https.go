@@ -28,10 +28,10 @@ const (
 )
 
 var (
-	OkConnect       = &ConnectAction{Action: ConnectAccept, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
-	MitmConnect     = &ConnectAction{Action: ConnectMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
-	HTTPMitmConnect = &ConnectAction{Action: ConnectHTTPMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
-	RejectConnect   = &ConnectAction{Action: ConnectReject, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
+	OkConnect       = &ConnectAction{Action: ConnectAccept, TLSConfig: TLSConfigFromCA(GoproxyCa)}
+	MitmConnect     = &ConnectAction{Action: ConnectMitm, TLSConfig: TLSConfigFromCA(GoproxyCa)}
+	HTTPMitmConnect = &ConnectAction{Action: ConnectHTTPMitm, TLSConfig: TLSConfigFromCA(GoproxyCa)}
+	RejectConnect   = &ConnectAction{Action: ConnectReject, TLSConfig: TLSConfigFromCA(GoproxyCa)}
 )
 
 type ConnectAction struct {
@@ -49,8 +49,8 @@ func stripPort(s string) string {
 }
 
 func (proxy *ProxyHttpServer) dial(network, addr string) (c net.Conn, err error) {
-	if proxy.Tr.Dial != nil {
-		return proxy.Tr.Dial(network, addr)
+	if proxy.Transport.Dial != nil {
+		return proxy.Transport.Dial(network, addr)
 	}
 	return net.Dial(network, addr)
 }
@@ -77,7 +77,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnect(w http.ResponseWriter, r *http.
 
 	preTLSClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 	proxyClient, vhostErr := vhost.TLS(preTLSClient) // try to sniff SNI
-	if vhostErr != nil{
+	if vhostErr != nil {
 		ctx.Logf("Failed to sniff SNI (falling back to request Host): %s", vhostErr)
 	}
 
@@ -176,6 +176,8 @@ func (proxy *ProxyHttpServer) handleHttpsConnect(w http.ResponseWriter, r *http.
 				return
 			}
 			defer rawClientTls.Close()
+
+			ctx.Conn = rawClientTls
 			clientTlsReader := bufio.NewReader(rawClientTls)
 			for !isEof(clientTlsReader) {
 				req, err := http.ReadRequest(clientTlsReader)
@@ -189,21 +191,25 @@ func (proxy *ProxyHttpServer) handleHttpsConnect(w http.ResponseWriter, r *http.
 				req.RemoteAddr = r.RemoteAddr // since we're converting the request, need to carry over the original connecting IP as well
 				ctx.Logf("req %v", r.Host)
 				req.URL, err = url.Parse("https://" + r.Host + req.URL.String())
-				req, resp := proxy.filterRequest(req, ctx)
-				if resp == nil {
-					if err != nil {
-						ctx.Warnf("Illegal URL %s", "https://"+r.Host+req.URL.Path)
-						return
-					}
-					removeProxyHeaders(ctx, req)
-					resp, err = ctx.RoundTrip(req)
-					if err != nil {
-						ctx.Warnf("Cannot read TLS response from mitm'd server %v", err)
-						return
-					}
-					ctx.Logf("resp %v", resp.Status)
-				}
-				resp = proxy.filterResponse(resp, ctx)
+
+				ctx.proxy.dispatchRequestHandlers(ctx)
+				// req, resp := proxy.filterRequest(req, ctx)
+				// if resp == nil {
+				// 	if err != nil {
+				// 		ctx.Warnf("Illegal URL %s", "https://"+r.Host+req.URL.Path)
+				// 		return
+				// 	}
+				// 	removeProxyHeaders(ctx, req)
+				// 	resp, err = ctx.RoundTrip(req)
+				// 	if err != nil {
+				// 		ctx.Warnf("Cannot read TLS response from mitm'd server %v", err)
+				// 		return
+				// 	}
+				// 	ctx.Logf("resp %v", resp.Status)
+				// }
+				// resp = proxy.filterResponse(resp, ctx)
+				resp := ctx.Resp
+
 				text := resp.Status
 				statusCode := strconv.Itoa(resp.StatusCode) + " "
 				if strings.HasPrefix(text, statusCode) {
@@ -252,7 +258,8 @@ func (proxy *ProxyHttpServer) handleHttpsConnect(w http.ResponseWriter, r *http.
 	}
 }
 
-func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
+func httpError(w io.WriteCloser, ctx *ProxyCtx, parentErr error) {
+	ctx.Logf("Sending http error: %s", parentErr)
 	if _, err := io.WriteString(w, "HTTP/1.1 502 Bad Gateway\r\n\r\n"); err != nil {
 		ctx.Warnf("Error responding to client: %s", err)
 	}
@@ -330,7 +337,7 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxy(https_proxy string) func(net
 			if err != nil {
 				return nil, err
 			}
-			c = tls.Client(c, proxy.Tr.TLSClientConfig)
+			c = tls.Client(c, proxy.Transport.TLSClientConfig)
 			connectReq := &http.Request{
 				Method: "CONNECT",
 				URL:    &url.URL{Opaque: addr},
@@ -363,7 +370,7 @@ func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls
 	return func(host string, ctx *ProxyCtx) (*tls.Config, error) {
 		config := *defaultTLSConfig
 		ctx.Logf("signing for %s", stripPort(host))
-		cert, err := signHost(*ca, []string{stripPort(host)})
+		cert, err := signHost(ca, []string{stripPort(host)})
 		if err != nil {
 			ctx.Warnf("Cannot sign host certificate with provided CA: %s", err)
 			return nil, err

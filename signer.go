@@ -30,9 +30,9 @@ func hashSortedBigInt(lst []string) *big.Int {
 	return rv
 }
 
-var goproxySignerVersion = ":goroxy1"
+var goproxySignerVersion = ":goproxy2"
 
-func signHost(ca tls.Certificate, hosts []string) (cert tls.Certificate, err error) {
+func signHost(ca *tls.Certificate, hosts []string) (cert tls.Certificate, err error) {
 	var x509ca *x509.Certificate
 
 	// Use the provided ca and not the global GoproxyCa for certificate generation.
@@ -64,7 +64,13 @@ func signHost(ca tls.Certificate, hosts []string) (cert tls.Certificate, err err
 	for _, h := range hosts {
 		if ip := net.ParseIP(h); ip != nil {
 			template.IPAddresses = append(template.IPAddresses, ip)
+			if template.Subject.CommonName == "" {
+				template.Subject.CommonName = ip.String()
+			}
 		} else {
+			if template.Subject.CommonName == "" {
+				template.Subject.CommonName = h
+			}
 			template.DNSNames = append(template.DNSNames, h)
 		}
 	}

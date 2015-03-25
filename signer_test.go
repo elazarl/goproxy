@@ -45,7 +45,7 @@ func TestSingerTls(t *testing.T) {
 	expected := "key verifies with Go"
 	server := httptest.NewUnstartedServer(ConstantHanlder(expected))
 	defer server.Close()
-	server.TLS = &tls.Config{Certificates: []tls.Certificate{cert, GoproxyCa}}
+	server.TLS = &tls.Config{Certificates: []tls.Certificate{cert, *GoproxyCa}}
 	server.TLS.BuildNameToCertificate()
 	server.StartTLS()
 	certpool := x509.NewCertPool()

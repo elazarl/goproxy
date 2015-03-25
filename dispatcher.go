@@ -2,6 +2,7 @@ package goproxy
 
 import (
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -165,6 +166,34 @@ func (proxy *ProxyHttpServer) OnRequest(conds ...ReqCondition) *ReqProxyConds {
 	return &ReqProxyConds{proxy, conds}
 }
 
+// HandleConnectFunc and HandleConnect mimic the `net/http` handlers, and register handlers for CONNECT proxy calls.
+func (proxy *ProxyHttpServer) HandleConnectFunc(f func(ctx *ProxyCtx) Next) {
+	proxy.connectHandlers = append(proxy.connectHandlers, ConnectHandlerFunc(f))
+}
+
+func (proxy *ProxyHttpServer) HandleConnect(f ConnectHandler) {
+	proxy.connectHandlers = append(proxy.connectHandlers, f)
+}
+
+// HandleRequestFunc and HandleRequest put hooks to handle certain requests. Note that MITM'd and HTTP requests that go through a CONNECT'd connection also go through those RequestHandlers.
+func (proxy *ProxyHttpServer) HandleRequestFunc(f func(ctx *ProxyCtx) Next) {
+	proxy.connectHandlers = append(proxy.connectHandlers, RequestHandlerFunc(f))
+}
+
+func (proxy *ProxyHttpServer) HandleRequest(f RequestHandler) {
+	proxy.connectHandlers = append(proxy.connectHandlers, f)
+}
+
+// HandleResponseFunc and HandleResponse put hooks to handle certain requests. Note that MITM'd and HTTP requests that go through a CONNECT'd connection also go through those ResponseHandlers.
+func (proxy *ProxyHttpServer) HandleResponseFunc(f func(ctx *ProxyCtx) Next) {
+	proxy.connectHandlers = append(proxy.connectHandlers, ResponseHandlerFunc(f))
+}
+
+func (proxy *ProxyHttpServer) HandleResponse(f ResponseHandler) {
+	proxy.connectHandlers = append(proxy.connectHandlers, f)
+}
+
+
 // ReqProxyConds aggregate ReqConditions for a ProxyHttpServer. Upon calling Do, it will register a ReqHandler that would
 // handle the request if all conditions on the HTTP request are met.
 type ReqProxyConds struct {
@@ -172,9 +201,9 @@ type ReqProxyConds struct {
 	reqConds []ReqCondition
 }
 
-// DoFunc is equivalent to proxy.OnRequest().Do(FuncReqHandler(f))
+// DoFunc is equivalent to proxy.OnRequest().Do(ReqHandlerFunc(f))
 func (pcond *ReqProxyConds) DoFunc(f func(req *http.Request, ctx *ProxyCtx) (*http.Request, *http.Response)) {
-	pcond.Do(FuncReqHandler(f))
+	pcond.Do(ReqHandlerFunc(f))
 }
 
 // ReqProxyConds.Do will register the ReqHandler on the proxy,
@@ -184,9 +213,10 @@ func (pcond *ReqProxyConds) DoFunc(f func(req *http.Request, ctx *ProxyCtx) (*ht
 //	proxy.OnRequest(cond1,cond2).Do(handler)
 //	// given request to the proxy, will test if cond1.HandleReq(req,ctx) && cond2.HandleReq(req,ctx) are true
 //	// if they are, will call handler.Handle(req,ctx)
+
 func (pcond *ReqProxyConds) Do(h ReqHandler) {
 	pcond.proxy.reqHandlers = append(pcond.proxy.reqHandlers,
-		FuncReqHandler(func(r *http.Request, ctx *ProxyCtx) (*http.Request, *http.Response) {
+		ReqHandlerFunc(func(r *http.Request, ctx *ProxyCtx) (*http.Request, *http.Response) {
 			for _, cond := range pcond.reqConds {
 				if !cond.HandleReq(r, ctx) {
 					return r, nil
@@ -209,7 +239,7 @@ func (pcond *ReqProxyConds) Do(h ReqHandler) {
 //	proxy.OnRequest().HandleConnect(goproxy.AlwaysReject) // rejects all CONNECT requests
 func (pcond *ReqProxyConds) HandleConnect(h HttpsHandler) {
 	pcond.proxy.httpsHandlers = append(pcond.proxy.httpsHandlers,
-		FuncHttpsHandler(func(host string, ctx *ProxyCtx) (*ConnectAction, string) {
+		HttpsHandlerFunc(func(host string, ctx *ProxyCtx) (*ConnectAction, string) {
 			for _, cond := range pcond.reqConds {
 				if !cond.HandleReq(ctx.Req, ctx) {
 					return nil, ""
@@ -232,12 +262,12 @@ func (pcond *ReqProxyConds) HandleConnect(h HttpsHandler) {
 //		return RejectConnect, host
 //	})
 func (pcond *ReqProxyConds) HandleConnectFunc(f func(host string, ctx *ProxyCtx) (*ConnectAction, string)) {
-	pcond.HandleConnect(FuncHttpsHandler(f))
+	pcond.HandleConnect(HttpsHandlerFunc(f))
 }
 
 func (pcond *ReqProxyConds) HijackConnect(f func(req *http.Request, client net.Conn, ctx *ProxyCtx)) {
 	pcond.proxy.httpsHandlers = append(pcond.proxy.httpsHandlers,
-		FuncHttpsHandler(func(host string, ctx *ProxyCtx) (*ConnectAction, string) {
+		HttpsHandlerFunc(func(host string, ctx *ProxyCtx) (*ConnectAction, string) {
 			for _, cond := range pcond.reqConds {
 				if !cond.HandleReq(ctx.Req, ctx) {
 					return nil, ""
@@ -256,16 +286,16 @@ type ProxyConds struct {
 	respCond []RespCondition
 }
 
-// ProxyConds.DoFunc is equivalent to proxy.OnResponse().Do(FuncRespHandler(f))
+// ProxyConds.DoFunc is equivalent to proxy.OnResponse().Do(RespHandlerFunc(f))
 func (pcond *ProxyConds) DoFunc(f func(resp *http.Response, ctx *ProxyCtx) *http.Response) {
-	pcond.Do(FuncRespHandler(f))
+	pcond.Do(RespHandlerFunc(f))
 }
 
 // ProxyConds.Do will register the RespHandler on the proxy, h.Handle(resp,ctx) will be called on every
 // request that matches the conditions aggregated in pcond.
 func (pcond *ProxyConds) Do(h RespHandler) {
 	pcond.proxy.respHandlers = append(pcond.proxy.respHandlers,
-		FuncRespHandler(func(resp *http.Response, ctx *ProxyCtx) *http.Response {
+		RespHandlerFunc(func(resp *http.Response, ctx *ProxyCtx) *http.Response {
 			for _, cond := range pcond.reqConds {
 				if !cond.HandleReq(ctx.Req, ctx) {
 					return resp
@@ -280,6 +310,76 @@ func (pcond *ProxyConds) Do(h RespHandler) {
 		}))
 }
 
+func (proxy *ProxyHttpServer) dispatchConnectHandlers(ctx *ProxyCtx) {
+	hij, ok := ctx.ResponseWriter.(http.Hijacker)
+	if !ok {
+		panic("httpserver does not support hijacking")
+	}
+
+	conn, _, err := hij.Hijack()
+	if err != nil {
+		panic("cannot hijack connection " + err.Error())
+	}
+
+	ctx.Conn = conn
+
+	var then Next
+	for _, handler := range proxy.connectHandlers {
+		then = handler.Handle(ctx)
+		switch then {
+		case NEXT:
+			continue
+
+		case FORWARD:
+			break
+
+		case MITM:
+			err := ctx.ManInTheMiddle(ctx.host)
+			if err != nil {
+				ctx.Logf("error MITM'ing: %s", err)
+			}
+			return
+
+		case REJECT:
+			ctx.RejectConnect()
+
+		default:
+			panic(fmt.Sprintf("Invalid value %v for Next after calling %v", then, handler))
+		}
+	}
+
+	if err := ctx.ForwardConnect(ctx.Host()); err != nil {
+		ctx.Logf("Failed forwarding in fallback clause: %s", err)
+	}
+}
+
+func (proxy *ProxyHttpServer) dispatchRequestHandlers(ctx *ProxyCtx) {
+	var then Next
+	for _, handler := range proxy.requestHandlers {
+		then = handler.Handle(ctx)
+		switch then {
+		case DONE:
+			// TODO: ensure everything is properly shut down
+			return
+		case NEXT:
+			continue
+		case FORWARD:
+			break
+		case MITM:
+			panic("MITM doesn't make sense when we are already parsing the request")
+		case REJECT:
+			ctx.ResponseWriter.WriteHeader(502)
+			ctx.ResponseWriter.Write([]byte("Rejected by proxy"))
+			return
+		default:
+			panic(fmt.Sprintf("Invalid value %v for Next after calling %v", then, handler))
+		}
+	}
+
+	ctx.ForwardRequest(ctx.host)
+	ctx.DispatchResponseHandlers()
+}
+
 // OnResponse is used when adding a response-filter to the HTTP proxy, usual pattern is
 //	proxy.OnResponse(cond1,cond2).Do(handler) // handler.Handle(resp,ctx) will be used
 //				// if cond1.HandleResp(resp) && cond2.HandleResp(resp)
@@ -290,7 +390,7 @@ func (proxy *ProxyHttpServer) OnResponse(conds ...RespCondition) *ProxyConds {
 // AlwaysMitm is a HttpsHandler that always eavesdrop https connections, for example to
 // eavesdrop all https connections to www.google.com, we can use
 //	proxy.OnRequest(goproxy.ReqHostIs("www.google.com")).HandleConnect(goproxy.AlwaysMitm)
-var AlwaysMitm FuncHttpsHandler = func(host string, ctx *ProxyCtx) (*ConnectAction, string) {
+var AlwaysMitm HttpsHandlerFunc = func(host string, ctx *ProxyCtx) (*ConnectAction, string) {
 	return MitmConnect, host
 }
 
@@ -298,7 +398,7 @@ var AlwaysMitm FuncHttpsHandler = func(host string, ctx *ProxyCtx) (*ConnectActi
 // connections to hosts on any other port than 443
 //	proxy.OnRequest(goproxy.Not(goproxy.ReqHostMatches(regexp.MustCompile(":443$"))).
 //		HandleConnect(goproxy.AlwaysReject)
-var AlwaysReject FuncHttpsHandler = func(host string, ctx *ProxyCtx) (*ConnectAction, string) {
+var AlwaysReject HttpsHandlerFunc = func(host string, ctx *ProxyCtx) (*ConnectAction, string) {
 	return RejectConnect, host
 }
 
@@ -306,7 +406,7 @@ var AlwaysReject FuncHttpsHandler = func(host string, ctx *ProxyCtx) (*ConnectAc
 // to a byte array in memory, would run the user supplied f function on the byte arra,
 // and will replace the body of the original response with the resulting byte array.
 func HandleBytes(f func(b []byte, ctx *ProxyCtx) []byte) RespHandler {
-	return FuncRespHandler(func(resp *http.Response, ctx *ProxyCtx) *http.Response {
+	return RespHandlerFunc(func(resp *http.Response, ctx *ProxyCtx) *http.Response {
 		b, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			ctx.Warnf("Cannot read response %s", err)

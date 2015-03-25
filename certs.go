@@ -5,14 +5,27 @@ import (
 	"crypto/x509"
 )
 
+var GoproxyCa *tls.Certificate
+
 func init() {
-	if goproxyCaErr != nil {
-		panic("Error parsing builtin CA " + goproxyCaErr.Error())
-	}
-	var err error
-	if GoproxyCa.Leaf, err = x509.ParseCertificate(GoproxyCa.Certificate[0]); err != nil {
+	ca, err := LoadCA(CA_CERT, CA_KEY)
+	if err != nil {
 		panic("Error parsing builtin CA " + err.Error())
 	}
+	GoproxyCa = ca
+}
+
+// Load a CA bundle from by arrays.  You can then load them into
+// the proxy with `proxy.SetMITMCertAuth`
+func LoadCA(caCert, caKey []byte) (*tls.Certificate, error) {
+	ca, err := tls.X509KeyPair(CA_CERT, CA_KEY)
+	if err != nil {
+		return nil, err
+	}
+	if ca.Leaf, err = x509.ParseCertificate(ca.Certificate[0]); err != nil {
+		return nil, err
+	}
+	return &ca, nil
 }
 
 var tlsClientSkipVerify = &tls.Config{InsecureSkipVerify: true}
@@ -52,5 +65,3 @@ qcbY4iX1gWVfr2tNjajSYz751yoxVbkpiT9joiQLVXYFvpu+JYEfRzsjmWl0h2Lq
 AftG8/xYmaEYcMZ6wSrRAkBUwiom98/8wZVlB6qbwhU1EKDFANvICGSWMIhPx3v7
 MJqTIj4uJhte2/uyVvZ6DC6noWYgy+kLgqG0S97tUEG8
 -----END RSA PRIVATE KEY-----`)
-
-var GoproxyCa, goproxyCaErr = tls.X509KeyPair(CA_CERT, CA_KEY)

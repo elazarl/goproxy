@@ -2,6 +2,7 @@ package goproxy
 
 import (
 	"bufio"
+	"crypto/tls"
 	"io"
 	"log"
 	"net"
@@ -17,17 +18,30 @@ type ProxyHttpServer struct {
 	// see http://golang.org/src/pkg/sync/atomic/doc.go#L41
 	sess int64
 	// setting Verbose to true will log information on each request sent to the proxy
-	Verbose         bool
+	Verbose bool
 	// SniffSNI enables sniffing Server Name Indicator when doing CONNECT calls.  It will thus answer to CONNECT calls with a "200 OK" even if the remote server might not answer.  The result would be the shutdown of the connection instead of an appropriate HTTP error code if the remote node doesn't answer.
-	SniffSNI        bool
-	Logger          *log.Logger
-	NonproxyHandler http.Handler
-	reqHandlers     []ReqHandler
-	respHandlers    []RespHandler
-	httpsHandlers   []HttpsHandler
-	Tr              *http.Transport
+	SniffSNI bool
+	Logger   *log.Logger
+
+	// NonProxyHandler will be used to handle direct connections to the proxy. You can assign an `http.ServeMux` or some other routing libs here.  The default will return a 500 error saying this is a proxy and has nothing to serve by itself.
+	NonProxyHandler http.Handler
+
+	connectHandlers []ConnectHandler
+	requestHandlers []RequestHandler
+	responseHandlers []ResponseHandler
+
+	// old form of handlers
+	reqHandlers   []ReqHandler
+	respHandlers  []RespHandler
+	httpsHandlers []HttpsHandler
+
+	Transport *http.Transport
+
+	// Setting MITMCertAuth allows you to override the default CA cert/key used to sign MITM'd requests.
+	MITMCertAuth *tls.Certificate
+
 	// ConnectDial will be used to create TCP connections for CONNECT requests
-	// if nil Tr.Dial will be used
+	// if nil, .Transport.Dial will be used
 	ConnectDial func(network string, addr string) (net.Conn, error)
 }
 
@@ -76,12 +90,15 @@ func (proxy *ProxyHttpServer) filterResponse(respOrig *http.Response, ctx *Proxy
 func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 	r.RequestURI = "" // this must be reset when serving a request with the client
 	ctx.Logf("Sending request %v %v", r.Method, r.URL.String())
+
 	// If no Accept-Encoding header exists, Transport will add the headers it can accept
 	// and would wrap the response body with the relevant reader.
 	r.Header.Del("Accept-Encoding")
+
 	// curl can add that, see
 	// http://homepage.ntlworld.com/jonathan.deboynepollard/FGA/web-proxy-connection-header.html
 	r.Header.Del("Proxy-Connection")
+
 	// Connection is single hop Header:
 	// http://www.w3.org/Protocols/rfc2616/rfc2616.txt
 	// 14.10 Connection
@@ -94,53 +111,30 @@ func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 // Standard net/http function. Shouldn't be used directly, http.Serve will use it.
 func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	//r.Header["X-Forwarded-For"] = w.RemoteAddr()
-	if r.Method == "CONNECT" {
-		proxy.handleHttpsConnect(w, r)
-	} else {
-		ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy}
 
-		var err error
+	ctx := &ProxyCtx{
+		Method:         r.Method,
+		SourceIP:       r.RemoteAddr, // pick it from somewhere else ? have a plugin to override this ?
+		Req:            r,
+		ResponseWriter: w,
+		UserData:       make(map[string]interface{}),
+		Session:        atomic.AddInt64(&proxy.sess, 1),
+		proxy:          proxy,
+		MITMCertAuth:   proxy.MITMCertAuth,
+	}
+	ctx.host = ctx.Host()
+
+	if r.Method == "CONNECT" {
+		proxy.dispatchConnectHandlers(ctx)
+		//proxy.handleHttpsConnect(w, r)
+	} else {
 		ctx.Logf("Got request %v %v %v %v", r.URL.Path, r.Host, r.Method, r.URL.String())
 		if !r.URL.IsAbs() {
-			proxy.NonproxyHandler.ServeHTTP(w, r)
+			proxy.NonProxyHandler.ServeHTTP(w, r)
 			return
 		}
-		r, resp := proxy.filterRequest(r, ctx)
 
-		if resp == nil {
-			removeProxyHeaders(ctx, r)
-			resp, err = ctx.RoundTrip(r)
-			if err != nil {
-				ctx.Error = err
-				resp = proxy.filterResponse(nil, ctx)
-				if resp == nil {
-					ctx.Logf("error read response %v %v:", r.URL.Host, err.Error())
-					http.Error(w, err.Error(), 500)
-					return
-				}
-			}
-			ctx.Logf("Received response %v", resp.Status)
-		}
-		origBody := resp.Body
-		resp = proxy.filterResponse(resp, ctx)
-
-		ctx.Logf("Copying response to client %v [%d]", resp.Status, resp.StatusCode)
-		// http.ResponseWriter will take care of filling the correct response length
-		// Setting it now, might impose wrong value, contradicting the actual new
-		// body the user returned.
-		// We keep the original body to remove the header only if things changed.
-		// This will prevent problems with HEAD requests where there's no body, yet,
-		// the Content-Length header should be set.
-		if origBody != resp.Body {
-			resp.Header.Del("Content-Length")
-		}
-		copyHeaders(w.Header(), resp.Header)
-		w.WriteHeader(resp.StatusCode)
-		nr, err := io.Copy(w, resp.Body)
-		if err := resp.Body.Close(); err != nil {
-			ctx.Warnf("Can't close response body %v", err)
-		}
-		ctx.Logf("Copied %v bytes to client error=%v", nr, err)
+		proxy.dispatchRequestHandlers(ctx)
 	}
 }
 
@@ -151,12 +145,21 @@ func NewProxyHttpServer() *ProxyHttpServer {
 		reqHandlers:   []ReqHandler{},
 		respHandlers:  []RespHandler{},
 		httpsHandlers: []HttpsHandler{},
-		NonproxyHandler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		NonProxyHandler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, "This is a proxy server. Does not respond to non-proxy requests.", 500)
 		}),
-		Tr: &http.Transport{TLSClientConfig: tlsClientSkipVerify,
+		Transport: &http.Transport{TLSClientConfig: tlsClientSkipVerify,
 			Proxy: http.ProxyFromEnvironment},
+		MITMCertAuth: GoproxyCa,
 	}
 	proxy.ConnectDial = dialerFromEnv(&proxy)
 	return &proxy
+}
+
+// SetMITMCertAuth sets the CA to be used to sign man-in-the-middle'd
+// certificates. You can load some []byte with `LoadCA()`. This bundle
+// gets passed into the `ProxyCtx` and may be overridden in the [TODO:
+// FIXME] `HandleConnect()` callback, before doing SNI sniffing.
+func (proxy *ProxyHttpServer) SetMITMCertAuth(ca *tls.Certificate) {
+	proxy.MITMCertAuth = ca
 }

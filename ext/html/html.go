@@ -49,7 +49,7 @@ func HandleString(f func(s string, ctx *goproxy.ProxyCtx) string) goproxy.RespHa
 // Will recieve an input stream which would convert the response to utf-8
 // The given function must close the reader r, in order to close the response body.
 func HandleStringReader(f func(r io.Reader, ctx *goproxy.ProxyCtx) io.Reader) goproxy.RespHandler {
-	return goproxy.FuncRespHandler(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+	return goproxy.RespHandlerFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
 		if ctx.Error != nil {
 			return nil
 		}
