@@ -16,20 +16,20 @@ func (proxy *ProxyHttpServer) HandleConnect(f Handler) {
 
 // HandleRequestFunc and HandleRequest put hooks to handle certain requests. Note that MITM'd and HTTP requests that go through a CONNECT'd connection also go through those Request Handlers.
 func (proxy *ProxyHttpServer) HandleRequestFunc(f func(ctx *ProxyCtx) Next) {
-	proxy.connectHandlers = append(proxy.connectHandlers, HandlerFunc(f))
+	proxy.requestHandlers = append(proxy.requestHandlers, HandlerFunc(f))
 }
 
 func (proxy *ProxyHttpServer) HandleRequest(f Handler) {
-	proxy.connectHandlers = append(proxy.connectHandlers, f)
+	proxy.requestHandlers = append(proxy.requestHandlers, f)
 }
 
 // HandleResponseFunc and HandleResponse put hooks to handle certain requests. Note that MITM'd and HTTP requests that go through a CONNECT'd connection also go through those Response Handlers.
 func (proxy *ProxyHttpServer) HandleResponseFunc(f func(ctx *ProxyCtx) Next) {
-	proxy.connectHandlers = append(proxy.connectHandlers, HandlerFunc(f))
+	proxy.responseHandlers = append(proxy.responseHandlers, HandlerFunc(f))
 }
 
 func (proxy *ProxyHttpServer) HandleResponse(f Handler) {
-	proxy.connectHandlers = append(proxy.connectHandlers, f)
+	proxy.responseHandlers = append(proxy.responseHandlers, f)
 }
 
 //////
