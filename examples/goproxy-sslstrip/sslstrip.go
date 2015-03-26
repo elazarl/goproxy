@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"log"
-	"net/http"
 
 	"github.com/elazarl/goproxy"
 )
@@ -13,12 +12,12 @@ func main() {
 	addr := flag.String("addr", ":8080", "proxy listen address")
 	flag.Parse()
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
-	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-		if req.URL.Scheme == "https" {
-			req.URL.Scheme = "http"
+	proxy.HandleConnect(goproxy.AlwaysMitm)
+	proxy.HandleRequestFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
+		if ctx.Req.URL.Scheme == "https" {
+			ctx.Req.URL.Scheme = "http"
 		}
-		return req, nil
+		return goproxy.NEXT
 	})
 	proxy.Verbose = *verbose
 	log.Fatal(proxy.ListenAndServe(*addr))

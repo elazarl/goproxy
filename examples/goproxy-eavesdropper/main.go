@@ -18,11 +18,15 @@ func orPanic(err error) {
 }
 
 func main() {
+	verbose := flag.Bool("v", false, "should every proxy request be logged to stdout")
+	addr := flag.String("addr", ":8080", "proxy listen address")
+	flag.Parse()
+
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.OnRequest(goproxy.ReqHostMatches(regexp.MustCompile("^.*baidu.com$"))).
-		HandleConnect(goproxy.AlwaysReject)
-	proxy.OnRequest(goproxy.ReqHostMatches(regexp.MustCompile("^.*$"))).
-		HandleConnect(goproxy.AlwaysMitm)
+	proxy.Verbose = *verbose
+	proxy.HandleConnect(goproxy.ReqHostMatches(regexp.MustCompile("^.*baidu.com$"))(goproxy.AlwaysReject))
+	proxy.HandleConnect(goproxy.AlwaysMitm)
+
 	// enable curl -p for all hosts on port 80
 	proxy.OnRequest(goproxy.ReqHostMatches(regexp.MustCompile("^.*:80$"))).
 		HijackConnect(func(req *http.Request, client net.Conn, ctx *goproxy.ProxyCtx) {
@@ -48,9 +52,6 @@ func main() {
 			orPanic(clientBuf.Flush())
 		}
 	})
-	verbose := flag.Bool("v", false, "should every proxy request be logged to stdout")
-	addr := flag.String("addr", ":8080", "proxy listen address")
-	flag.Parse()
-	proxy.Verbose = *verbose
+
 	log.Fatal(proxy.ListenAndServe(*addr))
 }
