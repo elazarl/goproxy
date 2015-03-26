@@ -89,6 +89,14 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+// ListenAndServe launches all the servers required and listens. Use this method if you want to start listeners for transparent proxying.
+func (proxy *ProxyHttpServer) ListenAndServe(addr string) error {
+	// TODO: implement listening on a port for HTTP transparent proxying
+	// TODO: implement listening on a port for HTTPS transparent proxying
+
+	return http.ListenAndServe(addr, proxy)
+}
+
 // New proxy server, logs to StdErr by default
 func NewProxyHttpServer() *ProxyHttpServer {
 	proxy := ProxyHttpServer{

@@ -54,5 +54,5 @@ func main() {
 	})
 
 	log.Println("Listening", *addr)
-	log.Fatal(http.ListenAndServe(*addr, proxy))
+	log.Fatal(proxy.ListenAndServe(*addr))
 }

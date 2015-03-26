@@ -14,7 +14,7 @@ Typical usage is
 	proxy.OnRequest(..conditions..).DoFunc(..requesthandlerFunction..)
 	proxy.OnResponse(..conditions..).Do(..responesHandler..)
 	proxy.OnResponse(..conditions..).DoFunc(..responesHandlerFunction..)
-	http.ListenAndServe(":8080", proxy)
+	proxy.ListenAndServe(":8080")
 
 Adding a header to each request
 

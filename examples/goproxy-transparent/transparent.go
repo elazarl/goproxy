@@ -70,7 +70,7 @@ func main() {
 	})
 
 	go func() {
-		log.Fatalln(http.ListenAndServe(*http_addr, proxy))
+		log.Fatalln(proxy.ListenAndServe(*http_addr))
 	}()
 
 	// listen to the TLS ClientHello but make it a CONNECT request instead

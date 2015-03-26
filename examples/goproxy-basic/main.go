@@ -1,10 +1,10 @@
 package main
 
 import (
-	"github.com/elazarl/goproxy"
-	"log"
 	"flag"
-	"net/http"
+	"log"
+
+	"github.com/elazarl/goproxy"
 )
 
 func main() {
@@ -13,5 +13,5 @@ func main() {
 	flag.Parse()
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.Verbose = *verbose
-	log.Fatal(http.ListenAndServe(*addr, proxy))
+	log.Fatal(proxy.ListenAndServe(*addr))
 }

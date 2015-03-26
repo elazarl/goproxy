@@ -51,5 +51,5 @@ func NewJqueryVersionProxy() *goproxy.ProxyHttpServer {
 func main() {
 	proxy := NewJqueryVersionProxy()
 	//proxy.Verbose = true
-	log.Fatal(http.ListenAndServe(":8080", proxy))
+	log.Fatal(proxy.ListenAndServe(":8080"))
 }

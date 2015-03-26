@@ -19,5 +19,5 @@ func main() {
 	})
 	proxy.HandleRequest(goproxy.RequestHostIsIn("www.reddit.com")(blockReddit))
 
-	log.Fatalln(http.ListenAndServe(":8080", proxy))
+	log.Fatalln(proxy.ListenAndServe(":8080"))
 }

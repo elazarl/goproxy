@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
-	"github.com/elazarl/goproxy"
-	"github.com/elazarl/goproxy/ext/html"
 	"io"
 	"log"
 	. "net/http"
 	"time"
+
+	"github.com/elazarl/goproxy"
+	"github.com/elazarl/goproxy/ext/html"
 )
 
 type Count struct {
@@ -62,5 +63,5 @@ func main() {
 		return resp
 	})
 	fmt.Printf("listening on :8080\n")
-	log.Fatal(ListenAndServe(":8080", proxy))
+	log.Fatal(proxy.ListenAndServe(":8080"))
 }

@@ -21,5 +21,5 @@ func main() {
 		return
 	}
 	proxy.Verbose = *verbose
-	log.Fatal(http.ListenAndServe(*addr, proxy))
+	log.Fatal(proxy.ListenAndServe(*addr))
 }

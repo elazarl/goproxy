@@ -1,11 +1,11 @@
 package main
 
 import (
-	"github.com/elazarl/goproxy"
-	"github.com/elazarl/goproxy/ext/image"
 	"image"
 	"log"
-	"net/http"
+
+	"github.com/elazarl/goproxy"
+	"github.com/elazarl/goproxy/ext/image"
 )
 
 func main() {
@@ -22,5 +22,5 @@ func main() {
 		return nimg
 	}))
 	proxy.Verbose = true
-	log.Fatal(http.ListenAndServe(":8080", proxy))
+	log.Fatal(proxy.ListenAndServe(":8080"))
 }
