@@ -3,6 +3,7 @@ package goproxy
 import (
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 // HandleConnectFunc and HandleConnect mimic the `net/http` handlers, and register handlers for CONNECT proxy calls.
@@ -60,7 +61,15 @@ func (proxy *ProxyHttpServer) dispatchConnectHandlers(ctx *ProxyCtx) {
 			break
 
 		case MITM:
-			err := ctx.ManInTheMiddle(ctx.host)
+			host := ctx.host
+			addPort := "80"
+			if ctx.Req.URL.Scheme == "https" {
+				addPort = "443"
+			}
+			if strings.IndexRune(host, ':') == -1 {
+				host = host + addPort
+			}
+			err := ctx.ManInTheMiddle(host)
 			if err != nil {
 				ctx.Logf("error MITM'ing: %s", err)
 			}

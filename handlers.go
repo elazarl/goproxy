@@ -26,6 +26,7 @@ type ChainedHandler func(Handler) Handler
 
 
 var AlwaysMitm = HandlerFunc(func(ctx *ProxyCtx) Next {
+	ctx.SNIHost()
 	return MITM
 })
 

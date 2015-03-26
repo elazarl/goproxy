@@ -356,12 +356,46 @@ func getCert(c *tls.Conn, t *testing.T) []byte {
 	return c.ConnectionState().PeerCertificates[0].Raw
 }
 
-func TestSimpleMitm(t *testing.T) {
+func TestSimpleMitmWithSNI(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.HandleRequest(goproxy.RequestHostIsIn(https.Listener.Addr().String())(goproxy.AlwaysMitm))
-	proxy.HandleRequest(goproxy.RequestHostIsIn("no such host exists")(goproxy.AlwaysMitm))
+	proxy.HandleConnectFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
+		ctx.SNIHost()
+		return goproxy.MITM
+	})
 
 	client, l := oneShotProxy(proxy, t)
+	defer l.Close()
+
+	if resp := string(getOrFail(https.URL+"/bobo", client, t)); resp != "bobo" {
+		t.Error("Wrong response when mitm", resp, "expected bobo")
+	}
+	if resp := string(getOrFail(https.URL+"/query?result=bar", client, t)); resp != "bar" {
+		t.Error("Wrong response when mitm", resp, "expected bar")
+	}
+}
+
+func TestSimpleMitmWithoutSNI(t *testing.T) {
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.HandleConnectFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
+		return goproxy.MITM
+	})
+
+	client, l := oneShotProxy(proxy, t)
+	defer l.Close()
+
+	if resp := string(getOrFail(https.URL+"/bobo", client, t)); resp != "bobo" {
+		t.Error("Wrong response when mitm", resp, "expected bobo")
+	}
+	if resp := string(getOrFail(https.URL+"/query?result=bar", client, t)); resp != "bar" {
+		t.Error("Wrong response when mitm", resp, "expected bar")
+	}
+}
+
+func TestMitmDynamicCertificate(t *testing.T) {
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.HandleConnect(goproxy.AlwaysMitm)
+
+	_, l := oneShotProxy(proxy, t)
 	defer l.Close()
 
 	c, err := tls.Dial("tcp", https.Listener.Addr().String(), &tls.Config{InsecureSkipVerify: true})
@@ -393,13 +427,6 @@ func TestSimpleMitm(t *testing.T) {
 		t.Errorf("Certificate after mitm is not different\n%v\n%v",
 			base64.StdEncoding.EncodeToString(origCert),
 			base64.StdEncoding.EncodeToString(proxyCert))
-	}
-
-	if resp := string(getOrFail(https.URL+"/bobo", client, t)); resp != "bobo" {
-		t.Error("Wrong response when mitm", resp, "expected bobo")
-	}
-	if resp := string(getOrFail(https.URL+"/query?result=bar", client, t)); resp != "bar" {
-		t.Error("Wrong response when mitm", resp, "expected bar")
 	}
 }
 
@@ -698,7 +725,7 @@ func readConnectResponse(buf *bufio.Reader) {
 func TestCurlMinusP(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.HandleConnectFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {
-		return goproxy.MITM  // default host
+		return goproxy.MITM // default host
 	})
 	called := false
 	proxy.HandleRequestFunc(func(ctx *goproxy.ProxyCtx) goproxy.Next {

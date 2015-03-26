@@ -110,10 +110,14 @@ func (ctx *ProxyCtx) SetDestinationHost(host string) {
 
 // ManInTheMiddle triggers either a full-fledged MITM when done through HTTPS, otherwise, simply tunnels future HTTP requests through the CONNECT stream, dispatching calls to the Request Handlers
 func (ctx *ProxyCtx) ManInTheMiddle(host string) error {
-	if strings.HasSuffix(host, ":80") || strings.IndexRune(host, ':') == -1 {
+	if ctx.Method != "CONNECT" {
+		panic("method is not CONNECT")
+	}
+
+	if strings.HasSuffix(host, ":80") {
 		return ctx.TunnelHTTP(host)
 	} else {
-		return ctx.ManInTheMiddleHTTPS(host)
+		return ctx.ManInTheMiddleHTTPS()
 	}
 }
 
@@ -123,6 +127,10 @@ func (ctx *ProxyCtx) ManInTheMiddle(host string) error {
 //
 // You can also find the original CONNECT request in `ctx.OriginalRequest`.
 func (ctx *ProxyCtx) TunnelHTTP(host string) error {
+	if ctx.Method != "CONNECT" {
+		panic("method is not CONNECT")
+	}
+
 	if !ctx.sniffedTLS {
 		ctx.Conn.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 	}
@@ -183,8 +191,22 @@ func (ctx *ProxyCtx) TunnelHTTP(host string) error {
 // The `ctx.OriginalRequest`
 // will also hold the original CONNECT request from which the tunnel
 // originated.
-func (ctx *ProxyCtx) ManInTheMiddleHTTPS(host string) error {
-	ctx.Logf("Assuming CONNECT is TLS, mitm proxying it")
+func (ctx *ProxyCtx) ManInTheMiddleHTTPS() error {
+	if ctx.Method != "CONNECT" {
+		panic("method is not CONNECT")
+	}
+
+	ctx.Logf("Assuming CONNECT is TLS, MITM proxying it")
+
+	if !ctx.sniffedTLS {
+		ctx.Conn.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+	}
+
+	host := ctx.sniHost
+	if host == "" {
+		host = ctx.host
+		ctx.Warnf("No SNI host set, falling back on CONNECT host. To avoid that, call SNIHost() before doing MITM.")
+	}
 
 	tlsConfig, err := ctx.tlsConfig(host)
 	if err != nil {
@@ -202,6 +224,7 @@ func (ctx *ProxyCtx) ManInTheMiddleHTTPS(host string) error {
 	go func() {
 		//TODO: cache connections to the remote website
 		r := ctx.Req
+
 		rawClientTls := tls.Server(ctx.Conn, tlsConfig)
 		if err := rawClientTls.Handshake(); err != nil {
 			ctx.Warnf("Cannot handshake client %v %v", r.Host, err)
