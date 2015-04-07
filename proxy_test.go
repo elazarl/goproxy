@@ -530,7 +530,8 @@ type VerifyNoProxyHeaders struct {
 }
 
 func (v VerifyNoProxyHeaders) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("Connection") != "" || r.Header.Get("Proxy-Connection") != "" {
+	if r.Header.Get("Connection") != "" || r.Header.Get("Proxy-Connection") != "" ||
+		r.Header.Get("Proxy-Authenticate") != "" || r.Header.Get("Proxy-Authorization") != "" {
 		v.Error("Got Connection header from goproxy", r.Header)
 	}
 }
@@ -543,6 +544,8 @@ func TestNoProxyHeaders(t *testing.T) {
 	panicOnErr(err, "bad request")
 	req.Header.Add("Connection", "close")
 	req.Header.Add("Proxy-Connection", "close")
+	req.Header.Add("Proxy-Authenticate", "auth")
+	req.Header.Add("Proxy-Authorization", "auth")
 	client.Do(req)
 }
 

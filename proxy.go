@@ -80,7 +80,9 @@ func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 	// curl can add that, see
 	// http://homepage.ntlworld.com/jonathan.deboynepollard/FGA/web-proxy-connection-header.html
 	r.Header.Del("Proxy-Connection")
-	// Connection is single hop Header:
+	r.Header.Del("Proxy-Authenticate")
+	r.Header.Del("Proxy-Authorization")
+	// Connection, Authenticate and Authorization are single hop Header:
 	// http://www.w3.org/Protocols/rfc2616/rfc2616.txt
 	// 14.10 Connection
 	//   The Connection general-header field allows the sender to specify
