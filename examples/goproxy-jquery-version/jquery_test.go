@@ -90,7 +90,8 @@ func TestProxyServiceTwoVersions(t *testing.T) {
 
 	get("/w3schools.html")
 	get("/php_man.html")
-	if buf.String() != "" {
+	if buf.String() != "" &&
+		!strings.Contains(buf.String(), " uses jquery ") {
 		t.Error("shouldn't warn on a single URL", buf.String())
 	}
 	get("/jquery1.html")
