@@ -43,7 +43,7 @@ func (c RespConditionFunc) HandleResp(resp *http.Response, ctx *ProxyCtx) bool {
 	return c(resp, ctx)
 }
 
-// UrlHasPrefix returns a ReqCondtion checking wether the destination URL the proxy client has requested
+// UrlHasPrefix returns a ReqCondition checking wether the destination URL the proxy client has requested
 // has the given prefix, with or without the host.
 // For example UrlHasPrefix("host/x") will match requests of the form 'GET host/x', and will match
 // requests to url 'http://host/x'
@@ -117,21 +117,21 @@ func UrlMatches(re *regexp.Regexp) ReqConditionFunc {
 	}
 }
 
-// DstHostIs returns a ReqCondtion testing wether the host in the request url is the given string
+// DstHostIs returns a ReqCondition testing wether the host in the request url is the given string
 func DstHostIs(host string) ReqConditionFunc {
 	return func(req *http.Request, ctx *ProxyCtx) bool {
 		return req.URL.Host == host
 	}
 }
 
-// SrcIpIs returns a ReqCondtion testing wether the source IP of the request is the given string
+// SrcIpIs returns a ReqCondition testing wether the source IP of the request is the given string
 func SrcIpIs(ip string) ReqCondition {
 	return ReqConditionFunc(func(req *http.Request, ctx *ProxyCtx) bool {
 		return strings.HasPrefix(req.RemoteAddr, ip+":")
 	})
 }
 
-// Not returns a ReqCondtion negating the given ReqCondition
+// Not returns a ReqCondition negating the given ReqCondition
 func Not(r ReqCondition) ReqConditionFunc {
 	return func(req *http.Request, ctx *ProxyCtx) bool {
 		return !r.HandleReq(req, ctx)
