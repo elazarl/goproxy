@@ -31,7 +31,7 @@ var IsWebRelatedText goproxy.RespCondition = goproxy.ContentTypeIs("text/html",
 	"text/xml",
 	"text/json")
 
-// HandleString will recieve a function that filters a string, and will convert the
+// HandleString will receive a function that filters a string, and will convert the
 // request body to a utf8 string, according to the charset specified in the Content-Type
 // header.
 // guessing Html charset encoding from the <META> tags is not yet implemented.
@@ -46,7 +46,7 @@ func HandleString(f func(s string, ctx *goproxy.ProxyCtx) string) goproxy.RespHa
 	})
 }
 
-// Will recieve an input stream which would convert the response to utf-8
+// Will receive an input stream which would convert the response to utf-8
 // The given function must close the reader r, in order to close the response body.
 func HandleStringReader(f func(r io.Reader, ctx *goproxy.ProxyCtx) io.Reader) goproxy.RespHandler {
 	return goproxy.FuncRespHandler(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {

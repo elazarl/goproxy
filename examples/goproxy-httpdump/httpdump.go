@@ -104,6 +104,10 @@ func (m *Meta) WriteTo(w io.Writer) (nr int64, err error) {
 	return
 }
 
+// HttpLogger is an asynchronous HTTP request/response logger. It traces
+// requests and responses headers in a "log" file in logger directory and dumps
+// their bodies in files prefixed with the session identifiers.
+// Close it to ensure pending items are correctly logged.
 type HttpLogger struct {
 	path  string
 	c     chan *Meta
@@ -173,6 +177,8 @@ func (logger *HttpLogger) Close() error {
 	return <-logger.errch
 }
 
+// TeeReadCloser extends io.TeeReader by allowing reader and writer to be
+// closed.
 type TeeReadCloser struct {
 	r io.Reader
 	w io.WriteCloser
@@ -187,18 +193,19 @@ func (t *TeeReadCloser) Read(b []byte) (int, error) {
 	return t.r.Read(b)
 }
 
+// Close attempts to close the reader and write. It returns an error if both
+// failed to Close.
 func (t *TeeReadCloser) Close() error {
 	err1 := t.c.Close()
 	err2 := t.w.Close()
-	if err1 == nil && err2 == nil {
-		return nil
-	}
 	if err1 != nil {
 		return err2
 	}
 	return err1
 }
 
+// stoppableListener serves stoppableConn and tracks their lifetime to notify
+// when it is safe to terminate the application.
 type stoppableListener struct {
 	net.Listener
 	sync.WaitGroup
@@ -241,8 +248,11 @@ func main() {
 		log.Fatal("can't open log file", err)
 	}
 	tr := transport.Transport{Proxy: transport.ProxyFromEnvironment}
+	// For every incoming request, override the RoundTripper to extract
+	// connection information. Store it is session context log it after
+	// handling the response.
 	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-		ctx.RoundTripper = goproxy.RoundTripperFunc(func (req *http.Request, ctx *goproxy.ProxyCtx) (resp *http.Response, err error) {
+		ctx.RoundTripper = goproxy.RoundTripperFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (resp *http.Response, err error) {
 			ctx.UserData, resp, err = tr.DetailedRoundTrip(req)
 			return
 		})
