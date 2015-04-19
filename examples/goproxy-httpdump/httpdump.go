@@ -199,9 +199,9 @@ func (t *TeeReadCloser) Close() error {
 	err1 := t.c.Close()
 	err2 := t.w.Close()
 	if err1 != nil {
-		return err2
+		return err1
 	}
-	return err1
+	return err2
 }
 
 // stoppableListener serves stoppableConn and tracks their lifetime to notify
