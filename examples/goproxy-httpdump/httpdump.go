@@ -194,9 +194,9 @@ func (t *TeeReadCloser) Close() error {
 		return nil
 	}
 	if err1 != nil {
-		return err2
+		return err1
 	}
-	return err1
+	return err2
 }
 
 type stoppableListener struct {
