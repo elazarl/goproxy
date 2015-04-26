@@ -18,6 +18,8 @@ type ProxyHttpServer struct {
 	sess int64
 	// setting Verbose to true will log information on each request sent to the proxy
 	Verbose         bool
+	// SniffSNI enables sniffing Server Name Indicator when doing CONNECT calls.  It will thus answer to CONNECT calls with a "200 OK" even if the remote server might not answer.  The result would be the shutdown of the connection instead of an appropriate HTTP error code if the remote node doesn't answer.
+	SniffSNI        bool
 	Logger          *log.Logger
 	NonproxyHandler http.Handler
 	reqHandlers     []ReqHandler
@@ -95,7 +97,7 @@ func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	//r.Header["X-Forwarded-For"] = w.RemoteAddr()
 	if r.Method == "CONNECT" {
-		proxy.handleHttps(w, r)
+		proxy.handleHttpsConnect(w, r)
 	} else {
 		ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy}
 
