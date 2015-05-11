@@ -4,8 +4,8 @@ import (
 	"image"
 	"log"
 
-	"github.com/elazarl/goproxy"
-	"github.com/elazarl/goproxy/ext/image"
+	"github.com/abourget/goproxy"
+	"github.com/abourget/goproxy/ext/image"
 )
 
 func main() {

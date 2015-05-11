@@ -8,8 +8,8 @@ import (
 	"image/png"
 	"io/ioutil"
 
-	. "github.com/elazarl/goproxy"
-	"github.com/elazarl/goproxy/regretable"
+	. "github.com/abourget/goproxy"
+	"github.com/abourget/goproxy/regretable"
 )
 
 var RespIsImage = RespContentTypeIs("image/gif",
