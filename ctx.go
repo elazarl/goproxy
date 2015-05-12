@@ -75,8 +75,8 @@ func (ctx *ProxyCtx) SNIHost() string {
 	if ctx.sniHost != "" {
 		return ctx.sniHost
 	}
-	if _, ok := ctx.Conn.(vhost.TLSConn); ok {
-		// We tried, and we didn't find SNI, fallback to Request
+
+	if ctx.sniffedTLS {
 		return ctx.Host()
 	}
 
@@ -91,8 +91,12 @@ func (ctx *ProxyCtx) SNIHost() string {
 	}
 
 	// TODO: make sure we put a ":port" on the `host` if there was one previously...
-	ctx.sniHost = tlsConn.Host()
-	ctx.host = ctx.sniHost
+	sniHost := tlsConn.Host()
+
+	if sniHost != "" {
+		ctx.sniHost = inheritPort(sniHost, ctx.Req.Host)
+		ctx.host = ctx.sniHost
+	}
 	return ctx.sniHost
 }
 
@@ -101,9 +105,9 @@ func (ctx *ProxyCtx) Host() string {
 	return ctx.host
 }
 
+// SetDestinationHost sets the host IP/domain to which you're going to forward the request. If you want the request to be consistent for the remote host, make sure you also alter `ctx.Req.Host` to the same value.
 func (ctx *ProxyCtx) SetDestinationHost(host string) {
-	ctx.Req.URL.Host = host
-	ctx.host = host
+	ctx.host = inheritPort(host, ctx.host)
 }
 
 // CONNECT handling methods
@@ -121,7 +125,9 @@ func (ctx *ProxyCtx) ManInTheMiddle(host string) error {
 	}
 }
 
-// TunnelHTTP assumes the current connection is a plain HTTP tunnel, with no security. It then dispatches all future requests in there through the registered Request Handlers.
+// TunnelHTTP assumes the current connection is a plain HTTP tunnel,
+// with no security. It then dispatches all future requests in there
+// through the registered Request Handlers.
 //
 // Requests flowing through this tunnel will be marked `ctx.IsThroughTunnel == true`.
 //

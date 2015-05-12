@@ -13,6 +13,7 @@ import (
 	"strings"
 )
 
+// returns only the hostname
 func stripPort(s string) string {
 	ix := strings.IndexRune(s, ':')
 	if ix == -1 {
