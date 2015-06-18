@@ -3,6 +3,7 @@ package goproxy
 import (
 	"bufio"
 	"crypto/tls"
+	"encoding/base64"
 	"errors"
 	"io"
 	"io/ioutil"
@@ -333,6 +334,7 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxy(https_proxy string) func(net
 			if err != nil {
 				return nil, err
 			}
+			proxyAuth(connectReq, u)
 			connectReq.Write(c)
 			// Read response.
 			// Okay to use and discard buffered reader here, because
@@ -371,6 +373,7 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxy(https_proxy string) func(net
 				Host:   addr,
 				Header: make(http.Header),
 			}
+			proxyAuth(connectReq, u)
 			connectReq.Write(c)
 			// Read response.
 			// Okay to use and discard buffered reader here, because
@@ -394,6 +397,13 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxy(https_proxy string) func(net
 		}
 	}
 	return nil
+}
+
+func proxyAuth(connectReq *http.Request, proxyUrl *url.URL) {
+	if proxyUrl.User != nil {
+		pa := "Basic " + base64.URLEncoding.EncodeToString([]byte(proxyUrl.User.String()))
+		connectReq.Header.Set("Proxy-Authorization", pa)
+	}
 }
 
 func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls.Config, error) {
