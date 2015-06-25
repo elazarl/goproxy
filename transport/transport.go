@@ -7,6 +7,8 @@
 // This is the low-level Transport implementation of RoundTripper.
 // The high-level interface is in client.go.
 
+// This file is DEPRECATED and keep solely for backward compatibility.
+
 package transport
 
 import (
