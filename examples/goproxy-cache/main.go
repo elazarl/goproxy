@@ -42,53 +42,67 @@ func main() {
 		httpcache.DebugLogging = true
 	}
 	
-	_, err := httpcache.NewDiskCache(dir)
+	cache, err := httpcache.NewDiskCache(dir)
+	
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	ubuntuRewriter := ubuntu.NewRewriter()
 
-	//Proxy	
 	proxy := goproxy.NewProxyHttpServer()
-	
-	//APT caching
 	
 	matchUbuntuApt := goproxy.UrlMatches(matchUbuntuAptPattern)
 	matchAptPackage := goproxy.UrlMatches(matchAptPackagePattern)
 	matchAptPackageIndex := goproxy.UrlMatches(matchAptPackageIndexPattern)
 	matchWindowsUpdatePackageIndex := goproxy.UrlMatches(matchWindowsUpdatePackageIndexPattern)
-		
-	proxy.OnRequest(matchAptPackage).DoFunc(
-		func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {			
-			url := r.URL.String()
-			log.Printf("AptPackage: %s", url)							
-			return r, nil
-		})	
-		
-	proxy.OnRequest(matchAptPackageIndex).DoFunc(
-		func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {			
-			url := r.URL.String()
-			log.Printf("AptPackageIndex: %s", url)		
-			return r, nil
-		})	
-		
-	proxy.OnRequest(matchWindowsUpdatePackageIndex).DoFunc(
-		func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-			url := r.URL.String()
-			log.Printf("WindowsUpdatePackage: %s", url)
-			return r, nil
-		})			
 
 	proxy.OnRequest(matchUbuntuApt).DoFunc(
-		func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {			
+		func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {		
 			url := r.URL.String()
-			log.Printf("UbuntuApt: %s", url)
+			log.Printf("Request UbuntuApt: %s", url)
 			ubuntuRewriter.Rewrite(r)
 			log.Printf("rewrote %q to %q", url, r.URL.String())
 			r.Host = r.URL.Host			
 			return r, nil
+		})		
+		
+	proxy.OnRequest(matchAptPackage).DoFunc(
+		func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {			
+			return TryServerCachedResponse(true, cache, r)
 		})	
+		
+	proxy.OnResponse(matchAptPackage).DoFunc(
+		func(r *http.Response, ctx *goproxy.ProxyCtx) (*http.Response) {
+			url := r.Request.URL.String()
+			log.Printf("AptPackage: %s", url)							
+			return r
+		})			
+		
+	proxy.OnRequest(matchAptPackageIndex).DoFunc(
+		func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {			
+			return TryServerCachedResponse(true, cache, r)
+		})
+		
+	proxy.OnResponse(matchAptPackageIndex).DoFunc(
+		func(r *http.Response, ctx *goproxy.ProxyCtx) (*http.Response) {
+			url := r.Request.URL.String()
+			log.Printf("AptPackageIndex: %s", url)		
+			return r
+		})			
+		
+	proxy.OnRequest(matchWindowsUpdatePackageIndex).DoFunc(
+		func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+			return TryServerCachedResponse(true, cache, r)
+		})	
+		
+	proxy.OnResponse(matchWindowsUpdatePackageIndex).DoFunc(
+		func(r *http.Response, ctx *goproxy.ProxyCtx) (*http.Response) {
+			url := r.Request.URL.String()
+			log.Printf("WindowsUpdatePackage: %s", url)
+			return r
+		})					
+
 
 	log.Printf("proxy listening on %s", listen)
 	log.Fatal(http.ListenAndServe(listen, proxy))	
