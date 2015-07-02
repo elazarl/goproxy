@@ -69,38 +69,32 @@ func main() {
 		
 	proxy.OnRequest(matchAptPackage).DoFunc(
 		func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {			
-			return TryServerCachedResponse(true, cache, r)
+			return TryServeCachedResponse(true, cache, r)
 		})	
 		
 	proxy.OnResponse(matchAptPackage).DoFunc(
 		func(r *http.Response, ctx *goproxy.ProxyCtx) (*http.Response) {
-			url := r.Request.URL.String()
-			log.Printf("AptPackage: %s", url)							
-			return r
+			return TryCacheResponse(true, cache, r)
 		})			
 		
 	proxy.OnRequest(matchAptPackageIndex).DoFunc(
 		func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {			
-			return TryServerCachedResponse(true, cache, r)
+			return TryServeCachedResponse(true, cache, r)
 		})
 		
 	proxy.OnResponse(matchAptPackageIndex).DoFunc(
 		func(r *http.Response, ctx *goproxy.ProxyCtx) (*http.Response) {
-			url := r.Request.URL.String()
-			log.Printf("AptPackageIndex: %s", url)		
-			return r
+			return TryCacheResponse(true, cache, r)
 		})			
 		
 	proxy.OnRequest(matchWindowsUpdatePackageIndex).DoFunc(
 		func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-			return TryServerCachedResponse(true, cache, r)
+			return TryServeCachedResponse(true, cache, r)
 		})	
 		
 	proxy.OnResponse(matchWindowsUpdatePackageIndex).DoFunc(
 		func(r *http.Response, ctx *goproxy.ProxyCtx) (*http.Response) {
-			url := r.Request.URL.String()
-			log.Printf("WindowsUpdatePackage: %s", url)
-			return r
+			return TryCacheResponse(true, cache, r)
 		})					
 
 

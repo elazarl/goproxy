@@ -9,9 +9,51 @@ import (
 	"math"
 	"github.com/lox/httpcache"
 	"github.com/elazarl/goproxy"
+	"sync"
 )
 
-func TryServerCachedResponse(shared bool, cache httpcache.Cache, r *http.Request) (*http.Request, *http.Response) {
+const (
+	ProxyDateHeader = "Proxy-Date"
+)
+
+var Writes sync.WaitGroup
+
+func TryCacheResponse(shared bool, cache httpcache.Cache, r *http.Response) (*http.Response) {
+	if (r.StatusCode != http.StatusOK || r.StatusCode != http.StatusNotModified){
+		return r
+	}
+	
+	cReq, err := NewCacheRequest(r.Request)
+	if err != nil {
+		return goproxy.NewResponse(r.Request, goproxy.ContentTypeText, http.StatusInternalServerError, err.Error())
+	}
+	
+	if !cReq.IsCacheable() {
+		log.Printf("request not cacheable")
+		return r
+	}
+	
+	cacheType := "private"
+	if shared {
+		cacheType = "shared"
+	}
+		
+	r.Header.Set(ProxyDateHeader, httpcache.Clock().Format(http.TimeFormat))
+	
+	res := httpcache.NewResource(r.StatusCode, r.Body, r.Header)
+	
+	if (r.StatusCode == http.StatusOK){
+		storeResource(shared, cache, res, cReq)		
+	}
+	
+	if (r.StatusCode == http.StatusNotModified){
+		cache.Freshen(res, cReq.Key.ForMethod("GET").String())
+	}
+	
+	return r
+}
+
+func TryServeCachedResponse(shared bool, cache httpcache.Cache, r *http.Request) (*http.Request, *http.Response) {
 	cReq, err := NewCacheRequest(r)
 	if err != nil {
 		return r, goproxy.NewResponse(r, goproxy.ContentTypeText, http.StatusInternalServerError, err.Error())
@@ -120,7 +162,31 @@ func (cb *ClosingBuffer) Close() (err error) {
         return 
 } 
 
+func storeResource(shared bool, cache httpcache.Cache, res *httpcache.Resource, r *cacheRequest) {
+	Writes.Add(1)
 
+	go func() {
+		defer Writes.Done()
+		t := httpcache.Clock()
+		keys := []string{r.Key.String()}
+		headers := res.Header()
+
+		if shared {
+			res.RemovePrivateHeaders()
+		}
+
+		// store a secondary vary version
+		if vary := headers.Get("Vary"); vary != "" {
+			keys = append(keys, r.Key.Vary(vary, r.Request).String())
+		}
+
+		if err := cache.Store(res, keys...); err != nil {
+			log.Printf("storing resources %#v failed with error: %s", keys, err.Error())
+		}
+
+		log.Printf("stored resources %+v in %s", keys, httpcache.Clock().Sub(t))
+	}()
+}
 
 func lookup(cache httpcache.Cache, req *cacheRequest) (*httpcache.Resource, error) {
 	cacheKey := req.Key.String()
