@@ -54,12 +54,73 @@ func TryCacheResponse(shared bool, cache httpcache.Cache, response *http.Respons
 			return response
 		}		
 		
-		cachedResponse := newCacheAndForwardResponse(shared, cache, response.Request, cacheRequest, response)
+		cachedResponse := newCacheAndForwardResponse(shared, cache, cacheRequest, response)
 				
 		return cachedResponse
 	}
 	
 	return response
+}
+
+func newCacheAndForwardResponse(shared bool, cache httpcache.Cache, cacheRequest *cacheRequest, response * http.Response) *http.Response {
+	resource := NewForwardOnlyResource(response.StatusCode, response.Body, response.Header)
+	
+	age, err := resource.Age()
+	if err != nil {
+		return response
+	}
+	
+	contentLength := response.ContentLength
+	statusCode := resource.Status()
+	
+	if shared {
+		resource.RemovePrivateHeaders()
+	}	
+	
+	headers := make(http.Header)
+	
+	for key, mimeheaders := range resource.Header() {
+		for _, header := range mimeheaders {
+			textproto.MIMEHeader(headers).Add(key, header)
+		}
+	}	
+	
+	// http://httpwg.github.io/specs/rfc7234.html#warn.113
+	if age > (time.Hour*24) && resource.HeuristicFreshness() > (time.Hour*24) {
+		textproto.MIMEHeader(headers).Add("Warning", `113 - "Heuristic Expiration"`)
+	}
+
+	// http://httpwg.github.io/specs/rfc7234.html#warn.110
+	freshness, err := freshness(shared, resource, cacheRequest)
+	if err != nil || freshness <= 0 {
+		textproto.MIMEHeader(headers).Add("Warning", `110 - "Response is Stale"`)
+	}
+
+	log.Printf("resource is %s old, updating age from %s", age.String(), headers.Get("Age"))
+		
+	textproto.MIMEHeader(headers).Set("Age", fmt.Sprintf("%.f", math.Floor(age.Seconds())))
+	textproto.MIMEHeader(headers).Set("Via", resource.Via())	
+		
+	body := resource.ReadCloser
+	
+	/////////////////////
+
+	keys := []string{cacheRequest.Key.String()}	
+		
+	// store a secondary vary version
+	if vary := headers.Get("Vary"); vary != "" {
+		keys = append(keys, cacheRequest.Key.Vary(vary, cacheRequest.Request).String())
+	}
+	
+	if err := cache.Store(res, keys...); err != nil {
+		log.Printf("storing resources %#v failed with error: %s", keys, err.Error())
+	}	
+	
+	/////////////////////
+	
+	forwardedResponse := newResponse(response.Request, headers, body, contentLength, statusCode)
+	
+	return forwardedResponse
 }
 
 func TryServeCachedResponse(shared bool, cache httpcache.Cache, request *http.Request) (*http.Request, *http.Response) {
@@ -109,36 +170,6 @@ func TryServeCachedResponse(shared bool, cache httpcache.Cache, request *http.Re
 	
 	return request, response
 }
-
-func newCacheAndForwardResponse(shared bool, cache httpcache.Cache, request *http.Request, cacheRequest *cacheRequest, response * http.Response) *http.Response {
-	resource := NewForwardOnlyResource(response.StatusCode, response.Body, response.Header)
-	
-	age, err := resource.Age()
-	if err != nil {
-		return response
-	}
-	
-	contentLength := response.ContentLength
-	
-	now := httpcache.Clock()
-	keys := []string{cacheRequest.Key.String()}	
-	
-	if shared {
-		resource.RemovePrivateHeaders()
-	}	
-		
-	headers := resource.Header()
-	
-	// store a secondary vary version
-	if vary := headers.Get("Vary"); vary != "" {
-		keys = append(keys, cacheRequest.Key.Vary(vary, cacheRequest.Request).String())
-	}
-	
-	
-	
-	return response		
-}
-
 
 func newCachedResponse(shared bool, request *http.Request, cacheRequest *cacheRequest, resource * httpcache.Resource) *http.Response {	
 	age, err := resource.Age()
@@ -194,6 +225,7 @@ func newResponse(request *http.Request, headers http.Header, body io.ReadCloser,
 	response.StatusCode = statusCode	
 	
 	if request.Method == "HEAD" || response.StatusCode != http.StatusOK {
+		body.Close()
 		response.Body = &BufferReadCloser{bytes.NewBufferString("")}
 	} else {
 		response.Body =	body
@@ -274,6 +306,41 @@ func needsValidation(shared bool, resource * httpcache.Resource, cacheRequest *c
 }
 
 // freshness returns the duration that a requested resource will be fresh for
+func freshness(shared bool, resource *ForwardOnlyResource, cacheRequest *cacheRequest) (time.Duration, error) {
+	maxAge, err := resource.MaxAge(shared)
+	if err != nil {
+		return time.Duration(0), err
+	}
+
+	if cacheRequest.CacheControl.Has("max-age") {
+		reqMaxAge, err := cacheRequest.CacheControl.Duration("max-age")
+		if err != nil {
+			return time.Duration(0), err
+		}
+
+		if reqMaxAge < maxAge {
+			log.Printf("using request max-age of %s", reqMaxAge.String())
+			maxAge = reqMaxAge
+		}
+	}
+
+	age, err := resource.Age()
+	if err != nil {
+		return time.Duration(0), err
+	}
+
+	if resource.IsStale() {
+		return time.Duration(0), nil
+	}
+
+	if hFresh := resource.HeuristicFreshness(); hFresh > maxAge {
+		log.Printf("using heuristic freshness of %q", hFresh)
+		maxAge = hFresh
+	}
+
+	return maxAge - age, nil
+}
+
 func freshness(shared bool, resource * httpcache.Resource, cacheRequest *cacheRequest) (time.Duration, error) {
 	maxAge, err := resource.MaxAge(shared)
 	if err != nil {
