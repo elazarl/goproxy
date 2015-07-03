@@ -111,6 +111,31 @@ func TryServeCachedResponse(shared bool, cache httpcache.Cache, request *http.Re
 }
 
 func newCacheAndForwardResponse(shared bool, cache httpcache.Cache, request *http.Request, cacheRequest *cacheRequest, response * http.Response) *http.Response {
+	resource := NewForwardOnlyResource(response.StatusCode, response.Body, response.Header)
+	
+	age, err := resource.Age()
+	if err != nil {
+		return response
+	}
+	
+	contentLength := response.ContentLength
+	
+	now := httpcache.Clock()
+	keys := []string{cacheRequest.Key.String()}	
+	
+	if shared {
+		resource.RemovePrivateHeaders()
+	}	
+		
+	headers := resource.Header()
+	
+	// store a secondary vary version
+	if vary := headers.Get("Vary"); vary != "" {
+		keys = append(keys, cacheRequest.Key.Vary(vary, cacheRequest.Request).String())
+	}
+	
+	
+	
 	return response		
 }
 
