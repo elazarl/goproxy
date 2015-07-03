@@ -22,7 +22,7 @@ type Mirrors struct {
 	URLs []string
 }
 
-func GetGeoMirrors() (m Mirrors, err error) {
+func GetGeoMirrors() (mirrors Mirrors, err error) {
 	response, err := http.Get(mirrorsUrl)
 	if err != nil {
 		return
@@ -30,37 +30,37 @@ func GetGeoMirrors() (m Mirrors, err error) {
 
 	defer response.Body.Close()
 	scanner := bufio.NewScanner(response.Body)
-	m.URLs = []string{}
+	mirrors.URLs = []string{}
 
 	// read urls line by line
 	for scanner.Scan() {
-		m.URLs = append(m.URLs, scanner.Text())
+		mirrors.URLs = append(mirrors.URLs, scanner.Text())
 	}
 
-	return m, scanner.Err()
+	return mirrors, scanner.Err()
 }
 
-func (m Mirrors) Fastest() (string, error) {
-	ch := make(chan benchmarkResult)
+func (mirrors Mirrors) Fastest() (string, error) {
+	benchMarkResultChannel := make(chan benchmarkResult)
 
 	// kick off all benchmarks in parallel
 	log.Printf("Start benchmarking mirrors")
-	for _, url := range m.URLs {
+	for _, url := range mirrors.URLs {
 		go func(u string) {
-			duration, err := m.benchmark(u, benchmarkTimes)
+			duration, err := mirrors.benchmark(u, benchmarkTimes)
 			if err == nil {
-				ch <- benchmarkResult{u, duration}
+				benchMarkResultChannel <- benchmarkResult{u, duration}
 			}
 		}(url)
 	}
 	
-	readN := len(m.URLs)
-	if 3 < readN {
-		readN = 3
+	totalMirrors := len(mirrors.URLs)
+	if 3 < totalMirrors {
+		totalMirrors = 3
 	}
 
 	// wait for the fastest results to come back
-	results, err := m.readResults(ch, readN)
+	results, err := mirrors.readResults(benchMarkResultChannel, totalMirrors)
 	log.Printf("Finished benchmarking mirrors")
 	if len(results) == 0 {		
 		return "", errors.New("No results found: " + err.Error())
@@ -69,24 +69,24 @@ func (m Mirrors) Fastest() (string, error) {
 	return results[0].URL, nil
 }
 
-func (m Mirrors) readResults(ch <-chan benchmarkResult, size int) (br []benchmarkResult, err error) {
+func (mirrors Mirrors) readResults(benchmarkResultChannel <-chan benchmarkResult, size int) (benchmarkResults []benchmarkResult, err error) {
 	for {
 		select {
-		case r := <-ch:
-			br = append(br, r)
+		case r := <-benchmarkResultChannel:
+			benchmarkResults = append(benchmarkResults, r)
 			
-			if len(br) >= size {
-				return br, nil
+			if len(benchmarkResults) >= size {
+				return benchmarkResults, nil
 			}
 		case <-time.After(benchmarkTimeout * time.Second):
-			return br, errors.New("Timed out waiting for results")
+			return benchmarkResults, errors.New("Timed out waiting for results")
 		}
 	}
 }
 
-func (m Mirrors) benchmark(url string, times int) (time.Duration, error) {
-	var sum int64
-	var d time.Duration
+func (mirrors Mirrors) benchmark(url string, times int) (time.Duration, error) {
+	var totalTimeTaken int64
+	var duration time.Duration
 	url = url + benchmarkUrl
 	
 	timeout := time.Duration(mirrorTimeout * time.Second)
@@ -99,20 +99,20 @@ func (m Mirrors) benchmark(url string, times int) (time.Duration, error) {
 		
 		response, err := client.Get(url)
 		if err != nil {
-			return d, err
+			return duration, err
 		}
 		
 		defer response.Body.Close()
         _, err = ioutil.ReadAll(response.Body)
 		
 		if err != nil {
-			return d, err
+			return duration, err
 		}
 
-		sum = sum + int64(time.Since(timer))
+		totalTimeTaken = totalTimeTaken + int64(time.Since(timer))
 	}
 
-	return time.Duration(sum / int64(times)), nil
+	return time.Duration(totalTimeTaken / int64(times)), nil
 }
 
 type benchmarkResult struct {
