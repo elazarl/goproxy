@@ -2,132 +2,167 @@ package main
 
 import (
 	"bytes"
-	"log"
-	"net/http"
-	"time"
 	"fmt"
-	"math"
 	"github.com/elazarl/goproxy"
-	"sync"
 	"io"
+	"math"
+	"net/http"
 	"net/textproto"
+	"time"
 )
 
 const (
 	ProxyDateHeader = "Proxy-Date"
 )
 
-var Writes sync.WaitGroup
+func TryCacheResponse(shared bool, cache Cache, response *http.Response) *http.Response {
 
-func TryCacheResponse(shared bool, cache Cache, response *http.Response) (*http.Response) {
-	if (response.StatusCode != http.StatusOK || response.StatusCode != http.StatusNotModified){
+	debugf("*********** Try cache response*****************")
+
+	for key, mimeheaders := range response.Request.Header {
+		for _, header := range mimeheaders {
+			debugf("%s: %s", key, header)
+		}
+	}
+
+	debugf("***********************************************")
+
+	if !((response.StatusCode == int(http.StatusOK)) || (response.StatusCode == int(http.StatusNotModified))) {
+		debugf("Not caching as status code is %d", response.StatusCode)
 		return response
 	}
-	
+
 	cacheRequest, err := NewCacheRequest(response.Request)
 	if err != nil {
+		debugf("Error creating cache request: %s", err)
 		return goproxy.NewResponse(response.Request, goproxy.ContentTypeText, http.StatusInternalServerError, err.Error())
 	}
-	
+
 	if !cacheRequest.IsCacheable() {
-		log.Printf("request not cacheable")
+		debugf("request not cacheable")
 		return response
 	}
-		
-	if (response.StatusCode == http.StatusNotModified){		
+
+	if response.StatusCode == int(http.StatusNotModified) {
 		resource, err := lookup(cache, cacheRequest)
-		if err != nil && err != ErrNotFoundInCache {
+		if !(err == nil || err == ErrNotFoundInCache) {
+			debugf("Error retrieving cached request: %s", err)
 			return goproxy.NewResponse(response.Request, goproxy.ContentTypeText, http.StatusInternalServerError, err.Error())
 		} else if err == ErrNotFoundInCache {
+			debugf("Request is not cached locally, forwarding result", err)
 			return response
 		}
-		
+
 		cache.Freshen(resource, cacheRequest.Key.ForMethod("GET").String())
 		response := newCachedResponse(shared, cacheRequest, resource)
-		
+
 		return response
 	}
-	
-	if (response.StatusCode == http.StatusOK){
-		if err != ErrNotFoundInCache {
-			return response
-		}		
-		
+
+	if response.StatusCode == int(http.StatusOK) {
+		_, err := lookup(cache, cacheRequest)
+		if !(err == nil || err == ErrNotFoundInCache) {
+			debugf("Error retrieving cached request: %s", err)
+			return goproxy.NewResponse(response.Request, goproxy.ContentTypeText, http.StatusInternalServerError, err.Error())
+		}
+
+		if err == ErrNotFoundInCache {
+			debugf("Request is not cached locally, so caching and forwarding result")
+		} else {
+			debugf("Request is cached locally but has been changed, so caching and forwarding result")
+		}
+
 		cachedResponse := newCacheAndForwardResponse(shared, cache, cacheRequest, response)
-				
 		return cachedResponse
 	}
-	
+
+	debugf("Not a cacheable request")
 	return response
 }
 
-
-
 func TryServeCachedResponse(shared bool, cache Cache, request *http.Request) (*http.Request, *http.Response) {
+
+	debugf("************ try serve cached response ****************")
+
+	for key, mimeheaders := range request.Header {
+		for _, header := range mimeheaders {
+			debugf("%s: %s", key, header)
+		}
+	}
+
+	debugf("*******************************************************")
+
 	cacheRequest, err := NewCacheRequest(request)
 	if err != nil {
 		return request, goproxy.NewResponse(request, goproxy.ContentTypeText, http.StatusInternalServerError, err.Error())
 	}
-	
+
 	if !cacheRequest.IsCacheable() {
-		log.Printf("request not cacheable")
+		debugf("request not cacheable")
 		return request, nil
 	}
-	
+
 	cacheType := "private"
 	if shared {
 		cacheType = "shared"
 	}
-	
+
 	resource, err := lookup(cache, cacheRequest)
 	if err != nil && err != ErrNotFoundInCache {
 		return request, goproxy.NewResponse(request, goproxy.ContentTypeText, http.StatusInternalServerError, err.Error())
 	}
-	
+
 	if err == ErrNotFoundInCache {
-		log.Printf("%s %s not in %s cache", request.Method, request.URL.String(), cacheType)
+		debugf("%s %s not in %s cache", request.Method, request.URL.String(), cacheType)
 		if cacheRequest.CacheControl.Has("only-if-cached") {
 			return request, goproxy.NewResponse(request, goproxy.ContentTypeText, http.StatusGatewayTimeout, "key not in cache")
 		}
-		
+
 		return request, nil
-	} 
-	
-	log.Printf("%s %s found in %s cache", request.Method, request.URL.String(), cacheType)
+	}
+
+	debugf("%s %s found in %s cache", request.Method, request.URL.String(), cacheType)
 
 	if needsValidation(shared, resource, cacheRequest) {
 		if cacheRequest.CacheControl.Has("only-if-cached") {
 			return request, goproxy.NewResponse(request, goproxy.ContentTypeText, http.StatusGatewayTimeout, "key not in cache")
 		}
 
-		log.Printf("validating cached response")		
+		debugf("validating cached response")
 		return request, nil
 	}
-	
-	log.Printf("serving from cache")
-	
+
+	debugf("serving from cache")
+
 	response := newCachedResponse(shared, cacheRequest, resource)
-	
+
 	return request, response
 }
 
-func newCacheAndForwardResponse(shared bool, cache Cache, cacheRequest *cacheRequest, response * http.Response) *http.Response {
+func newCacheAndForwardResponse(shared bool, cache Cache, cacheRequest *cacheRequest, response *http.Response) *http.Response {
+
+	cacheType := "private"
+	if shared {
+		cacheType = "shared"
+	}
+
+	debugf("%s %s attempting to add to %s cache", cacheRequest.Request.Method, cacheRequest.Request.URL.String(), cacheType)
 
 	statusCode := response.StatusCode
 	contentLength := response.ContentLength
 	headers := response.Header
-	
-	key := cacheRequest.Key.String()	
+
+	key := cacheRequest.Key.String()
 	if vary := headers.Get("Vary"); vary != "" {
 		key = cacheRequest.Key.Vary(vary, cacheRequest.Request).String()
 	}
-	
+
 	storeWriter, err := cache.NewStoreWriteCloser(key, statusCode, contentLength, headers)
 	if err != nil {
 		return response
-	}	
-	
-	body := NewTeeReadCloser(response.Body, storeWriter)	
+	}
+
+	body := NewTeeReadCloser(response.Body, storeWriter)
 	resource := NewResource(statusCode, contentLength, body, headers)
 
 	if shared {
@@ -135,46 +170,46 @@ func newCacheAndForwardResponse(shared bool, cache Cache, cacheRequest *cacheReq
 	}
 
 	statusCode, contentLength, headers, body, err = newResponseParameters(shared, cacheRequest, resource)
-		
+
 	if err != nil {
 		return response
-	}	
-	
+	}
+
 	cacheAndForwardResponse := newResponse(cacheRequest.Request, statusCode, contentLength, headers, body)
-	
-	return cacheAndForwardResponse	
+
+	return cacheAndForwardResponse
 }
 
-func newCachedResponse(shared bool, cacheRequest *cacheRequest, resource *Resource) *http.Response {	
+func newCachedResponse(shared bool, cacheRequest *cacheRequest, resource *Resource) *http.Response {
 
 	statusCode, contentLength, headers, body, err := newResponseParameters(shared, cacheRequest, resource)
-	
+
 	if err != nil {
 		return goproxy.NewResponse(cacheRequest.Request, goproxy.ContentTypeText, http.StatusInternalServerError, "Error calculating age: "+err.Error())
-	}	
-	
+	}
+
 	cachedResponse := newResponse(cacheRequest.Request, statusCode, contentLength, headers, body)
-	
+
 	return cachedResponse
 }
 
-func newResponseParameters(shared bool, cacheRequest *cacheRequest, resource *Resource) (int, int64, http.Header, io.ReadCloser, error){
+func newResponseParameters(shared bool, cacheRequest *cacheRequest, resource *Resource) (int, int64, http.Header, io.ReadCloser, error) {
 	age, err := resource.Age()
 	if err != nil {
 		return 500, -1, nil, nil, err
-	}	
-	
+	}
+
 	contentLength := resource.ContentLength()
 	statusCode := resource.Status()
-	
+
 	headers := make(http.Header)
-	
+
 	for key, mimeheaders := range resource.Header() {
 		for _, header := range mimeheaders {
 			textproto.MIMEHeader(headers).Add(key, header)
 		}
 	}
-	
+
 	// http://httpwg.github.io/specs/rfc7234.html#warn.113
 	if age > (time.Hour*24) && resource.HeuristicFreshness() > (time.Hour*24) {
 		textproto.MIMEHeader(headers).Add("Warning", `113 - "Heuristic Expiration"`)
@@ -186,13 +221,13 @@ func newResponseParameters(shared bool, cacheRequest *cacheRequest, resource *Re
 		textproto.MIMEHeader(headers).Add("Warning", `110 - "Response is Stale"`)
 	}
 
-	log.Printf("resource is %s old, updating age from %s", age.String(), headers.Get("Age"))
-		
+	debugf("resource is %s old, updating age from %s", age.String(), headers.Get("Age"))
+
 	textproto.MIMEHeader(headers).Set("Age", fmt.Sprintf("%.f", math.Floor(age.Seconds())))
 	textproto.MIMEHeader(headers).Set("Via", resource.Via())
-	
+
 	body := resource
-	
+
 	return statusCode, contentLength, headers, body, nil
 }
 
@@ -202,15 +237,15 @@ func newResponse(request *http.Request, statusCode int, contentLength int64, hea
 	response.TransferEncoding = request.TransferEncoding
 	response.Header = headers
 	response.ContentLength = contentLength
-	response.StatusCode = statusCode	
-	
-	if request.Method == "HEAD" || response.StatusCode != http.StatusOK {
+	response.StatusCode = statusCode
+
+	if request.Method == "HEAD" || response.StatusCode != int(http.StatusOK) {
 		body.Close()
 		response.Body = &BufferReadCloser{bytes.NewBufferString("")}
 	} else {
-		response.Body =	body
+		response.Body = body
 	}
-	
+
 	return response
 }
 
@@ -245,38 +280,38 @@ func lookup(cache Cache, cacheRequest *cacheRequest) (*Resource, error) {
 	return resource, nil
 }
 
-func needsValidation(shared bool, resource * Resource, cacheRequest *cacheRequest) bool {
+func needsValidation(shared bool, resource *Resource, cacheRequest *cacheRequest) bool {
 	if resource.MustValidate(shared) {
 		return true
 	}
 
 	freshness, err := freshness(shared, resource, cacheRequest)
 	if err != nil {
-		log.Printf("error calculating freshness: %s", err.Error())
+		debugf("error calculating freshness: %s", err.Error())
 		return true
 	}
 
 	if cacheRequest.CacheControl.Has("min-fresh") {
 		reqMinFresh, err := cacheRequest.CacheControl.Duration("min-fresh")
 		if err != nil {
-			log.Printf("error parsing request min-fresh: %s", err.Error())
+			debugf("error parsing request min-fresh: %s", err.Error())
 			return true
 		}
 
 		if freshness < reqMinFresh {
-			log.Printf("resource is fresh, but won't satisfy min-fresh of %s", reqMinFresh)
+			debugf("resource is fresh, but won't satisfy min-fresh of %s", reqMinFresh)
 			return true
 		}
 	}
 
-	log.Printf("resource has a freshness of %s", freshness)
+	debugf("resource has a freshness of %s", freshness)
 
 	if freshness <= 0 && cacheRequest.CacheControl.Has("max-stale") {
 		if len(cacheRequest.CacheControl["max-stale"]) == 0 {
-			log.Printf("resource is stale, but client sent max-stale")
+			debugf("resource is stale, but client sent max-stale")
 			return false
 		} else if maxStale, _ := cacheRequest.CacheControl.Duration("max-stale"); maxStale >= (freshness * -1) {
-			log.Printf("resource is stale, but within allowed max-stale period of %s", maxStale)
+			debugf("resource is stale, but within allowed max-stale period of %s", maxStale)
 			return false
 		}
 	}
@@ -298,7 +333,7 @@ func freshness(shared bool, resource *Resource, cacheRequest *cacheRequest) (tim
 		}
 
 		if reqMaxAge < maxAge {
-			log.Printf("using request max-age of %s", reqMaxAge.String())
+			debugf("using request max-age of %s", reqMaxAge.String())
 			maxAge = reqMaxAge
 		}
 	}
@@ -313,7 +348,7 @@ func freshness(shared bool, resource *Resource, cacheRequest *cacheRequest) (tim
 	}
 
 	if hFresh := resource.HeuristicFreshness(); hFresh > maxAge {
-		log.Printf("using heuristic freshness of %q", hFresh)
+		debugf("using heuristic freshness of %q", hFresh)
 		maxAge = hFresh
 	}
 
