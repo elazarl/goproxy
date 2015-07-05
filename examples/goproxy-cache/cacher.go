@@ -115,31 +115,26 @@ func newCacheAndForwardResponse(shared bool, cache Cache, cacheRequest *cacheReq
 
 	statusCode := response.StatusCode
 	contentLength := response.ContentLength
-	body := response.Body
 	headers := response.Header
 	
-	/////////////////////
-
-	keys := []string{cacheRequest.Key.String()}	
-		
-	// store a secondary vary version
+	key := cacheRequest.Key.String()	
 	if vary := headers.Get("Vary"); vary != "" {
-		keys = append(keys, cacheRequest.Key.Vary(vary, cacheRequest.Request).String())
+		key = cacheRequest.Key.Vary(vary, cacheRequest.Request).String()
 	}
 	
-	if err := cache.Store(res, keys...); err != nil {
-		log.Printf("storing resources %#v failed with error: %s", keys, err.Error())
+	storeWriter, err := cache.NewStoreWriteCloser(key, statusCode, contentLength, headers)
+	if err != nil {
+		return response
 	}	
 	
-	/////////////////////
-
+	body := NewTeeReadCloser(response.Body, storeWriter)	
 	resource := NewResource(statusCode, contentLength, body, headers)
 
 	if shared {
 		resource.RemovePrivateHeaders()
 	}
 
-	statusCode, contentLength, headers, body, err := newResponseParameters(shared, cacheRequest, resource)
+	statusCode, contentLength, headers, body, err = newResponseParameters(shared, cacheRequest, resource)
 		
 	if err != nil {
 		return response
@@ -218,7 +213,6 @@ func newResponse(request *http.Request, statusCode int, contentLength int64, hea
 	
 	return response
 }
-
 
 func lookup(cache Cache, cacheRequest *cacheRequest) (*Resource, error) {
 	cacheKey := cacheRequest.Key.String()

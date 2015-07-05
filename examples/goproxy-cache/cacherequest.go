@@ -46,7 +46,8 @@ func (cacheRequest *cacheRequest) IsCacheable() bool {
 
 	if cacheRequest.Header.Get("If-Match") != "" ||
 		cacheRequest.Header.Get("If-Unmodified-Since") != "" ||
-		cacheRequest.Header.Get("If-Range") != "" {
+		cacheRequest.Header.Get("If-Range") != "" ||
+		cacheRequest.Header.Get("Vary") == "*" {
 		return false
 	}
 

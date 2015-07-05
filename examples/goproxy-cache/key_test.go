@@ -4,7 +4,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/elazarl/goproxy/examples/goproxy-cache"
+	httpcache "github.com/elazarl/goproxy/examples/goproxy-cache"
 	"github.com/stretchr/testify/assert"
 )
 
