@@ -5,7 +5,6 @@ import (
 	"github.com/elazarl/goproxy"
 	"log"
 	"net/http"
-	"github.com/lox/httpcache"
 	"regexp"
 	"github.com/elazarl/goproxy/examples/goproxy-cache/ubuntu"
 )
@@ -39,10 +38,10 @@ func main() {
 	log.Printf("running apt-proxy %s", version)
 
 	if debug {
-		httpcache.DebugLogging = true
+		DebugLogging = true
 	}
 	
-	cache, err := httpcache.NewDiskCache(dir)
+	cache, err := NewDiskCache(dir)
 	
 	if err != nil {
 		log.Fatal(err)

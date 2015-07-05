@@ -4,18 +4,17 @@ import (
 	"net/http"
 	"time"
 	"errors"
-	"github.com/lox/httpcache"
 )
 
 type cacheRequest struct {
 	*http.Request
-	Key          httpcache.Key
+	Key          Key
 	Time         time.Time
-	CacheControl httpcache.CacheControl
+	CacheControl CacheControl
 }
 
 func NewCacheRequest(request *http.Request) (*cacheRequest, error) {
-	cacheControl, err := httpcache.ParseCacheControl(request.Header.Get("Cache-Control"))
+	cacheControl, err := ParseCacheControl(request.Header.Get("Cache-Control"))
 	if err != nil {
 		return nil, err
 	}
@@ -26,8 +25,8 @@ func NewCacheRequest(request *http.Request) (*cacheRequest, error) {
 
 	return &cacheRequest{
 		Request:      request,
-		Key:          httpcache.NewRequestKey(request),
-		Time:         httpcache.Clock(),
+		Key:          NewRequestKey(request),
+		Time:         Clock(),
 		CacheControl: cacheControl,
 	}, nil
 }

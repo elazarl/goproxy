@@ -4,13 +4,9 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
-	"strconv"
 	"time"
-	"github.com/lox/httpcache"
-	"log"
 )
 
 const (
@@ -18,72 +14,65 @@ const (
 	viaPseudonym   = "httpcache"
 )
 
-var Clock = func() time.Time {
-	return time.Now().UTC()
-}
 
-type ReadCloser interface {
-	io.Reader
-	io.Closer
-}
-
-type byteReadCloser struct {
-	*bytes.Reader
-}
-
-func (brsc *byteReadCloser) Close() error { return nil }
-
-type ForwardOnlyResource struct {
+type Resource struct {
 	ReadCloser
 	RequestTime, ResponseTime time.Time
 	header                    http.Header
+	contentLength			  int64
 	statusCode                int
-	cc                        httpcache.CacheControl
+	cc                        CacheControl
 	stale                     bool
 }
 
-func NewForwardOnlyResource(statusCode int, body ReadCloser, hdrs http.Header) *ForwardOnlyResource {
-	return &ForwardOnlyResource{
+func NewResource(statusCode int, contentLength int64, body ReadCloser, hdrs http.Header) *Resource {
+	return &Resource{
 		header:         hdrs,
 		ReadCloser: body,
 		statusCode:     statusCode,
+		contentLength:  contentLength,
 	}
 }
 
-func NewForwardOnlyResourceBytes(statusCode int, b []byte, hdrs http.Header) *ForwardOnlyResource {
-	return &ForwardOnlyResource{
+func NewResourceBytes(statusCode int, contentLength int64, b []byte, hdrs http.Header) *Resource {
+	return &Resource{
 		header:         hdrs,
 		statusCode:     statusCode,
+		contentLength:  contentLength,
 		ReadCloser: &byteReadCloser{bytes.NewReader(b)},
 	}
 }
 
-func (r *ForwardOnlyResource) IsNonErrorStatus() bool {
+func (r *Resource) IsNonErrorStatus() bool {
 	return r.statusCode >= 200 && r.statusCode < 400
 }
 
-func (r *ForwardOnlyResource) Status() int {
+func (r *Resource) Status() int {
 	return r.statusCode
 }
 
-func (r *ForwardOnlyResource) Header() http.Header {
+func (r *Resource) ContentLength() int64 {
+	return r.contentLength
+}
+
+func (r *Resource) Header() http.Header {
 	return r.header
 }
 
-func (r *ForwardOnlyResource) IsStale() bool {
+func (r *Resource) IsStale() bool {
 	return r.stale
 }
 
-func (r *ForwardOnlyResource) MarkStale() {
+func (r *Resource) MarkStale() {
 	r.stale = true
 }
 
-func (r *ForwardOnlyResource) cacheControl() (httpcache.CacheControl, error) {
+func (r *Resource) cacheControl() (CacheControl, error) {
 	if r.cc != nil {
 		return r.cc, nil
 	}
 
-	cc, err := httpcache.ParseCacheControlHeaders(r.header)
+	cc, err := ParseCacheControlHeaders(r.header)
 	if err != nil {
 		return cc, err
 	}
@@ -92,7 +81,7 @@ func (r *ForwardOnlyResource) cacheControl() (httpcache.CacheControl, error) {
 	return cc, nil
 }
 
-func (r *ForwardOnlyResource) LastModified() time.Time {
+func (r *Resource) LastModified() time.Time {
 	var modTime time.Time
 
 	if lastModHeader := r.header.Get("Last-Modified"); lastModHeader != "" {
@@ -104,7 +93,7 @@ func (r *ForwardOnlyResource) LastModified() time.Time {
 	return modTime
 }
 
-func (r *ForwardOnlyResource) Expires() (time.Time, error) {
+func (r *Resource) Expires() (time.Time, error) {
 	if expires := r.header.Get("Expires"); expires != "" {
 		return http.ParseTime(expires)
 	}
@@ -112,10 +101,10 @@ func (r *ForwardOnlyResource) Expires() (time.Time, error) {
 	return time.Time{}, nil
 }
 
-func (r *ForwardOnlyResource) MustValidate(shared bool) bool {
+func (r *Resource) MustValidate(shared bool) bool {
 	cc, err := r.cacheControl()
 	if err != nil {
-		log.Printf("Error parsing Cache-Control: ", err.Error())
+		debugf("Error parsing Cache-Control: ", err.Error())
 		return true
 	}
 
@@ -131,7 +120,7 @@ func (r *ForwardOnlyResource) MustValidate(shared bool) bool {
 	return false
 }
 
-func (r *ForwardOnlyResource) DateAfter(d time.Time) bool {
+func (r *Resource) DateAfter(d time.Time) bool {
 	if dateHeader := r.header.Get("Date"); dateHeader != "" {
 		if t, err := http.ParseTime(dateHeader); err != nil {
 			return false
@@ -143,7 +132,7 @@ func (r *ForwardOnlyResource) DateAfter(d time.Time) bool {
 }
 
 // Calculate the age of the resource
-func (r *ForwardOnlyResource) Age() (time.Duration, error) {
+func (r *Resource) Age() (time.Duration, error) {
 	var age time.Duration
 
 	if ageInt, err := intHeader("Age", r.header); err == nil {
@@ -161,7 +150,7 @@ func (r *ForwardOnlyResource) Age() (time.Duration, error) {
 	return time.Duration(0), errors.New("Unable to calculate age")
 }
 
-func (r *ForwardOnlyResource) MaxAge(shared bool) (time.Duration, error) {
+func (r *Resource) MaxAge(shared bool) (time.Duration, error) {
 	cc, err := r.cacheControl()
 	if err != nil {
 		return time.Duration(0), err
@@ -194,19 +183,19 @@ func (r *ForwardOnlyResource) MaxAge(shared bool) (time.Duration, error) {
 	return time.Duration(0), nil
 }
 
-func (r *ForwardOnlyResource) RemovePrivateHeaders() {
+func (r *Resource) RemovePrivateHeaders() {
 	cc, err := r.cacheControl()
 	if err != nil {
-		log.Printf("Error parsing Cache-Control: %s", err.Error())
+		debugf("Error parsing Cache-Control: %s", err.Error())
 	}
 
 	for _, p := range cc["private"] {
-		log.Printf("removing private header %q", p)
+		debugf("removing private header %q", p)
 		r.header.Del(p)
 	}
 }
 
-func (r *ForwardOnlyResource) HasValidators() bool {
+func (r *Resource) HasValidators() bool {
 	if r.header.Get("Last-Modified") != "" || r.header.Get("Etag") != "" {
 		return true
 	}
@@ -214,10 +203,10 @@ func (r *ForwardOnlyResource) HasValidators() bool {
 	return false
 }
 
-func (r *ForwardOnlyResource) HasExplicitExpiration() bool {
+func (r *Resource) HasExplicitExpiration() bool {
 	cc, err := r.cacheControl()
 	if err != nil {
-		log.Printf("Error parsing Cache-Control: %s", err.Error())
+		debugf("Error parsing Cache-Control: %s", err.Error())
 		return false
 	}
 
@@ -236,7 +225,7 @@ func (r *ForwardOnlyResource) HasExplicitExpiration() bool {
 	return false
 }
 
-func (r *ForwardOnlyResource) HeuristicFreshness() time.Duration {
+func (r *Resource) HeuristicFreshness() time.Duration {
 	if !r.HasExplicitExpiration() && r.header.Get("Last-Modified") != "" {
 		return Clock().Sub(r.LastModified()) / time.Duration(lastModDivisor)
 	}
@@ -244,26 +233,8 @@ func (r *ForwardOnlyResource) HeuristicFreshness() time.Duration {
 	return time.Duration(0)
 }
 
-func (r *ForwardOnlyResource) Via() string {
+func (r *Resource) Via() string {
 	via := []string{}
 	via = append(via, fmt.Sprintf("1.1 %s", viaPseudonym))
 	return strings.Join(via, ",")
-}
-
-var errNoHeader = errors.New("Header doesn't exist")
-
-func timeHeader(key string, h http.Header) (time.Time, error) {
-	if header := h.Get(key); header != "" {
-		return http.ParseTime(header)
-	} else {
-		return time.Time{}, errNoHeader
-	}
-}
-
-func intHeader(key string, h http.Header) (int, error) {
-	if header := h.Get(key); header != "" {
-		return strconv.Atoi(header)
-	} else {
-		return 0, errNoHeader
-	}
 }
