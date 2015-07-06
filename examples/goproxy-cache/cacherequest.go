@@ -1,9 +1,9 @@
 package main
 
 import (
+	"errors"
 	"net/http"
 	"time"
-	"errors"
 )
 
 type cacheRequest struct {
@@ -46,8 +46,7 @@ func (cacheRequest *cacheRequest) IsCacheable() bool {
 
 	if cacheRequest.Header.Get("If-Match") != "" ||
 		cacheRequest.Header.Get("If-Unmodified-Since") != "" ||
-		cacheRequest.Header.Get("If-Range") != "" ||
-		cacheRequest.Header.Get("Vary") == "*" {
+		cacheRequest.Header.Get("If-Range") != "" {
 		return false
 	}
 
@@ -55,7 +54,7 @@ func (cacheRequest *cacheRequest) IsCacheable() bool {
 		return false
 	}
 
-	if cacheRequest.CacheControl.Has("no-store") || cacheRequest.CacheControl.Has("no-cache") {
+	if cacheRequest.CacheControl.Has("no-store") || cacheRequest.CacheControl.Has("no-cache") || cacheRequest.CacheControl.Has("private") {
 		return false
 	}
 

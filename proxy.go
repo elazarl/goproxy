@@ -107,7 +107,30 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 		if resp == nil {
 			removeProxyHeaders(ctx, r)
+
+			log.Printf("------- request ----------")
+			log.Printf("%s %s %s", r.Method, r.URL.Path, r.Proto)
+			for key, mimeheaders := range r.Header {
+				for _, header := range mimeheaders {
+					log.Printf("%s: %s", key, header)
+				}
+			}
+			log.Printf("-----------------")
+
 			resp, err = ctx.RoundTrip(r)
+
+			log.Printf("------- response ----------")
+			if err != nil {
+				log.Printf("error=%s", err)
+			}
+			log.Printf("%s %d", resp.Proto, resp.StatusCode)
+			for key, mimeheaders := range resp.Header {
+				for _, header := range mimeheaders {
+					log.Printf("%s: %s", key, header)
+				}
+			}
+			log.Printf("-----------------")
+
 			if err != nil {
 				ctx.Error = err
 				resp = proxy.filterResponse(nil, ctx)
