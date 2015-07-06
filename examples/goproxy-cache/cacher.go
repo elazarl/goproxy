@@ -17,6 +17,11 @@ const (
 
 func TryCacheResponse(shared bool, cache Cache, response *http.Response) *http.Response {
 
+	if (response.Header.Get("Via") == Via()){
+		debugf("Skip caching as we are serving cached content")
+		return response	
+	}	
+
 	debugf("*********** Try cache response*****************")
 
 	for key, mimeheaders := range response.Request.Header {

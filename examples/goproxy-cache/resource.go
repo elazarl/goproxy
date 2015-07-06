@@ -238,3 +238,9 @@ func (r *Resource) Via() string {
 	via = append(via, fmt.Sprintf("1.1 %s", viaPseudonym))
 	return strings.Join(via, ",")
 }
+
+func Via() string {
+	via := []string{}
+	via = append(via, fmt.Sprintf("1.1 %s", viaPseudonym))
+	return strings.Join(via, ",")
+}
