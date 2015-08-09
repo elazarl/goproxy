@@ -12,7 +12,7 @@ yet, customizable and programable.
 
 The proxy itself is simply a `net/http` handler.
 
-In order to use goproxy, one should set his browser to use goproxy as an HTTP
+In order to use goproxy, one should set their browser to use goproxy as an HTTP
 proxy. Here is how you do that [in Chrome](https://support.google.com/chrome/answer/96815?hl=en)
 and [in Firefox](http://www.wikihow.com/Enter-Proxy-Settings-in-Firefox).
 
