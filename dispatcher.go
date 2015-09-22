@@ -50,7 +50,7 @@ func (c RespConditionFunc) HandleResp(resp *http.Response, ctx *ProxyCtx) bool {
 func UrlHasPrefix(prefix string) ReqConditionFunc {
 	return func(req *http.Request, ctx *ProxyCtx) bool {
 		return strings.HasPrefix(req.URL.Path, prefix) ||
-			strings.HasPrefix(req.URL.Host+"/"+req.URL.Path, prefix) ||
+			strings.HasPrefix(req.URL.Host+req.URL.Path, prefix) ||
 			strings.HasPrefix(req.URL.Scheme+req.URL.Host+req.URL.Path, prefix)
 	}
 }
