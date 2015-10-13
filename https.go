@@ -255,7 +255,7 @@ func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
 
 func copyAndClose(ctx *ProxyCtx, w, r net.Conn) {
 	connOk := true
-	if _, err := io.Copy(w, r); err != nil {
+	if bytes, err := io.Copy(w, r); err != nil && bytes <= 0 {
 		connOk = false
 		ctx.Warnf("Error copying to client: %s", err)
 	}
