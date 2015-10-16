@@ -23,6 +23,11 @@ type RespCondition interface {
 	HandleResp(resp *http.Response, ctx *ProxyCtx) bool
 }
 
+// It's called when the connection is closed
+type OnClose interface {
+	HandleClose(ctx *ProxyCtx)
+}
+
 // ReqConditionFunc.HandleReq(req,ctx) <=> ReqConditionFunc(req,ctx)
 type ReqConditionFunc func(req *http.Request, ctx *ProxyCtx) bool
 
@@ -289,6 +294,13 @@ func (pcond *ProxyConds) Do(h RespHandler) {
 //	proxy.OnResponse(cond1,cond2).Do(handler) // handler.Handle(resp,ctx) will be used
 //				// if cond1.HandleResp(resp) && cond2.HandleResp(resp)
 func (proxy *ProxyHttpServer) OnResponse(conds ...RespCondition) *ProxyConds {
+	return &ProxyConds{proxy, make([]ReqCondition, 0), conds}
+}
+
+// OnResponse is used when adding a response-filter to the HTTP proxy, usual pattern is
+//	proxy.OnResponse(cond1,cond2).Do(handler) // handler.Handle(resp,ctx) will be used
+//				// if cond1.HandleResp(resp) && cond2.HandleResp(resp)
+func (proxy *ProxyHttpServer) OnClose(conds ...RespCondition) *ProxyConds {
 	return &ProxyConds{proxy, make([]ReqCondition, 0), conds}
 }
 
