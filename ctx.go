@@ -19,8 +19,10 @@ type ProxyCtx struct {
 	// call of RespHandler
 	UserData interface{}
 	// Will connect a request to a response
-	Session int64
-	proxy   *ProxyHttpServer
+	Session         int64
+	proxy           *ProxyHttpServer
+	bytesUpstream   int64
+	bytesDownstream int64
 }
 
 type RoundTripper interface {

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
@@ -13,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 )
 
 type ConnectActionLiteral int
@@ -97,8 +99,21 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		}
 		ctx.Logf("Accepting CONNECT to %s", host)
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
-		go copyAndClose(ctx, targetSiteCon, proxyClient)
-		go copyAndClose(ctx, proxyClient, targetSiteCon)
+
+		upCh := make(chan int64)
+		downCh := make(chan int64)
+		go func() {
+			upCh <- copyAndClose(ctx, targetSiteCon, proxyClient)
+		}()
+
+		go func() {
+			downCh <- copyAndClose(ctx, proxyClient, targetSiteCon)
+		}()
+		ctx.bytesUpstream += <-upCh
+		targetSiteCon.SetReadDeadline(time.Now())
+		ctx.bytesDownstream += <-downCh
+		fmt.Printf("up: %d, down: %d\n", ctx.bytesUpstream, ctx.bytesDownstream)
+
 	case ConnectHijack:
 		ctx.Logf("Hijacking CONNECT to %s", host)
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
@@ -253,15 +268,19 @@ func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
 	}
 }
 
-func copyAndClose(ctx *ProxyCtx, w, r net.Conn) {
+func copyAndClose(ctx *ProxyCtx, w, r net.Conn) (bytes int64) {
 	connOk := true
-	if bytes, err := io.Copy(w, r); err != nil && bytes <= 0 {
+	var err error
+
+	if bytes, err = io.Copy(w, r); err != nil && bytes <= 0 {
 		connOk = false
 		ctx.Warnf("Error copying to client: %s", err)
 	}
 	if err := r.Close(); err != nil && connOk {
 		ctx.Warnf("Error closing: %s", err)
 	}
+	fmt.Printf("c: %d\n", bytes)
+	return bytes
 }
 
 func dialerFromEnv(proxy *ProxyHttpServer) func(network, addr string) (net.Conn, error) {
