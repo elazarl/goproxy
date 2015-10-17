@@ -27,8 +27,7 @@ type ProxyHttpServer struct {
 	Tr              *http.Transport
 	// ConnectDial will be used to create TCP connections for CONNECT requests
 	// if nil Tr.Dial will be used
-	ConnectDial func(network string, addr string) (net.Conn, error),
-	closeHandlers: []OnClose{},
+	ConnectDial func(network string, addr string) (net.Conn, error)
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
@@ -162,7 +161,6 @@ func NewProxyHttpServer() *ProxyHttpServer {
 		}),
 		Tr: &http.Transport{TLSClientConfig: tlsClientSkipVerify,
 			Proxy: http.ProxyFromEnvironment},
-		endHandler: []OnEndHandler{},
 	}
 	proxy.ConnectDial = dialerFromEnv(&proxy)
 	return &proxy

@@ -100,19 +100,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		ctx.Logf("Accepting CONNECT to %s", host)
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 
-		upCh := make(chan int64)
-		downCh := make(chan int64)
-		go func() {
-			upCh <- copyAndClose(ctx, targetSiteCon, proxyClient)
-		}()
-
-		go func() {
-			downCh <- copyAndClose(ctx, proxyClient, targetSiteCon)
-		}()
-		ctx.bytesUpstream += <-upCh
-		targetSiteCon.SetReadDeadline(time.Now())
-		ctx.bytesDownstream += <-downCh
-		fmt.Printf("up: %d, down: %d\n", ctx.bytesUpstream, ctx.bytesDownstream)
+		pipeAndClose(ctx, targetSiteCon, proxyClient)
 
 	case ConnectHijack:
 		ctx.Logf("Hijacking CONNECT to %s", host)
@@ -266,6 +254,35 @@ func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
 	if err := w.Close(); err != nil {
 		ctx.Warnf("Error closing client connection: %s", err)
 	}
+}
+
+func pipeAndClose(ctx *ProxyCtx, targetSiteCon, proxyClient net.Conn) {
+	upCh := make(chan int64)
+	downCh := make(chan int64)
+	closedConns := 0
+
+	go func() {
+		upCh <- copyAndClose(ctx, targetSiteCon, proxyClient)
+	}()
+
+	go func() {
+		downCh <- copyAndClose(ctx, proxyClient, targetSiteCon)
+	}()
+
+	for closedConns < 2 {
+		select {
+		case bytes := <-upCh:
+			ctx.bytesUpstream += bytes
+			closedConns++
+			targetSiteCon.SetReadDeadline(time.Now())
+
+		case bytes := <-downCh:
+			ctx.bytesDownstream += bytes
+			closedConns++
+			proxyClient.SetReadDeadline(time.Now())
+		}
+	}
+	fmt.Printf("up: %d, down: %d\n", ctx.bytesUpstream, ctx.bytesDownstream)
 }
 
 func copyAndClose(ctx *ProxyCtx, w, r net.Conn) (bytes int64) {
