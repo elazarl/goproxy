@@ -271,12 +271,12 @@ func pipeAndClose(ctx *ProxyCtx, targetSiteCon, proxyClient net.Conn) {
 	for closedConns < 2 {
 		select {
 		case bytes := <-upCh:
-			ctx.bytesUpstream += bytes
+			ctx.BytesUpstream += bytes
 			closedConns++
 			targetSiteCon.SetReadDeadline(time.Now())
 
 		case bytes := <-downCh:
-			ctx.bytesDownstream += bytes
+			ctx.BytesDownstream += bytes
 			closedConns++
 			proxyClient.SetReadDeadline(time.Now())
 		}

@@ -21,8 +21,8 @@ type ProxyCtx struct {
 	// Will connect a request to a response
 	Session         int64
 	proxy           *ProxyHttpServer
-	bytesUpstream   int64
-	bytesDownstream int64
+	BytesUpstream   int64
+	BytesDownstream int64
 }
 
 type RoundTripper interface {
