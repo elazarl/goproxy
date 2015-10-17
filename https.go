@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
@@ -282,7 +281,6 @@ func pipeAndClose(ctx *ProxyCtx, targetSiteCon, proxyClient net.Conn) {
 			proxyClient.SetReadDeadline(time.Now())
 		}
 	}
-	fmt.Printf("up: %d, down: %d\n", ctx.bytesUpstream, ctx.bytesDownstream)
 }
 
 func copyAndClose(ctx *ProxyCtx, w, r net.Conn) (bytes int64) {
@@ -296,7 +294,6 @@ func copyAndClose(ctx *ProxyCtx, w, r net.Conn) (bytes int64) {
 	if err := r.Close(); err != nil && connOk {
 		ctx.Warnf("Error closing: %s", err)
 	}
-	fmt.Printf("c: %d\n", bytes)
 	return bytes
 }
 

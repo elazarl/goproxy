@@ -2,7 +2,6 @@ package goproxy
 
 import (
 	"bufio"
-	"fmt"
 	"io"
 	"log"
 	"net"
@@ -145,7 +144,6 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 		ctx.bytesDownstream += nr
 		ctx.Logf("Copied %v bytes to client error=%v", nr, err)
-		fmt.Printf("up: %d, down: %d\n", ctx.bytesUpstream, ctx.bytesDownstream)
 	}
 }
 
