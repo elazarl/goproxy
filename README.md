@@ -45,6 +45,8 @@ goproxy server. Fiddler is a GUI app not designed to be ran like a server for mu
 To get a taste of `goproxy`, a basic HTTP/HTTPS transparent proxy
 
 
+    package main
+
     import (
         "github.com/elazarl/goproxy"
         "log"
