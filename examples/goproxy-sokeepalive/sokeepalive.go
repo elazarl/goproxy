@@ -1,9 +1,9 @@
 package main
 
 import (
+	"flag"
 	"github.com/elazarl/goproxy"
 	"log"
-	"flag"
 	"net"
 	"net/http"
 )
@@ -15,7 +15,7 @@ func main() {
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.Tr.Dial = func(network, addr string) (c net.Conn, err error) {
 		c, err = net.Dial(network, addr)
-		if c, ok := c.(*net.TCPConn); err != nil && ok {
+		if c, ok := c.(*net.TCPConn); err == nil && ok {
 			c.SetKeepAlive(true)
 		}
 		return

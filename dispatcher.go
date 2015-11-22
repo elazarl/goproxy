@@ -50,7 +50,7 @@ func (c RespConditionFunc) HandleResp(resp *http.Response, ctx *ProxyCtx) bool {
 func UrlHasPrefix(prefix string) ReqConditionFunc {
 	return func(req *http.Request, ctx *ProxyCtx) bool {
 		return strings.HasPrefix(req.URL.Path, prefix) ||
-			strings.HasPrefix(req.URL.Host+"/"+req.URL.Path, prefix) ||
+			strings.HasPrefix(req.URL.Host+req.URL.Path, prefix) ||
 			strings.HasPrefix(req.URL.Scheme+req.URL.Host+req.URL.Path, prefix)
 	}
 }
@@ -124,10 +124,15 @@ func DstHostIs(host string) ReqConditionFunc {
 	}
 }
 
-// SrcIpIs returns a ReqCondition testing wether the source IP of the request is the given string
-func SrcIpIs(ip string) ReqCondition {
+// SrcIpIs returns a ReqCondition testing whether the source IP of the request is one of the given strings
+func SrcIpIs(ips ...string) ReqCondition {
 	return ReqConditionFunc(func(req *http.Request, ctx *ProxyCtx) bool {
-		return strings.HasPrefix(req.RemoteAddr, ip+":")
+		for _, ip := range ips {
+			if strings.HasPrefix(req.RemoteAddr, ip+":") {
+				return true
+			}
+		}
+		return false
 	})
 }
 

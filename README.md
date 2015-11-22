@@ -1,5 +1,6 @@
 # Introduction
 
+[![GoDoc](https://godoc.org/github.com/elazarl/goproxy?status.svg)](https://godoc.org/github.com/elazarl/goproxy)
 [![Join the chat at https://gitter.im/elazarl/goproxy](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/elazarl/goproxy?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 Package goproxy provides a customizable HTTP proxy library for Go (golang),
@@ -12,7 +13,7 @@ yet, customizable and programable.
 
 The proxy itself is simply a `net/http` handler.
 
-In order to use goproxy, one should set his browser to use goproxy as an HTTP
+In order to use goproxy, one should set their browser to use goproxy as an HTTP
 proxy. Here is how you do that [in Chrome](https://support.google.com/chrome/answer/96815?hl=en)
 and [in Firefox](http://www.wikihow.com/Enter-Proxy-Settings-in-Firefox).
 
@@ -43,6 +44,8 @@ goproxy server. Fiddler is a GUI app not designed to be ran like a server for mu
 
 To get a taste of `goproxy`, a basic HTTP/HTTPS transparent proxy
 
+
+    package main
 
     import (
         "github.com/elazarl/goproxy"

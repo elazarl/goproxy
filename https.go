@@ -176,11 +176,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				req.RemoteAddr = r.RemoteAddr // since we're converting the request, need to carry over the original connecting IP as well
 				ctx.Logf("req %v", r.Host)
 				req.URL, err = url.Parse("https://" + r.Host + req.URL.String())
-				
-				// Bug fix which goproxy fails to provide request 
-				// information URL in the context when does HTTPS MITM 
+
+				// Bug fix which goproxy fails to provide request
+				// information URL in the context when does HTTPS MITM
 				ctx.Req = req
-				
+
 				req, resp := proxy.filterRequest(req, ctx)
 				if resp == nil {
 					if err != nil {
