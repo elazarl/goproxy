@@ -30,6 +30,11 @@ var (
 	MitmConnect     = &ConnectAction{Action: ConnectMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
 	HTTPMitmConnect = &ConnectAction{Action: ConnectHTTPMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
 	RejectConnect   = &ConnectAction{Action: ConnectReject, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
+
+	OkConnectEphemeral       = &ConnectAction{Action: ConnectAccept, TLSConfig: TLSConfigEphemeral}
+	MitmConnectEphemeral     = &ConnectAction{Action: ConnectMitm, TLSConfig: TLSConfigEphemeral}
+	HTTPMitmConnectEphemeral = &ConnectAction{Action: ConnectHTTPMitm, TLSConfig: TLSConfigEphemeral}
+	RejectConnectEphemeral   = &ConnectAction{Action: ConnectReject, TLSConfig: TLSConfigEphemeral}
 )
 
 type ConnectAction struct {
@@ -363,4 +368,31 @@ func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls
 		config.Certificates = append(config.Certificates, cert)
 		return &config, nil
 	}
+}
+
+func TLSConfigEphemeral(host string, ctx *ProxyCtx) (*tls.Config, error) {
+	config := *defaultTLSConfig
+	config.GetCertificate = func(clientHello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		ecdsaKey := false
+		if clientHello.SupportedCurves != nil {
+			for _, curve := range clientHello.SupportedCurves {
+				if curve == tls.CurveP256 {
+					ecdsaKey = true
+					break
+				}
+			}
+		}
+		if ecdsaKey {
+			ctx.Logf("signing for %s with ecdsa", stripPort(host))
+		} else {
+			ctx.Logf("signing for %s with rsa", stripPort(host))
+		}
+		cert, err := signEphemeralHost(ecdsaKey, []string{stripPort(host)})
+		if err != nil {
+			return nil, err
+		}
+		config.Certificates = append(config.Certificates, cert)
+		return &cert, nil
+	}
+	return &config, nil
 }
