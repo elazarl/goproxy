@@ -1,6 +1,9 @@
 package goproxy
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha1"
 	"crypto/tls"
@@ -82,6 +85,58 @@ func signHost(ca tls.Certificate, hosts []string) (cert tls.Certificate, err err
 	}
 	return tls.Certificate{
 		Certificate: [][]byte{derBytes, ca.Certificate[0]},
+		PrivateKey:  certpriv,
+	}, nil
+}
+
+func signEphemeralHost(ecdsaKey bool, hosts []string) (cert tls.Certificate, err error) {
+	start := time.Unix(0, 0)
+	end, err := time.Parse("2006-01-02", "2049-12-31")
+	if err != nil {
+		panic(err)
+	}
+	hash := hashSorted(append(hosts, goproxySignerVersion, ":"+runtime.Version()))
+	serial := new(big.Int)
+	serial.SetBytes(hash)
+	template := x509.Certificate{
+		// TODO(elazar): instead of this ugly hack, just encode the certificate and hash the binary form.
+		SerialNumber: serial,
+		Subject: pkix.Name{
+			Organization: []string{"GoProxy untrusted MITM proxy Inc"},
+		},
+		NotBefore: start,
+		NotAfter:  end,
+
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+	for _, h := range hosts {
+		if ip := net.ParseIP(h); ip != nil {
+			template.IPAddresses = append(template.IPAddresses, ip)
+		} else {
+			template.DNSNames = append(template.DNSNames, h)
+		}
+	}
+	var certpriv interface{}
+	var certpub interface{}
+	if ecdsaKey {
+		if certpriv, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader); err != nil {
+			return
+		}
+		certpub = &certpriv.(*ecdsa.PrivateKey).PublicKey
+	} else {
+		if certpriv, err = rsa.GenerateKey(rand.Reader, 1024); err != nil {
+			return
+		}
+		certpub = &certpriv.(*rsa.PrivateKey).PublicKey
+	}
+	var derBytes []byte
+	if derBytes, err = x509.CreateCertificate(rand.Reader, &template, &template, certpub, certpriv); err != nil {
+		return
+	}
+	return tls.Certificate{
+		Certificate: [][]byte{derBytes},
 		PrivateKey:  certpriv,
 	}, nil
 }
