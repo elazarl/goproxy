@@ -307,6 +307,21 @@ var AlwaysReject FuncHttpsHandler = func(host string, ctx *ProxyCtx) (*ConnectAc
 	return RejectConnect, host
 }
 
+// AlwaysMitmEphemeral is a HttpsHandler that always eavesdrop https connections, for example to
+// eavesdrop all https connections to www.google.com, we can use
+//	proxy.OnRequest(goproxy.ReqHostIs("www.google.com")).HandleConnect(goproxy.AlwaysMitmEphemeral)
+var AlwaysMitmEphemeral FuncHttpsHandler = func(host string, ctx *ProxyCtx) (*ConnectAction, string) {
+	return MitmConnectEphemeral, host
+}
+
+// AlwaysRejectEphemeral is a HttpsHandler that drops any CONNECT request, for example, this code will disallow
+// connections to hosts on any other port than 443
+//	proxy.OnRequest(goproxy.Not(goproxy.ReqHostMatches(regexp.MustCompile(":443$"))).
+//		HandleConnect(goproxy.AlwaysRejectEphemeral)
+var AlwaysRejectEphemeral FuncHttpsHandler = func(host string, ctx *ProxyCtx) (*ConnectAction, string) {
+	return RejectConnectEphemeral, host
+}
+
 // HandleBytes will return a RespHandler that read the entire body of the request
 // to a byte array in memory, would run the user supplied f function on the byte arra,
 // and will replace the body of the original response with the resulting byte array.
