@@ -2,7 +2,6 @@ package goproxy
 
 import (
 	"bytes"
-	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -50,7 +49,6 @@ func CookieMatches(regexps ...*regexp.Regexp) ReqConditionFunc {
 	return func(req *http.Request, ctx *ProxyCtx) bool {
 		for _, c := range req.Cookies() {
 			for _, re := range regexps {
-				fmt.Println(c.String())
 				if re.MatchString(c.String()) {
 					return true
 				}
