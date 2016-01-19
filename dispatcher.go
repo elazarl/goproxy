@@ -2,6 +2,7 @@ package goproxy
 
 import (
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -41,6 +42,22 @@ func (c ReqConditionFunc) HandleResp(resp *http.Response, ctx *ProxyCtx) bool {
 
 func (c RespConditionFunc) HandleResp(resp *http.Response, ctx *ProxyCtx) bool {
 	return c(resp, ctx)
+}
+
+// CookieMatches returns a ReqCondition, testing whether the host to which the request was directed to matches
+// any of the given regular expressions.
+func CookieMatches(regexps ...*regexp.Regexp) ReqConditionFunc {
+	return func(req *http.Request, ctx *ProxyCtx) bool {
+		for _, c := range req.Cookies() {
+			for _, re := range regexps {
+				fmt.Println(c.String())
+				if re.MatchString(c.String()) {
+					return true
+				}
+			}
+		}
+		return false
+	}
 }
 
 // UrlHasPrefix returns a ReqCondition checking wether the destination URL the proxy client has requested
