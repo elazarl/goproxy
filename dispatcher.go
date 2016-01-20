@@ -43,15 +43,14 @@ func (c RespConditionFunc) HandleResp(resp *http.Response, ctx *ProxyCtx) bool {
 	return c(resp, ctx)
 }
 
-// CookieMatches returns a ReqCondition, testing whether any of the cookies in the request
-// matches any of the given regular expressions.
-func CookieMatches(regexps ...*regexp.Regexp) ReqConditionFunc {
+// CookieMatches returns a ReqCondition, testing whether any of the Name or Value of the cookies
+// in the request matches both of the given regular expressions for http.Cookie.Name and
+// http.Cookie.Value.
+func CookieMatches(regexpName *regexp.Regexp, regexpValue *regexp.Regexp) ReqConditionFunc {
 	return func(req *http.Request, ctx *ProxyCtx) bool {
 		for _, c := range req.Cookies() {
-			for _, re := range regexps {
-				if re.MatchString(c.String()) {
-					return true
-				}
+			if regexpName.MatchString(c.Name) && regexpValue.MatchString(c.Value) {
+				return true
 			}
 		}
 		return false
