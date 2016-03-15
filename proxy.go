@@ -3,11 +3,13 @@ package goproxy
 import (
 	"bufio"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"regexp"
+	"strconv"
 	"sync/atomic"
 )
 
@@ -121,22 +123,18 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			}
 			ctx.Logf("Received response %v", resp.Status)
 		}
-		origBody := resp.Body
 		resp = proxy.filterResponse(resp, ctx)
 
 		ctx.Logf("Copying response to client %v [%d]", resp.Status, resp.StatusCode)
 		// http.ResponseWriter will take care of filling the correct response length
-		// Setting it now, might impose wrong value, contradicting the actual new
-		// body the user returned.
-		// We keep the original body to remove the header only if things changed.
+		// Set it explicitly to guarantee right Content-Length value.
 		// This will prevent problems with HEAD requests where there's no body, yet,
 		// the Content-Length header should be set.
-		if origBody != resp.Body {
-			resp.Header.Del("Content-Length")
-		}
+		body, err := ioutil.ReadAll(resp.Body)
 		copyHeaders(w.Header(), resp.Header)
+		w.Header().Set("Content-Length", strconv.Itoa(len(body)))
 		w.WriteHeader(resp.StatusCode)
-		nr, err := io.Copy(w, resp.Body)
+		nr, err := w.Write(body)
 		if err := resp.Body.Close(); err != nil {
 			ctx.Warnf("Can't close response body %v", err)
 		}
