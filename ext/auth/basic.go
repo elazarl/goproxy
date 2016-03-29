@@ -25,11 +25,11 @@ func BasicUnauthorized(req *http.Request, realm string) *http.Response {
 	}
 }
 
-var proxyAuthorizatonHeader = "Proxy-Authorization"
+var proxyAuthorizationHeader = "Proxy-Authorization"
 
 func auth(req *http.Request, f func(user, passwd string) bool) bool {
-	authheader := strings.SplitN(req.Header.Get(proxyAuthorizatonHeader), " ", 2)
-	req.Header.Del(proxyAuthorizatonHeader)
+	authheader := strings.SplitN(req.Header.Get(proxyAuthorizationHeader), " ", 2)
+	req.Header.Del(proxyAuthorizationHeader)
 	if len(authheader) != 2 || authheader[0] != "Basic" {
 		return false
 	}
