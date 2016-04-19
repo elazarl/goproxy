@@ -110,6 +110,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		if resp == nil {
 			removeProxyHeaders(ctx, r)
 			resp, err = ctx.RoundTrip(r)
+			ctx.BytesUpstream += r.ContentLength
 			if err != nil {
 				ctx.Error = err
 				resp = proxy.filterResponse(nil, ctx)
@@ -120,6 +121,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 				}
 			}
 			ctx.Logf("Received response %v", resp.Status)
+
 		}
 		origBody := resp.Body
 		resp = proxy.filterResponse(resp, ctx)
@@ -140,6 +142,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		if err := resp.Body.Close(); err != nil {
 			ctx.Warnf("Can't close response body %v", err)
 		}
+		ctx.BytesDownstream += nr
 		ctx.Logf("Copied %v bytes to client error=%v", nr, err)
 	}
 }

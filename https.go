@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 )
 
 type ConnectActionLiteral int
@@ -98,8 +99,9 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		}
 		ctx.Logf("Accepting CONNECT to %s", host)
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
-		go copyAndClose(ctx, targetSiteCon, proxyClient)
-		go copyAndClose(ctx, proxyClient, targetSiteCon)
+
+		pipeAndClose(ctx, targetSiteCon, proxyClient)
+
 	case ConnectHijack:
 		ctx.Logf("Hijacking CONNECT to %s", host)
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
@@ -257,15 +259,46 @@ func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
 	}
 }
 
-func copyAndClose(ctx *ProxyCtx, w, r net.Conn) {
+func pipeAndClose(ctx *ProxyCtx, targetSiteCon, proxyClient net.Conn) {
+	upCh := make(chan int64)
+	downCh := make(chan int64)
+	closedConns := 0
+
+	go func() {
+		upCh <- copyAndClose(ctx, targetSiteCon, proxyClient)
+	}()
+
+	go func() {
+		downCh <- copyAndClose(ctx, proxyClient, targetSiteCon)
+	}()
+
+	for closedConns < 2 {
+		select {
+		case bytes := <-upCh:
+			ctx.BytesUpstream += bytes
+			closedConns++
+			targetSiteCon.SetReadDeadline(time.Now())
+
+		case bytes := <-downCh:
+			ctx.BytesDownstream += bytes
+			closedConns++
+			proxyClient.SetReadDeadline(time.Now())
+		}
+	}
+}
+
+func copyAndClose(ctx *ProxyCtx, w, r net.Conn) (bytes int64) {
 	connOk := true
-	if _, err := io.Copy(w, r); err != nil {
+	var err error
+
+	if bytes, err = io.Copy(w, r); err != nil && bytes <= 0 {
 		connOk = false
 		ctx.Warnf("Error copying to client: %s", err)
 	}
 	if err := r.Close(); err != nil && connOk {
 		ctx.Warnf("Error closing: %s", err)
 	}
+	return bytes
 }
 
 func dialerFromEnv(proxy *ProxyHttpServer) func(network, addr string) (net.Conn, error) {
