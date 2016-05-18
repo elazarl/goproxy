@@ -184,6 +184,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 
 				req, resp := proxy.filterRequest(req, ctx)
 				if resp == nil {
+					if proxy.DisableOutboundRequests {
+						sayOutboundRequestsDisabled(rawClientTls, ctx)
+						return
+					}
+
 					if err != nil {
 						ctx.Warnf("Illegal URL %s", "https://"+r.Host+req.URL.Path)
 						return
@@ -245,6 +250,12 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			}
 		}
 		proxyClient.Close()
+	}
+}
+
+func sayOutboundRequestsDisabled(w io.WriteCloser, ctx *ProxyCtx) {
+	if _, err := io.WriteString(w, "HTTP/1.1 404 Not Found\r\n\r\n"+outboundRequestsDisabled); err != nil {
+		ctx.Warnf("Error responding to client: %s", err)
 	}
 }
 
