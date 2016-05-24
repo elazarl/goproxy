@@ -122,6 +122,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			ctx.Logf("Received response %v", resp.Status)
 		}
 		origBody := resp.Body
+		defer origBody.Close()
 		resp = proxy.filterResponse(resp, ctx)
 
 		ctx.Logf("Copying response to client %v [%d]", resp.Status, resp.StatusCode)
