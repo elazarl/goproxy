@@ -98,8 +98,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		}
 		ctx.Logf("Accepting CONNECT to %s", host)
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
-		go copyAndClose(ctx, targetSiteCon, proxyClient)
-		go copyAndClose(ctx, proxyClient, targetSiteCon)
+
+		tTargetSiteCon := targetSiteCon.(*net.TCPConn)
+		tProxyClient := proxyClient.(*net.TCPConn)
+		go copyAndClose(ctx, tTargetSiteCon, tProxyClient)
+		go copyAndClose(ctx, tProxyClient, tTargetSiteCon)
 	case ConnectHijack:
 		ctx.Logf("Hijacking CONNECT to %s", host)
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
@@ -257,15 +260,13 @@ func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
 	}
 }
 
-func copyAndClose(ctx *ProxyCtx, w, r net.Conn) {
-	connOk := true
-	if _, err := io.Copy(w, r); err != nil {
-		connOk = false
+func copyAndClose(ctx *ProxyCtx, dst, src *net.TCPConn) {
+	if _, err := io.Copy(dst, src); err != nil {
 		ctx.Warnf("Error copying to client: %s", err)
 	}
-	if err := r.Close(); err != nil && connOk {
-		ctx.Warnf("Error closing: %s", err)
-	}
+
+	dst.CloseWrite()
+	src.CloseRead()
 }
 
 func dialerFromEnv(proxy *ProxyHttpServer) func(network, addr string) (net.Conn, error) {
