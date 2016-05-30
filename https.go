@@ -99,10 +99,8 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		ctx.Logf("Accepting CONNECT to %s", host)
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 
-		tTargetSiteCon := targetSiteCon.(*net.TCPConn)
-		tProxyClient := proxyClient.(*net.TCPConn)
-		go copyAndClose(ctx, tTargetSiteCon, tProxyClient)
-		go copyAndClose(ctx, tProxyClient, tTargetSiteCon)
+		go copyAndClose(ctx, targetSiteCon, proxyClient)
+		go copyAndClose(ctx, proxyClient, targetSiteCon)
 	case ConnectHijack:
 		ctx.Logf("Hijacking CONNECT to %s", host)
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
@@ -260,13 +258,22 @@ func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
 	}
 }
 
-func copyAndClose(ctx *ProxyCtx, dst, src *net.TCPConn) {
+func copyAndClose(ctx *ProxyCtx, dst, src net.Conn) {
 	if _, err := io.Copy(dst, src); err != nil {
 		ctx.Warnf("Error copying to client: %s", err)
 	}
 
-	dst.CloseWrite()
-	src.CloseRead()
+	closeWrite(dst)
+	closeWrite(src)
+}
+
+func closeWrite(c net.Conn) {
+	// Close the write half of the connnection only if the underlying type supports it.
+	if cw, ok := c.(closeWriter); ok {
+		cw.CloseWrite()
+	} else {
+		c.Close()
+	}
 }
 
 func dialerFromEnv(proxy *ProxyHttpServer) func(network, addr string) (net.Conn, error) {
@@ -368,4 +375,8 @@ func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls
 		config.Certificates = append(config.Certificates, cert)
 		return &config, nil
 	}
+}
+
+type closeWriter interface {
+	CloseWrite() error
 }
