@@ -200,6 +200,8 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					ctx.Logf("resp %v", resp.Status)
 				}
 				resp = proxy.filterResponse(resp, ctx)
+				defer resp.Body.Close()
+
 				text := resp.Status
 				statusCode := strconv.Itoa(resp.StatusCode) + " "
 				if strings.HasPrefix(text, statusCode) {
