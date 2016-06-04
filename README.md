@@ -36,7 +36,7 @@ as customable as goproxy intend to be. The main difference is, Fiddler is not
 intended to be used as a real proxy.
 
 A possible use case that suits goproxy but
-not Fiddler, is, gathering statisitics on page load times for a certain website over a week.
+not Fiddler, is, gathering statistics on page load times for a certain website over a week.
 With goproxy you could ask all your users to set their proxy to a dedicated machine running a
 goproxy server. Fiddler is a GUI app not designed to be ran like a server for multiple users.
 
