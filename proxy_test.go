@@ -765,3 +765,38 @@ func TestHasGoproxyCA(t *testing.T) {
 		t.Error("Wrong response when mitm", resp, "expected bobo")
 	}
 }
+
+func TestBlockOutboundRequests(t *testing.T) {
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.DisableOutboundRequests = true
+
+	client, s := oneShotProxy(proxy, t)
+	defer s.Close()
+
+	resp, err := client.Get("http://google.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("Expected status: %d, got: %d", http.StatusNotFound, resp.StatusCode)
+	}
+}
+
+func TestBlockOutboundRequestsMitm(t *testing.T) {
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.DisableOutboundRequests = true
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+
+	client, s := oneShotProxy(proxy, t)
+	defer s.Close()
+
+	resp, err := client.Get("https://google.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("Expected status: %d, got: %d", http.StatusNotFound, resp.StatusCode)
+	}
+}

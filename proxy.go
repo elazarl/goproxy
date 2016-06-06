@@ -11,6 +11,10 @@ import (
 	"sync/atomic"
 )
 
+const (
+	outboundRequestsDisabled = "goproxy: outbound requests have been disabled\n"
+)
+
 // The basic proxy type. Implements http.Handler.
 type ProxyHttpServer struct {
 	// session variable must be aligned in i386
@@ -27,6 +31,11 @@ type ProxyHttpServer struct {
 	// ConnectDial will be used to create TCP connections for CONNECT requests
 	// if nil Tr.Dial will be used
 	ConnectDial func(network string, addr string) (net.Conn, error)
+
+	// DisableOutboundRequests responds to all requests with a 404, useful for
+	// scenarios where you only want to return pre-determined responses and do
+	// not want any requests to be forwarded on (e.g. an automated test suite)
+	DisableOutboundRequests bool
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
@@ -108,6 +117,11 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		r, resp := proxy.filterRequest(r, ctx)
 
 		if resp == nil {
+			if proxy.DisableOutboundRequests {
+				http.Error(w, outboundRequestsDisabled, http.StatusNotFound)
+				return
+			}
+
 			removeProxyHeaders(ctx, r)
 			resp, err = ctx.RoundTrip(r)
 			if err != nil {
