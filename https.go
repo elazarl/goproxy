@@ -209,6 +209,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 
 				req, resp := proxy.filterRequest(req, ctx)
 				if resp == nil {
+					if isWebSocketRequest(req) {
+						ctx.Logf("Request looks like websocket upgrade.")
+						proxy.serveWebsocketTLS(ctx, w, req, tlsConfig, rawClientTls)
+						return
+					}
 					if err != nil {
 						ctx.Warnf("Illegal URL %s", "https://"+r.Host+req.URL.Path)
 						return
@@ -362,7 +367,7 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy strin
 			return c, nil
 		}
 	}
-	if u.Scheme == "https" {
+	if u.Scheme == "https" || u.Scheme == "wss" {
 		if strings.IndexRune(u.Host, ':') == -1 {
 			u.Host += ":443"
 		}
