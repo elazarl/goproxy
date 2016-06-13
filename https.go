@@ -136,6 +136,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					httpError(proxyClient, ctx, err)
 					return
 				}
+				defer resp.Body.Close()
 			}
 			resp = proxy.filterResponse(resp, ctx)
 			if err := resp.Write(proxyClient); err != nil {
@@ -312,8 +313,12 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxy(https_proxy string) func(net
 				c.Close()
 				return nil, err
 			}
+			defer resp.Body.Close()
 			if resp.StatusCode != 200 {
-				resp, _ := ioutil.ReadAll(resp.Body)
+				resp, err := ioutil.ReadAll(resp.Body)
+				if err != nil {
+					return nil, err
+				}
 				c.Close()
 				return nil, errors.New("proxy refused connection" + string(resp))
 			}
@@ -346,9 +351,12 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxy(https_proxy string) func(net
 				c.Close()
 				return nil, err
 			}
+			defer resp.Body.Close()
 			if resp.StatusCode != 200 {
-				body, _ := ioutil.ReadAll(io.LimitReader(resp.Body, 500))
-				resp.Body.Close()
+				body, err := ioutil.ReadAll(io.LimitReader(resp.Body, 500))
+				if err != nil {
+					return nil, err
+				}
 				c.Close()
 				return nil, errors.New("proxy refused connection" + string(body))
 			}
