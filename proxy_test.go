@@ -765,3 +765,67 @@ func TestHasGoproxyCA(t *testing.T) {
 		t.Error("Wrong response when mitm", resp, "expected bobo")
 	}
 }
+
+func TestHttpsMitmURLRewrite(t *testing.T) {
+	testCases := []struct {
+		Host        string
+		FullURL     string
+		AddOpaque   bool
+		QueryParams url.Values
+	}{
+		{
+			Host:      "example.com",
+			FullURL:   "https://example.com/blah",
+			AddOpaque: true,
+		},
+		{
+			Host:        "example.com:443",
+			FullURL:     "https://example.com/blah",
+			QueryParams: map[string][]string{"nestedURL": []string{"https://google.com?q=test"}},
+		},
+	}
+
+	for _, tc := range testCases {
+		proxy := goproxy.NewProxyHttpServer()
+		proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+
+		proxy.OnRequest(goproxy.DstHostIs(tc.Host)).DoFunc(
+			func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+				return nil, goproxy.TextResponse(req, "Dummy response")
+			})
+
+		client, s := oneShotProxy(proxy, t)
+		defer s.Close()
+
+		req, err := http.NewRequest("GET", tc.FullURL, nil)
+		if tc.AddOpaque {
+			req.URL.Scheme = "https"
+			req.URL.Opaque = "//" + tc.Host
+		}
+
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		resp, err := client.Do(req)
+
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		b, err := ioutil.ReadAll(resp.Body)
+		defer resp.Body.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		body := string(b)
+		if body != "Dummy response" {
+			t.Errorf("Expected proxy to return dummy body content but got %s", body)
+		}
+
+		if resp.StatusCode != http.StatusAccepted {
+			t.Errorf("Expected status: %d, got: %d", http.StatusAccepted, resp.StatusCode)
+		}
+	}
+}
