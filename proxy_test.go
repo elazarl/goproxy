@@ -767,21 +767,25 @@ func TestHasGoproxyCA(t *testing.T) {
 }
 
 func TestHttpsMitmURLRewrite(t *testing.T) {
+	scheme := "https"
+
 	testCases := []struct {
-		Host        string
-		FullURL     string
-		AddOpaque   bool
-		QueryParams url.Values
+		Host      string
+		RawPath   string
+		AddOpaque bool
 	}{
 		{
 			Host:      "example.com",
-			FullURL:   "https://example.com/blah",
+			RawPath:   "/blah/v1/data/realtime",
 			AddOpaque: true,
 		},
 		{
-			Host:        "example.com:443",
-			FullURL:     "https://example.com/blah",
-			QueryParams: map[string][]string{"nestedURL": []string{"https://google.com?q=test"}},
+			Host:    "example.com:443",
+			RawPath: "/blah/v1/data/realtime?encodedURL=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile",
+		},
+		{
+			Host:    "example.com:443",
+			RawPath: "/blah/v1/data/realtime?unencodedURL=https://www.googleapis.com/auth/userinfo.profile",
 		},
 	}
 
@@ -797,14 +801,15 @@ func TestHttpsMitmURLRewrite(t *testing.T) {
 		client, s := oneShotProxy(proxy, t)
 		defer s.Close()
 
-		req, err := http.NewRequest("GET", tc.FullURL, nil)
-		if tc.AddOpaque {
-			req.URL.Scheme = "https"
-			req.URL.Opaque = "//" + tc.Host
-		}
-
+		fullURL := scheme + "://" + tc.Host + tc.RawPath
+		req, err := http.NewRequest("GET", fullURL, nil)
 		if err != nil {
 			t.Fatal(err)
+		}
+
+		if tc.AddOpaque {
+			req.URL.Scheme = scheme
+			req.URL.Opaque = "//" + tc.Host + tc.RawPath
 		}
 
 		resp, err := client.Do(req)
