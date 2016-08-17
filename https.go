@@ -101,10 +101,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		ctx.Logf("Accepting CONNECT to %s", host)
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 
-		tTargetSiteCon := targetSiteCon.(*net.TCPConn)
-		tProxyClient := proxyClient.(*net.TCPConn)
-		go copyAndClose(ctx, tTargetSiteCon, tProxyClient)
-		go copyAndClose(ctx, tProxyClient, tTargetSiteCon)
+		go copyAndClose(ctx, targetSiteCon, proxyClient)
 	case ConnectHijack:
 		ctx.Logf("Hijacking CONNECT to %s", host)
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
@@ -268,13 +265,21 @@ func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
 	}
 }
 
-func copyAndClose(ctx *ProxyCtx, dst, src *net.TCPConn) {
-	if _, err := io.Copy(dst, src); err != nil {
-		ctx.Warnf("Error copying to client: %s", err)
-	}
+func copyAndClose(ctx *ProxyCtx, dst, src net.Conn) {
+  done := make(chan bool)
+  go copyConn(ctx, done, dst, src)
+  go copyConn(ctx, done, src, dst)
+  <-done
+  <-done
+  dst.Close()
+  src.Close()
+}
 
-	dst.CloseWrite()
-	src.CloseRead()
+func copyConn(ctx *ProxyCtx, done chan bool, dst, src net.Conn) {
+  if _, err := io.Copy(dst, src); err != nil {
+    ctx.Warnf("Error copying to client: %s", err)
+  }
+  done <- true
 }
 
 func dialerFromEnv(proxy *ProxyHttpServer) func(network, addr string) (net.Conn, error) {
