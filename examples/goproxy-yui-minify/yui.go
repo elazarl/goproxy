@@ -76,7 +76,7 @@ func main() {
 			go func() {
 				defer stderr.Close()
 				const kb = 1024
-				msg, err := ioutil.ReadAll(&io.LimitedReader{stderr, 50 * kb})
+				msg, err := ioutil.ReadAll(&io.LimitedReader{R:stderr, N:50 * kb})
 				if len(msg) != 0 {
 					ctx.Logf("Error executing yuicompress: %s", string(msg))
 				}

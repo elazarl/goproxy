@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // HTTP client implementation. See RFC 2616.
-// 
+//
 // This is the low-level Transport implementation of RoundTripper.
 // The high-level interface is in client.go.
 
@@ -305,7 +305,6 @@ func (t *Transport) getIdleConn(cm *connectMethod) (pconn *persistConn) {
 			return
 		}
 	}
-	return
 }
 
 func (t *Transport) dial(network, addr string) (c net.Conn, raddr string, ip *net.TCPAddr, err error) {
@@ -655,7 +654,6 @@ type requestAndChan struct {
 func (pc *persistConn) roundTrip(req *transportRequest) (resp *http.Response, err error) {
 	if pc.mutateHeaderFunc != nil {
 		panic("mutateHeaderFunc not supported in modified Transport")
-		pc.mutateHeaderFunc(req.extraHeaders())
 	}
 
 	// Ask for a compressed version if the caller didn't set their
@@ -664,7 +662,7 @@ func (pc *persistConn) roundTrip(req *transportRequest) (resp *http.Response, er
 	// requested it.
 	requestedGzip := false
 	if !pc.t.DisableCompression && req.Header.Get("Accept-Encoding") == "" {
-		// Request gzip only, not deflate. Deflate is ambiguous and 
+		// Request gzip only, not deflate. Deflate is ambiguous and
 		// not as universally supported anyway.
 		// See: http://www.gzip.org/zlib/zlib_faq.html#faq38
 		requestedGzip = true
