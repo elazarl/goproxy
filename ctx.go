@@ -9,18 +9,19 @@ import (
 // every user function. Also used as a logger.
 type ProxyCtx struct {
 	// Will contain the client request from the proxy
-	Req *http.Request
+	Req          *http.Request
 	// Will contain the remote server's response (if available. nil if the request wasn't send yet)
 	Resp         *http.Response
 	RoundTripper RoundTripper
 	// will contain the recent error that occured while trying to send receive or parse traffic
-	Error error
+	Error        error
 	// A handle for the user to keep data in the context, from the call of ReqHandler to the
 	// call of RespHandler
-	UserData interface{}
+	UserData     interface{}
 	// Will connect a request to a response
-	Session int64
-	proxy   *ProxyHttpServer
+	Session      int64
+	Websocket	 bool
+	proxy        *ProxyHttpServer
 }
 
 type RoundTripper interface {
@@ -41,7 +42,7 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func (ctx *ProxyCtx) printf(msg string, argv ...interface{}) {
-	ctx.proxy.Logger.Printf("[%03d] "+msg+"\n", append([]interface{}{ctx.Session & 0xFF}, argv...)...)
+	ctx.proxy.Logger.Printf("[%03d] " + msg + "\n", append([]interface{}{ctx.Session & 0xFF}, argv...)...)
 }
 
 // Logf prints a message to the proxy's log. Should be used in a ProxyHttpServer's filter
@@ -54,7 +55,7 @@ func (ctx *ProxyCtx) printf(msg string, argv ...interface{}) {
 //	})
 func (ctx *ProxyCtx) Logf(msg string, argv ...interface{}) {
 	if ctx.proxy.Verbose {
-		ctx.printf("INFO: "+msg, argv...)
+		ctx.printf("INFO: " + msg, argv...)
 	}
 }
 
@@ -70,7 +71,7 @@ func (ctx *ProxyCtx) Logf(msg string, argv ...interface{}) {
 //		return r, nil
 //	})
 func (ctx *ProxyCtx) Warnf(msg string, argv ...interface{}) {
-	ctx.printf("WARN: "+msg, argv...)
+	ctx.printf("WARN: " + msg, argv...)
 }
 
 var charsetFinder = regexp.MustCompile("charset=([^ ;]*)")

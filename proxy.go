@@ -9,13 +9,16 @@ import (
 	"os"
 	"regexp"
 	"sync/atomic"
+	"github.com/gorilla/websocket"
+	"sync"
+	"fmt"
 )
 
 // The basic proxy type. Implements http.Handler.
 type ProxyHttpServer struct {
 	// session variable must be aligned in i386
 	// see http://golang.org/src/pkg/sync/atomic/doc.go#L41
-	sess int64
+	sess            int64
 	// setting Verbose to true will log information on each request sent to the proxy
 	Verbose         bool
 	Logger          *log.Logger
@@ -26,7 +29,9 @@ type ProxyHttpServer struct {
 	Tr              *http.Transport
 	// ConnectDial will be used to create TCP connections for CONNECT requests
 	// if nil Tr.Dial will be used
-	ConnectDial func(network string, addr string) (net.Conn, error)
+	ConnectDial     func(network string, addr string) (net.Conn, error)
+	WsServer        *websocket.Upgrader
+	WsDialer        *websocket.Dialer
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
@@ -93,54 +98,124 @@ func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 
 // Standard net/http function. Shouldn't be used directly, http.Serve will use it.
 func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	//r.Header["X-Forwarded-For"] = w.RemoteAddr()
 	if r.Method == "CONNECT" {
 		proxy.handleHttps(w, r)
+	} else if !r.URL.IsAbs() {
+		proxy.NonproxyHandler.ServeHTTP(w, r)
 	} else {
-		ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy}
+		proxy.handleRequest(w, r)
+	}
+}
 
-		var err error
-		ctx.Logf("Got request %v %v %v %v", r.URL.Path, r.Host, r.Method, r.URL.String())
-		if !r.URL.IsAbs() {
-			proxy.NonproxyHandler.ServeHTTP(w, r)
-			return
-		}
-		r, resp := proxy.filterRequest(r, ctx)
+func (proxy *ProxyHttpServer) handleRequest(out http.ResponseWriter, base *http.Request) {
+	ctx := &ProxyCtx{
+		Req: base,
+		Session: atomic.AddInt64(&proxy.sess, 1),
+		Websocket: websocket.IsWebSocketUpgrade(base),
+		proxy: proxy,
+	}
 
-		if resp == nil {
-			removeProxyHeaders(ctx, r)
-			resp, err = ctx.RoundTrip(r)
-			if err != nil {
-				ctx.Error = err
-				resp = proxy.filterResponse(nil, ctx)
-				if resp == nil {
-					ctx.Logf("error read response %v %v:", r.URL.Host, err.Error())
-					http.Error(w, err.Error(), 500)
-					return
+	if websocket.IsWebSocketUpgrade(base) {
+		proto := websocket.Subprotocols(base)
+		wg := &sync.WaitGroup{}
+
+		ctx.Logf("Relying websocket connection with protocols: %v", proto)
+
+		remote, _, _ := proxy.WsDialer.Dial(
+			base.URL.String(),
+			nil,
+		)
+
+		client, _ := proxy.WsServer.Upgrade(out, base, nil)
+
+		wg.Add(2)
+
+		go wsRelay(ctx, remote, client, wg)
+		go wsRelay(ctx, client, remote, wg)
+
+		wg.Wait()
+
+		remote.Close()
+		client.Close()
+
+		return
+	}
+
+	ctx.Logf("Got request %v %v %v %v", base.URL.Path, base.Host, base.Method, base.URL.String())
+
+	var (
+		req *http.Request
+		resp *http.Response
+		err error
+	)
+
+	req, resp = proxy.filterRequest(base, ctx)
+
+	if resp == nil {
+		removeProxyHeaders(ctx, req)
+
+		resp, err = ctx.RoundTrip(req)
+
+		if err != nil {
+			ctx.Logf("Error reading response %v: %v", req.URL.Host, err.Error())
+
+			ctx.Error = err
+			resp = proxy.filterResponse(nil, ctx)
+
+			if resp == nil {
+				// TODO: add gateway timeout error in case of timeout
+				switch err {
+				default:
+					http.Error(out, err.Error(), http.StatusBadGateway)
 				}
+
+				return
 			}
-			ctx.Logf("Received response %v", resp.Status)
 		}
-		origBody := resp.Body
-		resp = proxy.filterResponse(resp, ctx)
-		defer origBody.Close()
-		ctx.Logf("Copying response to client %v [%d]", resp.Status, resp.StatusCode)
-		// http.ResponseWriter will take care of filling the correct response length
-		// Setting it now, might impose wrong value, contradicting the actual new
-		// body the user returned.
-		// We keep the original body to remove the header only if things changed.
-		// This will prevent problems with HEAD requests where there's no body, yet,
-		// the Content-Length header should be set.
-		if origBody != resp.Body {
-			resp.Header.Del("Content-Length")
+	}
+
+	fmt.Printf("%v", resp)
+
+	body := resp.Body
+	defer body.Close()
+
+	resp = proxy.filterResponse(resp, ctx)
+
+	// http.ResponseWriter will take care of filling the correct response length
+	// Setting it now, might impose wrong value, contradicting the actual new
+	// body the user returned.
+	// We keep the original body to remove the header only if things changed.
+	// This will prevent problems with HEAD requests where there's no body, yet,
+	// the Content-Length header should be set.
+	if body != resp.Body {
+		resp.Header.Del("Content-Length")
+	}
+
+	ctx.Logf("Received response: %v", resp.Status)
+	ctx.Logf("Copying response to client %v [%d]", resp.Status, resp.StatusCode)
+
+	for k, _ := range out.Header() {
+		out.Header().Del(k)
+	}
+
+	for k, vs := range resp.Header {
+		for _, v := range vs {
+			out.Header().Add(k, v)
 		}
-		copyHeaders(w.Header(), resp.Header)
-		w.WriteHeader(resp.StatusCode)
-		nr, err := io.Copy(w, resp.Body)
-		if err := resp.Body.Close(); err != nil {
-			ctx.Warnf("Can't close response body %v", err)
-		}
-		ctx.Logf("Copied %v bytes to client error=%v", nr, err)
+	}
+
+	out.WriteHeader(resp.StatusCode)
+
+	nr, err := io.Copy(out, resp.Body)
+
+	if err != nil {
+		ctx.Logf("Copied %v bytes to client with error: %v", nr, err)
+	} else {
+		ctx.Logf("Copied %v bytes to client", nr)
+	}
+
+	if err := resp.Body.Close(); err != nil {
+		ctx.Warnf("Can't close response body: %v", err)
 	}
 }
 

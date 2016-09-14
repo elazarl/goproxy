@@ -89,6 +89,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			break
 		}
 	}
+
 	switch todo.Action {
 	case ConnectAccept:
 		if !hasPort.MatchString(host) {
@@ -116,7 +117,6 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				wg.Wait()
 				proxyClient.Close()
 				targetSiteCon.Close()
-
 			}()
 		}
 
@@ -124,6 +124,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		ctx.Logf("Hijacking CONNECT to %s", host)
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 		todo.Hijack(r, proxyClient, ctx)
+
 	case ConnectHTTPMitm:
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 		ctx.Logf("Assuming CONNECT is plain HTTP tunneling, mitm proxying it")
@@ -161,6 +162,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				return
 			}
 		}
+
 	case ConnectMitm:
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 		ctx.Logf("Assuming CONNECT is TLS, mitm proxying it")
@@ -261,9 +263,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			}
 			ctx.Logf("Exiting on EOF")
 		}()
+
 	case ConnectProxyAuthHijack:
 		proxyClient.Write([]byte("HTTP/1.1 407 Proxy Authentication Required\r\n"))
 		todo.Hijack(r, proxyClient, ctx)
+
 	case ConnectReject:
 		if ctx.Resp != nil {
 			if err := ctx.Resp.Write(proxyClient); err != nil {
