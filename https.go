@@ -66,6 +66,7 @@ func (proxy *ProxyHttpServer) connectDial(network, addr string) (c net.Conn, err
 
 func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy}
+	w = NewHijackedResponseWriter(w)
 
 	hij, ok := w.(http.Hijacker)
 	if !ok {
@@ -126,40 +127,25 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 		todo.Hijack(r, proxyClient, ctx)
 
 	case ConnectHTTPMitm:
-		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 		ctx.Logf("Assuming CONNECT is plain HTTP tunneling, mitm proxying it")
-		targetSiteCon, err := proxy.connectDial("tcp", host)
-		if err != nil {
-			ctx.Warnf("Error dialing to %s: %s", host, err.Error())
-			return
-		}
+		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+
 		for {
 			client := bufio.NewReader(proxyClient)
-			remote := bufio.NewReader(targetSiteCon)
 			req, err := http.ReadRequest(client)
-			if err != nil && err != io.EOF {
-				ctx.Warnf("cannot read request of MITM HTTP client: %+#v", err)
-			}
+
 			if err != nil {
-				return
-			}
-			req, resp := proxy.filterRequest(req, ctx)
-			if resp == nil {
-				if err := req.Write(targetSiteCon); err != nil {
-					httpError(proxyClient, ctx, err)
-					return
+				if err != io.EOF {
+					ctx.Warnf("cannot read request of MITM HTTP client: %+#v", err)
 				}
-				resp, err = http.ReadResponse(remote, req)
-				if err != nil {
-					httpError(proxyClient, ctx, err)
-					return
-				}
-				defer resp.Body.Close()
+
+				break
 			}
-			resp = proxy.filterResponse(resp, ctx)
-			if err := resp.Write(proxyClient); err != nil {
-				httpError(proxyClient, ctx, err)
-				return
+
+			req.URL, err = url.Parse("http://" + req.Host + req.URL.String())
+
+			if err := proxy.handleRequest(w, req); err != nil {
+				break
 			}
 		}
 

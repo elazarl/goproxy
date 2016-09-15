@@ -9,8 +9,12 @@ import (
 
 // This response writer can be hijacked multiple times
 type hijackedResponseWriter struct {
+	// base writer
 	nested http.ResponseWriter
+
+	// HiJacked fields
 	conn   net.Conn
+	rw     *bufio.ReadWriter
 	err    error
 }
 
@@ -34,12 +38,18 @@ func (writer *hijackedResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, err
 	}
 
 	if !writer.hijacked() {
-		writer.conn, _, writer.err = hijacker.Hijack()
+		writer.conn, writer.rw, writer.err = hijacker.Hijack()
 	}
 
-	return writer.conn, nil, writer.err
+	return writer.conn, writer.rw, writer.err
 }
 
 func (writer *hijackedResponseWriter) hijacked() bool {
 	return writer.conn != nil || writer.err != nil
+}
+
+func NewHijackedResponseWriter(nested http.ResponseWriter) *hijackedResponseWriter {
+	return &hijackedResponseWriter{
+		nested: nested,
+	}
 }

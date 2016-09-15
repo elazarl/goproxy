@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"github.com/gorilla/websocket"
 	"sync"
+	"errors"
 )
 
 // The basic proxy type. Implements http.Handler.
@@ -32,6 +33,8 @@ type ProxyHttpServer struct {
 	WsServer        *websocket.Upgrader
 	WsDialer        *websocket.Dialer
 }
+
+var ErrConnectionClosed = errors.New("http: no Location header in response")
 
 var hasPort = regexp.MustCompile(`:\d+$`)
 
@@ -128,15 +131,18 @@ func writeResponse(ctx *ProxyCtx, resp *http.Response, out http.ResponseWriter) 
 // Standard net/http function. Shouldn't be used directly, http.Serve will use it.
 func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "CONNECT" {
+		// CONNECT requests: SSL and WebSockets
 		proxy.handleConnect(w, r)
 	} else if !r.URL.IsAbs() {
+		// Local requests
 		proxy.NonproxyHandler.ServeHTTP(w, r)
 	} else {
+		// Common HTTP proxy
 		proxy.handleRequest(w, r)
 	}
 }
 
-func (proxy *ProxyHttpServer) handleRequest(out http.ResponseWriter, base *http.Request) {
+func (proxy *ProxyHttpServer) handleRequest(out http.ResponseWriter, base *http.Request) error {
 	ctx := &ProxyCtx{
 		Req: base,
 		Session: atomic.AddInt64(&proxy.sess, 1),
@@ -149,6 +155,8 @@ func (proxy *ProxyHttpServer) handleRequest(out http.ResponseWriter, base *http.
 	} else {
 		proxy.handleHttpRequest(ctx, out, base)
 	}
+
+	return nil
 }
 
 // TODO add handshake filter and message introspection
@@ -156,7 +164,15 @@ func (proxy *ProxyHttpServer) handleWsRequest(ctx *ProxyCtx, out http.ResponseWr
 	proto := websocket.Subprotocols(base)
 	wg := &sync.WaitGroup{}
 
-	ctx.Logf("Relying websocket connection with protocols: %v", proto)
+	switch base.URL.Scheme {
+	case "http":
+		base.URL.Scheme = "ws"
+
+	case "https":
+		base.URL.Scheme = "wss"
+	}
+
+	ctx.Logf("Relying websocket connection %s with protocols: %v",  base.URL.String(), proto)
 
 	remote, resp, err := proxy.WsDialer.Dial(
 		base.URL.String(),
@@ -164,6 +180,8 @@ func (proxy *ProxyHttpServer) handleWsRequest(ctx *ProxyCtx, out http.ResponseWr
 	)
 
 	if err != nil {
+		ctx.Logf(err.Error())
+
 		if err == websocket.ErrBadHandshake {
 			writeResponse(ctx, resp, out)
 		} else {
@@ -176,6 +194,8 @@ func (proxy *ProxyHttpServer) handleWsRequest(ctx *ProxyCtx, out http.ResponseWr
 	client, err := proxy.WsServer.Upgrade(out, base, nil)
 
 	if err != nil {
+		ctx.Logf(err.Error())
+
 		return
 	}
 
@@ -253,6 +273,12 @@ func NewProxyHttpServer() *ProxyHttpServer {
 		}),
 		Tr: &http.Transport{TLSClientConfig: tlsClientSkipVerify,
 			Proxy: http.ProxyFromEnvironment},
+
+		WsServer: &websocket.Upgrader{
+			CheckOrigin: func(r *http.Request) bool {
+				return true
+			},
+		},
 	}
 	proxy.ConnectDial = dialerFromEnv(&proxy)
 	return &proxy
