@@ -11,7 +11,6 @@ import (
 	"sync/atomic"
 	"github.com/gorilla/websocket"
 	"sync"
-	"fmt"
 )
 
 // The basic proxy type. Implements http.Handler.
@@ -96,10 +95,40 @@ func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 	r.Header.Del("Connection")
 }
 
+func writeResponse(ctx *ProxyCtx, resp *http.Response, out http.ResponseWriter) {
+	ctx.Logf("Copying response to client: %v [%d]", resp.Status, resp.StatusCode)
+
+	// 1
+	for k, _ := range out.Header() {
+		out.Header().Del(k)
+	}
+
+	for k, vs := range resp.Header {
+		for _, v := range vs {
+			out.Header().Add(k, v)
+		}
+	}
+
+	// 2
+	out.WriteHeader(resp.StatusCode)
+
+	// 3
+	if nr, err := io.Copy(out, resp.Body); err != nil {
+		ctx.Logf("Copied %v bytes to client with error: %v", nr, err)
+	} else {
+		ctx.Logf("Copied %v bytes to client", nr)
+	}
+
+	// 4
+	if err := resp.Body.Close(); err != nil {
+		ctx.Warnf("Can't close response body: %v", err)
+	}
+}
+
 // Standard net/http function. Shouldn't be used directly, http.Serve will use it.
 func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "CONNECT" {
-		proxy.handleHttps(w, r)
+		proxy.handleConnect(w, r)
 	} else if !r.URL.IsAbs() {
 		proxy.NonproxyHandler.ServeHTTP(w, r)
 	} else {
@@ -116,65 +145,80 @@ func (proxy *ProxyHttpServer) handleRequest(out http.ResponseWriter, base *http.
 	}
 
 	if websocket.IsWebSocketUpgrade(base) {
-		proto := websocket.Subprotocols(base)
-		wg := &sync.WaitGroup{}
+		proxy.handleWsRequest(ctx, out, base)
+	} else {
+		proxy.handleHttpRequest(ctx, out, base)
+	}
+}
 
-		ctx.Logf("Relying websocket connection with protocols: %v", proto)
+// TODO add handshake filter and message introspection
+func (proxy *ProxyHttpServer) handleWsRequest(ctx *ProxyCtx, out http.ResponseWriter, base *http.Request) {
+	proto := websocket.Subprotocols(base)
+	wg := &sync.WaitGroup{}
 
-		remote, _, _ := proxy.WsDialer.Dial(
-			base.URL.String(),
-			nil,
-		)
+	ctx.Logf("Relying websocket connection with protocols: %v", proto)
 
-		client, _ := proxy.WsServer.Upgrade(out, base, nil)
+	remote, resp, err := proxy.WsDialer.Dial(
+		base.URL.String(),
+		nil,
+	)
 
-		wg.Add(2)
-
-		go wsRelay(ctx, remote, client, wg)
-		go wsRelay(ctx, client, remote, wg)
-
-		wg.Wait()
-
-		remote.Close()
-		client.Close()
+	if err != nil {
+		if err == websocket.ErrBadHandshake {
+			writeResponse(ctx, resp, out)
+		} else {
+			http.Error(out, err.Error(), http.StatusBadGateway)
+		}
 
 		return
 	}
 
-	ctx.Logf("Got request %v %v %v %v", base.URL.Path, base.Host, base.Method, base.URL.String())
+	client, err := proxy.WsServer.Upgrade(out, base, nil)
 
+	if err != nil {
+		return
+	}
+
+	wg.Add(2)
+
+	go wsRelay(ctx, remote, client, wg)
+	go wsRelay(ctx, client, remote, wg)
+
+	wg.Wait()
+
+	remote.Close()
+	client.Close()
+
+	return
+}
+
+func (proxy *ProxyHttpServer) handleHttpRequest(ctx *ProxyCtx, out http.ResponseWriter, base *http.Request) {
 	var (
 		req *http.Request
 		resp *http.Response
 		err error
 	)
 
+	ctx.Logf("Relying http(s) request to: %v", base.URL.String())
+
 	req, resp = proxy.filterRequest(base, ctx)
 
 	if resp == nil {
 		removeProxyHeaders(ctx, req)
-
 		resp, err = ctx.RoundTrip(req)
-
-		if err != nil {
-			ctx.Logf("Error reading response %v: %v", req.URL.Host, err.Error())
-
-			ctx.Error = err
-			resp = proxy.filterResponse(nil, ctx)
-
-			if resp == nil {
-				// TODO: add gateway timeout error in case of timeout
-				switch err {
-				default:
-					http.Error(out, err.Error(), http.StatusBadGateway)
-				}
-
-				return
-			}
-		}
 	}
 
-	fmt.Printf("%v", resp)
+	if err != nil {
+		ctx.Logf("Error reading response %v: %v", req.URL.Host, err.Error())
+
+		// TODO: add gateway timeout error in case of timeout
+		switch err {
+		default:
+			http.Error(out, err.Error(), http.StatusBadGateway)
+		}
+
+		return
+	}
 
 	body := resp.Body
 	defer body.Close()
@@ -194,29 +238,7 @@ func (proxy *ProxyHttpServer) handleRequest(out http.ResponseWriter, base *http.
 	ctx.Logf("Received response: %v", resp.Status)
 	ctx.Logf("Copying response to client %v [%d]", resp.Status, resp.StatusCode)
 
-	for k, _ := range out.Header() {
-		out.Header().Del(k)
-	}
-
-	for k, vs := range resp.Header {
-		for _, v := range vs {
-			out.Header().Add(k, v)
-		}
-	}
-
-	out.WriteHeader(resp.StatusCode)
-
-	nr, err := io.Copy(out, resp.Body)
-
-	if err != nil {
-		ctx.Logf("Copied %v bytes to client with error: %v", nr, err)
-	} else {
-		ctx.Logf("Copied %v bytes to client", nr)
-	}
-
-	if err := resp.Body.Close(); err != nil {
-		ctx.Warnf("Can't close response body: %v", err)
-	}
+	writeResponse(ctx, resp, out)
 }
 
 // New proxy server, logs to StdErr by default
