@@ -11,7 +11,6 @@ import (
 	"sync/atomic"
 	"github.com/gorilla/websocket"
 	"sync"
-	"errors"
 )
 
 // The basic proxy type. Implements http.Handler.
@@ -33,8 +32,6 @@ type ProxyHttpServer struct {
 	WsServer        *websocket.Upgrader
 	WsDialer        *websocket.Dialer
 }
-
-var ErrConnectionClosed = errors.New("http: no Location header in response")
 
 var hasPort = regexp.MustCompile(`:\d+$`)
 
@@ -101,6 +98,16 @@ func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 func writeResponse(ctx *ProxyCtx, resp *http.Response, out http.ResponseWriter) {
 	ctx.Logf("Copying response to client: %v [%d]", resp.Status, resp.StatusCode)
 
+	// Fancy ResponseWriter
+	if w, ok := out.(*connResponseWriter); ok {
+		if err := resp.Write(w); err != nil {
+			ctx.Warnf("Error copying response: %s", err.Error())
+		}
+
+		return
+	}
+
+	// Standard ResponseWriter
 	// 1
 	for k, _ := range out.Header() {
 		out.Header().Del(k)
@@ -142,7 +149,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func (proxy *ProxyHttpServer) handleRequest(out http.ResponseWriter, base *http.Request) error {
+func (proxy *ProxyHttpServer) handleRequest(writer http.ResponseWriter, base *http.Request) (bool, error) {
 	ctx := &ProxyCtx{
 		Req: base,
 		Session: atomic.AddInt64(&proxy.sess, 1),
@@ -151,16 +158,14 @@ func (proxy *ProxyHttpServer) handleRequest(out http.ResponseWriter, base *http.
 	}
 
 	if websocket.IsWebSocketUpgrade(base) {
-		proxy.handleWsRequest(ctx, out, base)
+		return proxy.handleWsRequest(ctx, writer, base)
 	} else {
-		proxy.handleHttpRequest(ctx, out, base)
+		return proxy.handleHttpRequest(ctx, writer, base)
 	}
-
-	return nil
 }
 
 // TODO add handshake filter and message introspection
-func (proxy *ProxyHttpServer) handleWsRequest(ctx *ProxyCtx, out http.ResponseWriter, base *http.Request) {
+func (proxy *ProxyHttpServer) handleWsRequest(ctx *ProxyCtx, writer http.ResponseWriter, base *http.Request) (bool, error) {
 	proto := websocket.Subprotocols(base)
 	wg := &sync.WaitGroup{}
 
@@ -180,23 +185,19 @@ func (proxy *ProxyHttpServer) handleWsRequest(ctx *ProxyCtx, out http.ResponseWr
 	)
 
 	if err != nil {
-		ctx.Logf(err.Error())
-
 		if err == websocket.ErrBadHandshake {
-			writeResponse(ctx, resp, out)
+			writeResponse(ctx, resp, writer)
 		} else {
-			http.Error(out, err.Error(), http.StatusBadGateway)
+			http.Error(writer, err.Error(), http.StatusBadGateway)
 		}
 
-		return
+		return true, err
 	}
 
-	client, err := proxy.WsServer.Upgrade(out, base, nil)
+	client, err := proxy.WsServer.Upgrade(writer, base, nil)
 
 	if err != nil {
-		ctx.Logf(err.Error())
-
-		return
+		return true, err
 	}
 
 	wg.Add(2)
@@ -209,10 +210,10 @@ func (proxy *ProxyHttpServer) handleWsRequest(ctx *ProxyCtx, out http.ResponseWr
 	remote.Close()
 	client.Close()
 
-	return
+	return true, nil
 }
 
-func (proxy *ProxyHttpServer) handleHttpRequest(ctx *ProxyCtx, out http.ResponseWriter, base *http.Request) {
+func (proxy *ProxyHttpServer) handleHttpRequest(ctx *ProxyCtx, writer http.ResponseWriter, base *http.Request) (bool, error) {
 	var (
 		req *http.Request
 		resp *http.Response
@@ -234,10 +235,10 @@ func (proxy *ProxyHttpServer) handleHttpRequest(ctx *ProxyCtx, out http.Response
 		// TODO: add gateway timeout error in case of timeout
 		switch err {
 		default:
-			http.Error(out, err.Error(), http.StatusBadGateway)
+			http.Error(writer, err.Error(), http.StatusBadGateway)
 		}
 
-		return
+		return false, err
 	}
 
 	body := resp.Body
@@ -258,7 +259,9 @@ func (proxy *ProxyHttpServer) handleHttpRequest(ctx *ProxyCtx, out http.Response
 	ctx.Logf("Received response: %v", resp.Status)
 	ctx.Logf("Copying response to client %v [%d]", resp.Status, resp.StatusCode)
 
-	writeResponse(ctx, resp, out)
+	writeResponse(ctx, resp, writer)
+
+	return false, err
 }
 
 // New proxy server, logs to StdErr by default
@@ -274,6 +277,7 @@ func NewProxyHttpServer() *ProxyHttpServer {
 		Tr: &http.Transport{TLSClientConfig: tlsClientSkipVerify,
 			Proxy: http.ProxyFromEnvironment},
 
+		WsDialer: &websocket.Dialer{},
 		WsServer: &websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
 				return true

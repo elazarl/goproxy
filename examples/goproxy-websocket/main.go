@@ -16,10 +16,6 @@ func main() {
 
 	// MitM
 	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
-		if ctx.Req.Header.Get("Connection") == "Upgrade" {
-			return goproxy.RejectConnect, host
-		}
-
 		if https.MatchString(host) {
 			return goproxy.MitmConnect, host
 		} else {

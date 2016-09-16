@@ -1,55 +1,51 @@
 package goproxy
 
 import (
-	"net/http"
-	"net"
 	"bufio"
 	"errors"
+	"io"
+	"io/ioutil"
+	"net"
+	"net/http"
 )
 
-// This response writer can be hijacked multiple times
-type hijackedResponseWriter struct {
-	// base writer
-	nested http.ResponseWriter
-
-	// HiJacked fields
-	conn   net.Conn
-	rw     *bufio.ReadWriter
-	err    error
+type connResponseWriter struct {
+	dst io.Writer
 }
 
-func (writer *hijackedResponseWriter) Header() http.Header {
-	return writer.nested.Header()
+func (w *connResponseWriter) Header() http.Header {
+	panic("proxy: ConnectionResponseWriter does not implement Header()")
 }
 
-func (writer *hijackedResponseWriter) Write(data []byte) (int, error) {
-	return writer.nested.Write(data)
+func (w *connResponseWriter) Write(data []byte) (int, error) {
+	return w.dst.Write(data)
 }
 
-func (writer *hijackedResponseWriter) WriteHeader(code int) {
-	writer.nested.WriteHeader(code)
+func (w *connResponseWriter) WriteHeader(code int) {
+	panic("proxy: ConnectionResponseWriter does not implement WriteHeader(int)")
 }
 
-func (writer *hijackedResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	hijacker, ok := writer.nested.(http.Hijacker)
+func (w *connResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	conn, ok := w.dst.(net.Conn)
 
 	if !ok {
-		return nil, nil, errors.New("proxy: nested http.ResponseWriter does not implement http.Hijacker interface")
+		return nil, nil, errors.New("proxy: nested io.Writer does not implement net.Conn interface")
 	}
 
-	if !writer.hijacked() {
-		writer.conn, writer.rw, writer.err = hijacker.Hijack()
-	}
+	rw := bufio.NewReadWriter(
+		bufio.NewReader(io.MultiReader()),
+		bufio.NewWriter(ioutil.Discard),
+	)
 
-	return writer.conn, writer.rw, writer.err
+	return conn, rw, nil
 }
 
-func (writer *hijackedResponseWriter) hijacked() bool {
-	return writer.conn != nil || writer.err != nil
+func NewConnResponseWriter(dst io.Writer) *connResponseWriter {
+	return &connResponseWriter{
+		dst: dst,
+	}
 }
 
-func NewHijackedResponseWriter(nested http.ResponseWriter) *hijackedResponseWriter {
-	return &hijackedResponseWriter{
-		nested: nested,
-	}
+func Error(w http.ResponseWriter, error string, code int) {
+
 }
