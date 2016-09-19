@@ -57,24 +57,18 @@ func (proxy *ProxyHttpServer) filterResponse(respOrig *http.Response, ctx *Proxy
 	return
 }
 
-func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
-	r.RequestURI = "" // this must be reset when serving a request with the client
-	ctx.Logf("Sending request %v %v", r.Method, r.URL.String())
-	// If no Accept-Encoding header exists, Transport will add the headers it can accept
-	// and would wrap the response body with the relevant reader.
-	r.Header.Del("Accept-Encoding")
-	// curl can add that, see
-	// https://jdebp.eu./FGA/web-proxy-connection-header.html
-	r.Header.Del("Proxy-Connection")
-	r.Header.Del("Proxy-Authenticate")
-	r.Header.Del("Proxy-Authorization")
-	// Connection, Authenticate and Authorization are single hop Header:
-	// http://www.w3.org/Protocols/rfc2616/rfc2616.txt
-	// 14.10 Connection
-	//   The Connection general-header field allows the sender to specify
-	//   options that are desired for that particular connection and MUST NOT
-	//   be communicated by proxies over further connections.
-	r.Header.Del("Connection")
+// Hop-by-hop headers. These are removed when sent to the backend.
+// http://www.w3.org/Protocols/rfc2616/rfc2616-sec13.html
+var hopHeaders = []string{
+	"Connection",
+	"Keep-Alive",
+	"Proxy-Connection",
+	"Proxy-Authenticate",
+	"Proxy-Authorization",
+	"Te",
+	"Trailer",
+	"Transfer-Encoding",
+	"Upgrade",
 }
 
 func writeResponse(ctx *ProxyCtx, resp *http.Response, out http.ResponseWriter) {
@@ -168,6 +162,9 @@ func (proxy *ProxyHttpServer) handleRequest(writer http.ResponseWriter, base *ht
 		proxy: proxy,
 	}
 
+	// Clean-up
+	base.RequestURI = ""
+
 	if websocket.IsWebSocketUpgrade(base) {
 		return proxy.handleWsRequest(ctx, writer, base)
 	} else {
@@ -236,8 +233,22 @@ func (proxy *ProxyHttpServer) handleHttpRequest(ctx *ProxyCtx, writer http.Respo
 	req, resp = proxy.filterRequest(base, ctx)
 
 	if resp == nil {
-		removeProxyHeaders(ctx, req)
+		// If no Accept-Encoding header exists, Transport will add the headers it can accept
+		// and would wrap the response body with the relevant reader.
+		req.Header.Del("Accept-Encoding")
+
+		// Clean-up request
+		for _, h := range hopHeaders {
+			req.Header.Del(h)
+		}
+
+		// Process
 		resp, err = ctx.RoundTrip(req)
+
+		// Clean-up response
+		for _, h := range hopHeaders {
+			resp.Header.Del(h)
+		}
 	}
 
 	if err != nil {
