@@ -128,8 +128,9 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 		ctx.Logf("Assuming CONNECT is plain HTTP tunneling, mitm proxying it")
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 
+		client := bufio.NewReader(proxyClient)
+
 		for {
-			client := bufio.NewReader(proxyClient)
 			req, err := http.ReadRequest(client)
 
 			if err != nil {
@@ -151,6 +152,8 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 			}
 		}
 
+		proxyClient.Close()
+
 	case ConnectMitm:
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 		ctx.Logf("Assuming CONNECT is TLS, mitm proxying it")
@@ -167,38 +170,40 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 				return
 			}
 		}
-		go func() {
-			//TODO: cache connections to the remote website
-			rawClientTls := tls.Server(proxyClient, tlsConfig)
-			if err := rawClientTls.Handshake(); err != nil {
-				ctx.Warnf("Cannot handshake client %v %v", r.Host, err)
-				return
-			}
-			defer rawClientTls.Close()
-			clientTlsReader := bufio.NewReader(rawClientTls)
-			for !isEof(clientTlsReader) {
-				req, err := http.ReadRequest(clientTlsReader)
 
+		//TODO: cache connections to the remote website
+		rawClientTls := tls.Server(proxyClient, tlsConfig)
+		if err := rawClientTls.Handshake(); err != nil {
+			ctx.Warnf("Cannot handshake client %v %v", r.Host, err)
+			return
+		}
+		defer rawClientTls.Close()
+		clientTlsReader := bufio.NewReader(rawClientTls)
+
+		for {
+			req, err := http.ReadRequest(clientTlsReader)
+
+			if err != nil {
+				if err != io.EOF {
+					ctx.Warnf("cannot read request of MITM HTTPS client: %+#v", err)
+				}
+
+				break
+			}
+
+			req.URL, err = url.Parse("https://" + req.Host + req.URL.String())
+
+			if end, err := proxy.handleRequest(NewConnResponseWriter(rawClientTls), req); end {
 				if err != nil {
-					if err != io.EOF {
-						ctx.Warnf("cannot read request of MITM HTTPS client: %+#v", err)
-					}
-
-					break
+					ctx.Warnf("Error during serving MITM HTTPS request: %+#v", err)
 				}
 
-				req.URL, err = url.Parse("https://" + req.Host + req.URL.String())
-
-				if end, err := proxy.handleRequest(NewConnResponseWriter(rawClientTls), req); end {
-					if err != nil {
-						ctx.Warnf("Error during serving MITM HTTPS request: %+#v", err)
-					}
-
-					break
-				}
+				break
 			}
-			ctx.Logf("Exiting on EOF")
-		}()
+		}
+
+		ctx.Logf("Exiting on EOF")
+		proxyClient.Close()
 
 	case ConnectProxyAuthHijack:
 		proxyClient.Write([]byte("HTTP/1.1 407 Proxy Authentication Required\r\n"))

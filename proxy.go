@@ -1,7 +1,6 @@
 package goproxy
 
 import (
-	"bufio"
 	"io"
 	"log"
 	"net"
@@ -11,6 +10,8 @@ import (
 	"sync/atomic"
 	"github.com/gorilla/websocket"
 	"sync"
+	"io/ioutil"
+	"bytes"
 )
 
 // The basic proxy type. Implements http.Handler.
@@ -34,25 +35,6 @@ type ProxyHttpServer struct {
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
-
-func copyHeaders(dst, src http.Header) {
-	for k, _ := range dst {
-		dst.Del(k)
-	}
-	for k, vs := range src {
-		for _, v := range vs {
-			dst.Add(k, v)
-		}
-	}
-}
-
-func isEof(r *bufio.Reader) bool {
-	_, err := r.Peek(1)
-	if err == io.EOF {
-		return true
-	}
-	return false
-}
 
 func (proxy *ProxyHttpServer) filterRequest(r *http.Request, ctx *ProxyCtx) (req *http.Request, resp *http.Response) {
 	req = r
@@ -96,12 +78,41 @@ func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 }
 
 func writeResponse(ctx *ProxyCtx, resp *http.Response, out http.ResponseWriter) {
-	ctx.Logf("Copying response to client: %v [%d]", resp.Status, resp.StatusCode)
+	ctx.Logf("Copying response to client: %v (%d bytes)", resp.Status, resp.ContentLength)
 
 	// Fancy ResponseWriter
 	if w, ok := out.(*connResponseWriter); ok {
+		// net/http: Response.Write produces invalid responses in this case,
+		// hacking to fix that
+		if resp.ContentLength == -1 {
+			defer resp.Body.Close()
+
+			peek, err := ioutil.ReadAll(
+				io.LimitReader(resp.Body, 4 * 1024),
+			)
+
+			body := bytes.NewReader(peek)
+
+			if err != nil {
+				ctx.Warnf("Error copying response: %s", err.Error())
+			}
+
+			if len(peek) < 4 * 1024 {
+				resp.ContentLength = int64(body.Len())
+				resp.Body = ioutil.NopCloser(body)
+			} else {
+				resp.TransferEncoding = append(resp.TransferEncoding, "chunked")
+				resp.Body = ioutil.NopCloser(io.MultiReader(
+					body,
+					resp.Body,
+				))
+			}
+		}
+
 		if err := resp.Write(w); err != nil {
 			ctx.Warnf("Error copying response: %s", err.Error())
+		} else {
+			ctx.Logf("Copied response to client")
 		}
 
 		return
@@ -257,7 +268,6 @@ func (proxy *ProxyHttpServer) handleHttpRequest(ctx *ProxyCtx, writer http.Respo
 	}
 
 	ctx.Logf("Received response: %v", resp.Status)
-	ctx.Logf("Copying response to client %v [%d]", resp.Status, resp.StatusCode)
 
 	writeResponse(ctx, resp, writer)
 
