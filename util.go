@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"strings"
 )
 
 type connResponseWriter struct {
@@ -46,6 +47,19 @@ func NewConnResponseWriter(dst io.Writer) *connResponseWriter {
 	}
 }
 
-func Error(w http.ResponseWriter, error string, code int) {
+func Error(out http.ResponseWriter, error string, code int) {
+	resp := &http.Response{
+		StatusCode: code,
+		ContentLength: -1,
+		Body: ioutil.NopCloser(strings.NewReader(error)),
+	}
 
+	ctx := &ProxyCtx{
+		Req: nil,
+		Session: 0,
+		Websocket: false,
+		proxy: nil,
+	}
+
+	writeResponse(ctx, resp, out)
 }

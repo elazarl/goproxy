@@ -196,7 +196,7 @@ func (proxy *ProxyHttpServer) handleWsRequest(ctx *ProxyCtx, writer http.Respons
 		if err == websocket.ErrBadHandshake {
 			writeResponse(ctx, resp, writer)
 		} else {
-			http.Error(writer, err.Error(), http.StatusBadGateway)
+			Error(writer, err.Error(), http.StatusBadGateway)
 		}
 
 		return true, err
@@ -302,6 +302,9 @@ func NewProxyHttpServer() *ProxyHttpServer {
 		WsServer: &websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
 				return true
+			},
+			Error: func(w http.ResponseWriter, r *http.Request, status int, reason error) {
+				Error(w, reason.Error(), status)
 			},
 		},
 	}
