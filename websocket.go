@@ -34,6 +34,7 @@ func (proxy *ProxyHttpServer) serveHTTPWebsocket(w http.ResponseWriter, r *http.
 	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy}
 	outreq := new(http.Request)
 	// shallow copying
+	r, _ = proxy.filterRequest(r, ctx)
 	*outreq = *r
 	host := outreq.URL.Host
 	if !hasPort.MatchString(host) {
