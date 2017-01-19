@@ -9,7 +9,7 @@ It supports regular HTTP proxy, HTTPS through CONNECT, and "hijacking" HTTPS
 connection using "Man in the Middle" style attack.
 
 The intent of the proxy, is to be usable with reasonable amount of traffic
-yet, customizable and programable.
+yet, customizable and programmable.
 
 The proxy itself is simply a `net/http` handler.
 
@@ -90,7 +90,7 @@ In order to refuse connections to reddit at work time
 we will only process requests that matches the condition. `DstHostIs("www.reddit.com")` will return
 a `ReqCondition` accepting only requests directed to "www.reddit.com".
 
-`DoFunc` will recieve a function that will preprocess the request. We can change the request, or
+`DoFunc` will receive a function that will preprocess the request. We can change the request, or
 return a response. If the time is between 8:00am and 17:00pm, we will neglect the request, and
 return a precanned text response saying "do not waste your time".
 
@@ -105,7 +105,7 @@ See additional examples in the examples directory.
 # License
 
 I put the software temporarily under the Go-compatible BSD license,
-if this prevents someone from using the software, do let mee know and I'll consider changing it.
+if this prevents someone from using the software, do let me know and I'll consider changing it.
 
 At any rate, user feedback is very important for me, so I'll be delighted to know if you're using this package.
 
@@ -114,5 +114,5 @@ At any rate, user feedback is very important for me, so I'll be delighted to kno
 I've received a positive feedback from a few people who use goproxy in production settings.
 I believe it is good enough for usage.
 
-I'll try to keep reasonable backwards compatability. In case of a major API change,
+I'll try to keep reasonable backwards compatibility. In case of a major API change,
 I'll change the import path.
