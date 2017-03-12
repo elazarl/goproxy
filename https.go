@@ -3,6 +3,7 @@ package goproxy
 import (
 	"bufio"
 	"crypto/tls"
+	"encoding/base64"
 	"errors"
 	"io"
 	"io/ioutil"
@@ -365,6 +366,11 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxy(https_proxy string) func(net
 				Host:   addr,
 				Header: make(http.Header),
 			}
+			// Adding auth header if user:password is present in url
+			if u.User != nil {
+				basic := "Basic " + base64.StdEncoding.EncodeToString([]byte(u.User.String()))
+				connectReq.Header.Add("Proxy-Authorization", basic)
+			}
 			c, err := proxy.dial(network, u.Host)
 			if err != nil {
 				return nil, err
@@ -406,6 +412,11 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxy(https_proxy string) func(net
 				URL:    &url.URL{Opaque: addr},
 				Host:   addr,
 				Header: make(http.Header),
+			}
+			// Adding auth header if user:password is present in url
+			if u.User != nil {
+				basic := "Basic " + base64.StdEncoding.EncodeToString([]byte(u.User.String()))
+				connectReq.Header.Add("Proxy-Authorization", basic)
 			}
 			connectReq.Write(c)
 			// Read response.
