@@ -238,6 +238,8 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				// TODO: use a more reasonable scheme
 				resp.Header.Del("Content-Length")
 				resp.Header.Set("Transfer-Encoding", "chunked")
+				// Force connection close otherwise chrome will keep CONNECT tunnel open forever
+				resp.Header.Set("Connection", "close")
 				if err := resp.Header.Write(rawClientTls); err != nil {
 					ctx.Warnf("Cannot write TLS response header from mitm'd client: %v", err)
 					return
