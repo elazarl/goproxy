@@ -3,6 +3,7 @@ package goproxy
 import (
 	"bufio"
 	"crypto/tls"
+	"encoding/base64"
 	"errors"
 	"io"
 	"io/ioutil"
@@ -26,14 +27,16 @@ const (
 	ConnectHijack
 	ConnectHTTPMitm
 	ConnectProxyAuthHijack
+	ConnectNewHTTPMitm
 )
 
 var (
-	OkConnect       = &ConnectAction{Action: ConnectAccept, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
-	MitmConnect     = &ConnectAction{Action: ConnectMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
-	HTTPMitmConnect = &ConnectAction{Action: ConnectHTTPMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
-	RejectConnect   = &ConnectAction{Action: ConnectReject, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
-	httpsRegexp     = regexp.MustCompile(`^https:\/\/`)
+	OkConnect          = &ConnectAction{Action: ConnectAccept, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
+	MitmConnect        = &ConnectAction{Action: ConnectMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
+	HTTPMitmConnect    = &ConnectAction{Action: ConnectHTTPMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
+	RejectConnect      = &ConnectAction{Action: ConnectReject, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
+	HTTPMitmNewConnect = &ConnectAction{Action: ConnectNewHTTPMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
+	httpsRegexp        = regexp.MustCompile(`^https:\/\/`)
 )
 
 type ConnectAction struct {
@@ -160,6 +163,42 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				httpError(proxyClient, ctx, err)
 				return
 			}
+		}
+	//Making Connect Request after running all OnReq functions
+	case ConnectNewHTTPMitm:
+		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+		ctx.Logf("Assuming CONNECT is plain HTTP tunneling, mitm proxying it")
+		client := bufio.NewReader(proxyClient)
+		req, err := http.ReadRequest(client)
+		if err != nil && err != io.EOF {
+			ctx.Warnf("cannot read request of MITM HTTP client: %+#v", err)
+		}
+		if err != nil {
+			return
+		}
+		req, resp := proxy.filterRequest(req, ctx)
+		targetSiteCon, err := proxy.connectDial("tcp", host)
+		if err != nil {
+			ctx.Warnf("Error dialing to %s: %s", host, err.Error())
+			return
+		}
+		remote := bufio.NewReader(targetSiteCon)
+		if resp == nil {
+			if err := req.Write(targetSiteCon); err != nil {
+				httpError(proxyClient, ctx, err)
+				return
+			}
+			resp, err = http.ReadResponse(remote, req)
+			if err != nil {
+				httpError(proxyClient, ctx, err)
+				return
+			}
+			defer resp.Body.Close()
+		}
+		resp = proxy.filterResponse(resp, ctx)
+		if err := resp.Write(proxyClient); err != nil {
+			httpError(proxyClient, ctx, err)
+			return
 		}
 	case ConnectMitm:
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
@@ -329,6 +368,11 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxy(https_proxy string) func(net
 				Host:   addr,
 				Header: make(http.Header),
 			}
+			// Adding auth header if user:password is present in url
+			if u.User != nil {
+				basic := "Basic " + base64.StdEncoding.EncodeToString([]byte(u.User.String()))
+				connectReq.Header.Add("Proxy-Authorization", basic)
+			}
 			c, err := proxy.dial(network, u.Host)
 			if err != nil {
 				return nil, err
@@ -370,6 +414,11 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxy(https_proxy string) func(net
 				URL:    &url.URL{Opaque: addr},
 				Host:   addr,
 				Header: make(http.Header),
+			}
+			// Adding auth header if user:password is present in url
+			if u.User != nil {
+				basic := "Basic " + base64.StdEncoding.EncodeToString([]byte(u.User.String()))
+				connectReq.Header.Add("Proxy-Authorization", basic)
 			}
 			connectReq.Write(c)
 			// Read response.
