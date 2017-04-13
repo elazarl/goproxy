@@ -74,9 +74,7 @@ func (proxy *ProxyHttpServer) filterResponse(respOrig *http.Response, ctx *Proxy
 func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 	r.RequestURI = "" // this must be reset when serving a request with the client
 	ctx.Logf("Sending request %v %v", r.Method, r.URL.String())
-	// If no Accept-Encoding header exists, Transport will add the headers it can accept
-	// and would wrap the response body with the relevant reader.
-	r.Header.Del("Accept-Encoding")
+
 	// curl can add that, see
 	// https://jdebp.eu./FGA/web-proxy-connection-header.html
 	r.Header.Del("Proxy-Connection")
@@ -109,7 +107,30 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 		if resp == nil {
 			removeProxyHeaders(ctx, r)
+
+			log.Printf("------- request ----------")
+			log.Printf("%s %s %s", r.Method, r.URL.Path, r.Proto)
+			for key, mimeheaders := range r.Header {
+				for _, header := range mimeheaders {
+					log.Printf("%s: %s", key, header)
+				}
+			}
+			log.Printf("-----------------")
+
 			resp, err = ctx.RoundTrip(r)
+
+			log.Printf("------- response ----------")
+			if err != nil {
+				log.Printf("error=%s", err)
+			}
+			log.Printf("%s %d", resp.Proto, resp.StatusCode)
+			for key, mimeheaders := range resp.Header {
+				for _, header := range mimeheaders {
+					log.Printf("%s: %s", key, header)
+				}
+			}
+			log.Printf("-----------------")
+
 			if err != nil {
 				ctx.Error = err
 				resp = proxy.filterResponse(nil, ctx)
