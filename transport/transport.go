@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // HTTP client implementation. See RFC 2616.
-// 
+//
 // This is the low-level Transport implementation of RoundTripper.
 // The high-level interface is in client.go.
 
@@ -39,6 +39,12 @@ var DefaultTransport RoundTripper = &Transport{Proxy: ProxyFromEnvironment}
 // DefaultMaxIdleConnsPerHost is the default value of Transport's
 // MaxIdleConnsPerHost.
 const DefaultMaxIdleConnsPerHost = 2
+
+// Retry count for EOF error while writing on remote connections.
+const RetryBrokenConnection = 1
+
+// for error of writing to remote connections.
+var BrokenConnection = errors.New("Couldn't write on broken connection.")
 
 // Transport is an implementation of RoundTripper that supports http,
 // https, and http proxies (for either http or https with CONNECT).
@@ -160,13 +166,22 @@ func (t *Transport) DetailedRoundTrip(req *http.Request) (details *RoundTripDeta
 	// Get the cached or newly-created connection to either the
 	// host (for http or https), the http proxy, or the http proxy
 	// pre-CONNECTed to https server.  In any case, we'll be ready
-	// to send it requests.
-	pconn, err := t.getConn(cm)
-	if err != nil {
-		return nil, nil, err
+	// to send it requests. Only an exception, may be broken
+	// remote connection. This reason attempts to connect
+	// {RetryBrokenConnection} times in this case.
+	for try := RetryBrokenConnection; try >= 0; try-- {
+		pconn, err := t.getConn(cm)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		resp, err = pconn.roundTrip(treq)
+
+		if err != nil && err != BrokenConnection {
+			break
+		}
 	}
 
-	resp, err = pconn.roundTrip(treq)
 	return &RoundTripDetails{pconn.host, pconn.ip, pconn.isProxy, err}, resp, err
 }
 
@@ -664,7 +679,7 @@ func (pc *persistConn) roundTrip(req *transportRequest) (resp *http.Response, er
 	// requested it.
 	requestedGzip := false
 	if !pc.t.DisableCompression && req.Header.Get("Accept-Encoding") == "" {
-		// Request gzip only, not deflate. Deflate is ambiguous and 
+		// Request gzip only, not deflate. Deflate is ambiguous and
 		// not as universally supported anyway.
 		// See: http://www.gzip.org/zlib/zlib_faq.html#faq38
 		requestedGzip = true
@@ -683,9 +698,19 @@ func (pc *persistConn) roundTrip(req *transportRequest) (resp *http.Response, er
 	}
 	if err != nil {
 		pc.close()
+		if err == io.EOF {
+			err = BrokenConnection
+		}
 		return
 	}
-	pc.bw.Flush()
+
+	if err = pc.bw.Flush(); err != nil {
+		pc.close()
+		if err == io.EOF {
+			err = BrokenConnection
+		}
+		return
+	}
 
 	ch := make(chan responseAndError, 1)
 	pc.reqch <- requestAndChan{req.Request, ch, requestedGzip}
