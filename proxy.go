@@ -76,7 +76,7 @@ func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 	ctx.Logf("Sending request %v %v", r.Method, r.URL.String())
 	// If no Accept-Encoding header exists, Transport will add the headers it can accept
 	// and would wrap the response body with the relevant reader.
-	r.Header.Del("Accept-Encoding")
+//	r.Header.Del("Accept-Encoding")
 	// curl can add that, see
 	// https://jdebp.eu./FGA/web-proxy-connection-header.html
 	r.Header.Del("Proxy-Connection")
