@@ -111,15 +111,11 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			removeProxyHeaders(ctx, r)
 			resp, err = ctx.RoundTrip(r)
 			if err != nil {
+				ctx.Logf("error read response %v %v:", r.URL.Host, err.Error())
 				ctx.Error = err
-				resp = proxy.filterResponse(nil, ctx)
-				if resp == nil {
-					ctx.Logf("error read response %v %v:", r.URL.Host, err.Error())
-					http.Error(w, err.Error(), 500)
-					return
-				}
+				resp = NewResponse(r, ContentTypeText+"; charset=utf-8", 500, err.Error())
+				ctx.Logf("Generated response %v", resp.Status)
 			}
-			ctx.Logf("Received response %v", resp.Status)
 		}
 		origBody := resp.Body
 		resp = proxy.filterResponse(resp, ctx)
