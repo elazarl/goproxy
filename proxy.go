@@ -37,9 +37,7 @@ func copyHeaders(dst, src http.Header) {
 		dst.Del(k)
 	}
 	for k, vs := range src {
-		for _, v := range vs {
-			dst.Add(k, v)
-		}
+		dst[k] = vs
 	}
 }
 
