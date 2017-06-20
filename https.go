@@ -234,6 +234,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					ctx.Warnf("Cannot write TLS response HTTP status from mitm'd client: %v", err)
 					return
 				}
+
+				if resp.Header == nil {
+					resp.Header = http.Header{}
+				}
+
 				// Since we don't know the length of resp, return chunked encoded response
 				// TODO: use a more reasonable scheme
 				resp.Header.Del("Content-Length")
