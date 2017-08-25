@@ -132,10 +132,6 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 					ctx.Logf("error read response %v %v:", r.URL.Host, err.Error())
 					http.Error(w, err.Error(), 500)
 
-					// bandwidth
-					dumpData, _ = httputil.DumpResponse(resp, true)
-					ctx.AddBandwidth(int64(len(dumpData)), false)
-
 					proxy.onDone(ctx)
 					return
 				}
