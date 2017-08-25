@@ -55,3 +55,17 @@ type FuncHttpsHandler func(host string, ctx *ProxyCtx) (*ConnectAction, string)
 func (f FuncHttpsHandler) HandleConnect(host string, ctx *ProxyCtx) (*ConnectAction, string) {
 	return f(host, ctx)
 }
+
+// OnDone is called when a http request complete including https
+type DoneHandler interface {
+	Handle(ctx *ProxyCtx)
+}
+
+// A wrapper that would convert a function to a DoneHandler interface type
+type FuncDoneHandler func(ctx *ProxyCtx)
+
+// FuncDoneHandler.Handle(req,ctx) <=> FuncDoneHandler(req,ctx)
+func (f FuncDoneHandler) Handle(ctx *ProxyCtx) {
+	f(ctx)
+	return
+}

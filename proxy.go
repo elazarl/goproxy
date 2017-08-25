@@ -24,6 +24,7 @@ type ProxyHttpServer struct {
 	reqHandlers     []ReqHandler
 	respHandlers    []RespHandler
 	httpsHandlers   []HttpsHandler
+	doneHandlers    []DoneHandler
 	Tr              *http.Transport
 	// ConnectDial will be used to create TCP connections for CONNECT requests
 	// if nil Tr.Dial will be used
@@ -68,6 +69,12 @@ func (proxy *ProxyHttpServer) filterResponse(respOrig *http.Response, ctx *Proxy
 	for _, h := range proxy.respHandlers {
 		ctx.Resp = resp
 		resp = h.Handle(resp, ctx)
+	}
+	return
+}
+func (proxy *ProxyHttpServer) onDone(ctx *ProxyCtx) {
+	for _, h := range proxy.doneHandlers {
+		h.Handle(ctx)
 	}
 	return
 }
@@ -126,6 +133,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 					dumpData, _ = httputil.DumpResponse(resp, true)
 					ctx.AddBandwidth(int64(len(dumpData)), false)
 
+					proxy.onDone(ctx)
 					return
 				}
 			}
@@ -156,6 +164,8 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			ctx.Warnf("Can't close response body %v", err)
 		}
 		ctx.Logf("Copied %v bytes to client error=%v", nr, err)
+
+		proxy.onDone(ctx)
 	}
 }
 

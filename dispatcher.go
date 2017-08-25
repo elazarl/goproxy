@@ -323,3 +323,27 @@ func HandleBytes(f func(b []byte, ctx *ProxyCtx) []byte) RespHandler {
 		return resp
 	})
 }
+
+// DoneProxyConds has empty conditions now
+type DoneProxyConds struct {
+	proxy *ProxyHttpServer
+}
+
+// OnDone is called when a http request complete including https
+func (proxy *ProxyHttpServer) OnDone() *DoneProxyConds {
+	return &DoneProxyConds{proxy}
+}
+
+// DoFunc is equivalent to proxy.OnDone().Do(FuncDoneHandler(f))
+func (pcond *DoneProxyConds) DoFunc(f func(ctx *ProxyCtx)) {
+	pcond.Do(FuncDoneHandler(f))
+}
+
+// DoneProxyConds.Do will register the DoneHandler on the proxy
+func (pcond *DoneProxyConds) Do(h DoneHandler) {
+	pcond.proxy.doneHandlers = append(pcond.proxy.doneHandlers,
+		FuncDoneHandler(func(ctx *ProxyCtx) {
+			h.Handle(ctx)
+			return
+		}))
+}

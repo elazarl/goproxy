@@ -113,6 +113,8 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				go copyAndClose(ctx, targetTCP, proxyClientTCP, true, &wg)
 				go copyAndClose(ctx, proxyClientTCP, targetTCP, false, &wg)
 				wg.Wait()
+
+				proxy.onDone(ctx)
 			} else {
 				var wg sync.WaitGroup
 				wg.Add(2)
@@ -121,6 +123,8 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				wg.Wait()
 				proxyClient.Close()
 				targetSiteCon.Close()
+
+				proxy.onDone(ctx)
 			}
 		}()
 
