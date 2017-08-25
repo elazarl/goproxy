@@ -3,6 +3,7 @@ package goproxy
 import (
 	"net/http"
 	"regexp"
+	"sync/atomic"
 )
 
 // ProxyCtx is the Proxy context, contains useful information about every request. It is passed to
@@ -21,6 +22,9 @@ type ProxyCtx struct {
 	// Will connect a request to a response
 	Session int64
 	proxy   *ProxyHttpServer
+	// Bandwidth
+	Inbounce  int64
+	Outbounce int64
 }
 
 type RoundTripper interface {
@@ -84,4 +88,13 @@ func (ctx *ProxyCtx) Charset() string {
 		return ""
 	}
 	return charsets[1]
+}
+
+// AddBandwidth set ctx Inbounce and Outbounce
+func (ctx *ProxyCtx) AddBandwidth(written int64, isInbounce bool) {
+	if isInbounce {
+		atomic.AddInt64(&ctx.Inbounce, written)
+		return
+	}
+	atomic.AddInt64(&ctx.Outbounce, written)
 }

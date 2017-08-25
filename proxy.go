@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"os"
 	"regexp"
 	"sync/atomic"
@@ -107,6 +108,10 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 		r, resp := proxy.filterRequest(r, ctx)
 
+		// bandwidth
+		dumpData, _ := httputil.DumpRequest(r, true)
+		ctx.AddBandwidth(int64(len(dumpData)), true)
+
 		if resp == nil {
 			removeProxyHeaders(ctx, r)
 			resp, err = ctx.RoundTrip(r)
@@ -116,6 +121,11 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 				if resp == nil {
 					ctx.Logf("error read response %v %v:", r.URL.Host, err.Error())
 					http.Error(w, err.Error(), 500)
+
+					// bandwidth
+					dumpData, _ = httputil.DumpResponse(resp, true)
+					ctx.AddBandwidth(int64(len(dumpData)), false)
+
 					return
 				}
 			}
@@ -136,6 +146,11 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 		copyHeaders(w.Header(), resp.Header)
 		w.WriteHeader(resp.StatusCode)
+
+		// bandwidth
+		dumpData, _ = httputil.DumpResponse(resp, true)
+		ctx.AddBandwidth(int64(len(dumpData)), false)
+
 		nr, err := io.Copy(w, resp.Body)
 		if err := resp.Body.Close(); err != nil {
 			ctx.Warnf("Can't close response body %v", err)
