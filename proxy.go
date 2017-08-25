@@ -116,8 +116,11 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		r, resp := proxy.filterRequest(r, ctx)
 
 		// bandwidth
-		dumpData, _ := httputil.DumpRequest(r, true)
-		ctx.AddBandwidth(int64(len(dumpData)), true)
+		var dumpData []byte
+		if r != nil {
+			dumpData, _ = httputil.DumpRequest(r, true)
+			ctx.AddBandwidth(int64(len(dumpData)), true)
+		}
 
 		if resp == nil {
 			removeProxyHeaders(ctx, r)
