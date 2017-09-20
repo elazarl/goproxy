@@ -152,7 +152,7 @@ func NewProxyHttpServer() *ProxyHttpServer {
 	l.Level = logrus.DebugLevel
 
 	proxy := ProxyHttpServer{
-		Logger:        l.WithFields(logrus.Fields{"prefix": "go-proxy"}),
+		Logger:        l.WithFields(logrus.Fields{"prefix": "goproxy"}),
 		reqHandlers:   []ReqHandler{},
 		respHandlers:  []RespHandler{},
 		httpsHandlers: []HttpsHandler{},
