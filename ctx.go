@@ -41,7 +41,7 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func (ctx *ProxyCtx) printf(msg string, argv ...interface{}) {
-	ctx.proxy.Logger.Printf("[%03d] "+msg+"\n", append([]interface{}{ctx.Session & 0xFF}, argv...)...)
+	ctx.proxy.Logger.Infof("[%03d] "+msg, append([]interface{}{ctx.Session & 0xFF}, argv...)...)
 }
 
 // Logf prints a message to the proxy's log. Should be used in a ProxyHttpServer's filter
@@ -54,7 +54,7 @@ func (ctx *ProxyCtx) printf(msg string, argv ...interface{}) {
 //	})
 func (ctx *ProxyCtx) Logf(msg string, argv ...interface{}) {
 	if ctx.proxy.Verbose {
-		ctx.printf("INFO: "+msg, argv...)
+		ctx.printf(msg, argv...)
 	}
 }
 
