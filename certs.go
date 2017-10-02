@@ -17,7 +17,7 @@ func init() {
 
 var tlsClientSkipVerify = &tls.Config{InsecureSkipVerify: true}
 
-var defaultTLSConfig = &tls.Config{
+var defaultTlsConfig = &tls.Config{
 	InsecureSkipVerify: true,
 }
 
