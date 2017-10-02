@@ -1,6 +1,7 @@
 package goproxy
 
 import (
+	"github.com/elazarl/goproxy/transport"
 	"net/http"
 	"regexp"
 )
@@ -11,8 +12,8 @@ type ProxyCtx struct {
 	// Will contain the client request from the proxy
 	Req *http.Request
 	// Will contain the remote server's response (if available. nil if the request wasn't send yet)
-	Resp         *http.Response
-	RoundTripper RoundTripper
+	Resp      *http.Response
+	RoundTrip *transport.RoundTripDetails
 	// will contain the recent error that occured while trying to send receive or parse traffic
 	Error error
 	// A handle for the user to keep data in the context, from the call of ReqHandler to the
@@ -23,23 +24,6 @@ type ProxyCtx struct {
 	proxy   *ProxyHttpServer
 }
 
-type RoundTripper interface {
-	RoundTrip(req *http.Request, ctx *ProxyCtx) (*http.Response, error)
-}
-
-type RoundTripperFunc func(req *http.Request, ctx *ProxyCtx) (*http.Response, error)
-
-func (f RoundTripperFunc) RoundTrip(req *http.Request, ctx *ProxyCtx) (*http.Response, error) {
-	return f(req, ctx)
-}
-
-func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
-	if ctx.RoundTripper != nil {
-		return ctx.RoundTripper.RoundTrip(req, ctx)
-	}
-	return ctx.proxy.Tr.RoundTrip(req)
-}
-
 func (ctx *ProxyCtx) printf(msg string, argv ...interface{}) {
 	ctx.proxy.Logger.Printf("[%03d] "+msg+"\n", append([]interface{}{ctx.Session & 0xFF}, argv...)...)
 }
@@ -47,10 +31,10 @@ func (ctx *ProxyCtx) printf(msg string, argv ...interface{}) {
 // Logf prints a message to the proxy's log. Should be used in a ProxyHttpServer's filter
 // This message will be printed only if the Verbose field of the ProxyHttpServer is set to true
 //
-//	proxy.OnRequest().DoFunc(func(r *http.Request,ctx *goproxy.ProxyCtx) (*http.Request, *http.Response){
+//	proxy.OnRequest().DoFunc(func(r *http.Request,ctx *goproxy.ProxyCtx) *http.Request{
 //		nr := atomic.AddInt32(&counter,1)
 //		ctx.Printf("So far %d requests",nr)
-//		return r, nil
+//		return r
 //	})
 func (ctx *ProxyCtx) Logf(msg string, argv ...interface{}) {
 	if ctx.proxy.Verbose {
@@ -61,19 +45,19 @@ func (ctx *ProxyCtx) Logf(msg string, argv ...interface{}) {
 // Warnf prints a message to the proxy's log. Should be used in a ProxyHttpServer's filter
 // This message will always be printed.
 //
-//	proxy.OnRequest().DoFunc(func(r *http.Request,ctx *goproxy.ProxyCtx) (*http.Request, *http.Response){
+//	proxy.OnRequest().DoFunc(func(r *http.Request,ctx *goproxy.ProxyCtx) *http.Request{
 //		f,err := os.OpenFile(cachedContent)
 //		if err != nil {
 //			ctx.Warnf("error open file %v: %v",cachedContent,err)
-//			return r, nil
+//			return r
 //		}
-//		return r, nil
+//		return r
 //	})
 func (ctx *ProxyCtx) Warnf(msg string, argv ...interface{}) {
 	ctx.printf("WARN: "+msg, argv...)
 }
 
-var charsetFinder = regexp.MustCompile("charset=([^ ;]*)")
+var charsetFinder = regexp.MustCompile("charset=([^ ]*)")
 
 // Will try to infer the character set of the request from the headers.
 // Returns the empty string if we don't know which character set it used.
