@@ -6,15 +6,13 @@ import (
 )
 
 func init() {
+	GoproxyCa, goproxyCaErr =  ParseCa(CA_CERT, CA_KEY)
 	if goproxyCaErr != nil {
 		panic("Error parsing builtin CA " + goproxyCaErr.Error())
 	}
-	var err error
-	if GoproxyCa.Leaf, err = x509.ParseCertificate(GoproxyCa.Certificate[0]); err != nil {
-		panic("Error parsing builtin CA " + err.Error())
-	}
 }
-
+var GoproxyCa tls.Certificate
+var goproxyCaErr error
 var tlsClientSkipVerify = &tls.Config{InsecureSkipVerify: true}
 
 var defaultTLSConfig = &tls.Config{
@@ -108,4 +106,16 @@ cj/azKBaT04IOMLaN8xfSqitJYSraWMVNgGJM5vfcVaivZnNh0lZBv+qu6YkdM88
 4/avCJ8IutT+FcMM+GbGazOm5ALWqUyhrnbLGc4CQMPfe7Il6NxwcrOxT8w=
 -----END RSA PRIVATE KEY-----`)
 
-var GoproxyCa, goproxyCaErr = tls.X509KeyPair(CA_CERT, CA_KEY)
+func ParseCa(CaCert []byte, CaKey []byte) (tls.Certificate, error) {
+	var ca, caErr = tls.X509KeyPair(CaCert, CaKey)
+	if caErr != nil {
+		return tls.Certificate{}, caErr
+	}
+
+	var err error
+	if ca.Leaf, err = x509.ParseCertificate(ca.Certificate[0]); err != nil {
+		return tls.Certificate{}, err
+	}
+
+	return ca, nil
+}
