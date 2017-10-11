@@ -2,10 +2,11 @@ package goproxy
 
 import (
 	"bufio"
+	"github.com/elazarl/goproxy/transport"
 	"io"
 	"log"
-	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"sync/atomic"
@@ -17,19 +18,22 @@ type ProxyHttpServer struct {
 	// see http://golang.org/src/pkg/sync/atomic/doc.go#L41
 	sess int64
 	// setting Verbose to true will log information on each request sent to the proxy
-	Verbose         bool
-	Logger          *log.Logger
-	NonproxyHandler http.Handler
-	reqHandlers     []ReqHandler
-	respHandlers    []RespHandler
-	httpsHandlers   []HttpsHandler
-	Tr              *http.Transport
-	// ConnectDial will be used to create TCP connections for CONNECT requests
-	// if nil Tr.Dial will be used
-	ConnectDial func(network string, addr string) (net.Conn, error)
+	Verbose       bool
+	Logger        *log.Logger
+	reqHandlers   []ReqHandler
+	respHandlers  []RespHandler
+	httpsHandlers []HttpsHandler
+	Tr            *transport.Transport
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
+
+func (proxy *ProxyHttpServer) copyAndClose(w io.WriteCloser, r io.Reader) {
+	io.Copy(w, r)
+	if err := w.Close(); err != nil {
+		proxy.Logger.Println("Error closing", err)
+	}
+}
 
 func copyHeaders(dst, src http.Header) {
 	for k, _ := range dst {
@@ -78,11 +82,9 @@ func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 	// and would wrap the response body with the relevant reader.
 	r.Header.Del("Accept-Encoding")
 	// curl can add that, see
-	// https://jdebp.eu./FGA/web-proxy-connection-header.html
+	// http://homepage.ntlworld.com/jonathan.deboynepollard/FGA/web-proxy-connection-header.html
 	r.Header.Del("Proxy-Connection")
-	r.Header.Del("Proxy-Authenticate")
-	r.Header.Del("Proxy-Authorization")
-	// Connection, Authenticate and Authorization are single hop Header:
+	// Connection is single hop Header:
 	// http://www.w3.org/Protocols/rfc2616/rfc2616.txt
 	// 14.10 Connection
 	//   The Connection general-header field allows the sender to specify
@@ -102,14 +104,23 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		var err error
 		ctx.Logf("Got request %v %v %v %v", r.URL.Path, r.Host, r.Method, r.URL.String())
 		if !r.URL.IsAbs() {
-			proxy.NonproxyHandler.ServeHTTP(w, r)
-			return
+			if r.Host == "" {
+				ctx.Warnf("non-proxy request received, without Host header")
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			r.URL, err = url.Parse("http://" + r.Host + r.URL.Path)
+			if err != nil {
+				ctx.Warnf("unparsable path or host received, by non-proxy request: %+#v", r.URL.Path)
+				http.Error(w, err.Error(), 500)
+				return
+			}
 		}
 		r, resp := proxy.filterRequest(r, ctx)
 
 		if resp == nil {
 			removeProxyHeaders(ctx, r)
-			resp, err = ctx.RoundTrip(r)
+			ctx.RoundTrip, resp, err = proxy.Tr.DetailedRoundTrip(r)
 			if err != nil {
 				ctx.Error = err
 				resp = proxy.filterResponse(nil, ctx)
@@ -123,7 +134,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 		origBody := resp.Body
 		resp = proxy.filterResponse(resp, ctx)
-		defer origBody.Close()
+
 		ctx.Logf("Copying response to client %v [%d]", resp.Status, resp.StatusCode)
 		// http.ResponseWriter will take care of filling the correct response length
 		// Setting it now, might impose wrong value, contradicting the actual new
@@ -146,17 +157,12 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 // New proxy server, logs to StdErr by default
 func NewProxyHttpServer() *ProxyHttpServer {
-	proxy := ProxyHttpServer{
+	return &ProxyHttpServer{
 		Logger:        log.New(os.Stderr, "", log.LstdFlags),
 		reqHandlers:   []ReqHandler{},
 		respHandlers:  []RespHandler{},
 		httpsHandlers: []HttpsHandler{},
-		NonproxyHandler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			http.Error(w, "This is a proxy server. Does not respond to non-proxy requests.", 500)
-		}),
-		Tr: &http.Transport{TLSClientConfig: tlsClientSkipVerify,
-			Proxy: http.ProxyFromEnvironment},
+		Tr: &transport.Transport{TLSClientConfig: tlsClientSkipVerify,
+			Proxy: transport.ProxyFromEnvironment},
 	}
-	proxy.ConnectDial = dialerFromEnv(&proxy)
-	return &proxy
 }
