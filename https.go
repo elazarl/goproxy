@@ -29,10 +29,10 @@ const (
 )
 
 var (
-	OkConnect       = &ConnectAction{Action: ConnectAccept, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
-	MitmConnect     = &ConnectAction{Action: ConnectMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
-	HTTPMitmConnect = &ConnectAction{Action: ConnectHTTPMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
-	RejectConnect   = &ConnectAction{Action: ConnectReject, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
+	OkConnect       = &ConnectAction{Action: ConnectAccept, TLSConfig: TLSConfigFromProxyCA()}
+	MitmConnect     = &ConnectAction{Action: ConnectMitm, TLSConfig: TLSConfigFromProxyCA()}
+	HTTPMitmConnect = &ConnectAction{Action: ConnectHTTPMitm, TLSConfig: TLSConfigFromProxyCA()}
+	RejectConnect   = &ConnectAction{Action: ConnectReject, TLSConfig: TLSConfigFromProxyCA()}
 	httpsRegexp     = regexp.MustCompile(`^https:\/\/`)
 )
 
@@ -401,6 +401,20 @@ func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls
 		config := *defaultTLSConfig
 		ctx.Logf("signing for %s", stripPort(host))
 		cert, err := signHost(*ca, []string{stripPort(host)})
+		if err != nil {
+			ctx.Warnf("Cannot sign host certificate with provided CA: %s", err)
+			return nil, err
+		}
+		config.Certificates = append(config.Certificates, cert)
+		return &config, nil
+	}
+}
+
+func TLSConfigFromProxyCA() func(host string, ctx *ProxyCtx) (*tls.Config, error) {
+	return func(host string, ctx *ProxyCtx) (*tls.Config, error) {
+		config := *defaultTLSConfig
+		ctx.Logf("signing for %s", stripPort(host))
+		cert, err := signHost(*ctx.proxy.Ca, []string{stripPort(host)})
 		if err != nil {
 			ctx.Warnf("Cannot sign host certificate with provided CA: %s", err)
 			return nil, err

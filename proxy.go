@@ -2,6 +2,7 @@ package goproxy
 
 import (
 	"bufio"
+	"crypto/tls"
 	"io"
 	"log"
 	"net"
@@ -24,6 +25,7 @@ type ProxyHttpServer struct {
 	respHandlers    []RespHandler
 	httpsHandlers   []HttpsHandler
 	Tr              *http.Transport
+	Ca              *tls.Certificate
 	// ConnectDial will be used to create TCP connections for CONNECT requests
 	// if nil Tr.Dial will be used
 	ConnectDial func(network string, addr string) (net.Conn, error)
@@ -158,5 +160,6 @@ func NewProxyHttpServer() *ProxyHttpServer {
 			Proxy: http.ProxyFromEnvironment},
 	}
 	proxy.ConnectDial = dialerFromEnv(&proxy)
+	proxy.Ca = &GoproxyCa
 	return &proxy
 }
