@@ -22,6 +22,9 @@ type ProxyCtx struct {
 	// Will connect a request to a response
 	Session int64
 	proxy   *ProxyHttpServer
+	// Auth
+	Username string
+	Password string
 	// Bandwidth
 	Inbounce  int64
 	Outbounce int64
