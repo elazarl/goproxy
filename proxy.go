@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"os"
 	"regexp"
 	"sync/atomic"
@@ -23,6 +24,7 @@ type ProxyHttpServer struct {
 	reqHandlers     []ReqHandler
 	respHandlers    []RespHandler
 	httpsHandlers   []HttpsHandler
+	doneHandlers    []DoneHandler
 	Tr              *http.Transport
 	// ConnectDial will be used to create TCP connections for CONNECT requests
 	// if nil Tr.Dial will be used
@@ -70,6 +72,12 @@ func (proxy *ProxyHttpServer) filterResponse(respOrig *http.Response, ctx *Proxy
 	}
 	return
 }
+func (proxy *ProxyHttpServer) onDone(ctx *ProxyCtx) {
+	for _, h := range proxy.doneHandlers {
+		h.Handle(ctx)
+	}
+	return
+}
 
 func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 	r.RequestURI = "" // this must be reset when serving a request with the client
@@ -107,6 +115,13 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 		r, resp := proxy.filterRequest(r, ctx)
 
+		// bandwidth
+		var dumpData []byte
+		if r != nil {
+			dumpData, _ = httputil.DumpRequest(r, true)
+			ctx.AddBandwidth(int64(len(dumpData)), true)
+		}
+
 		if resp == nil {
 			removeProxyHeaders(ctx, r)
 			resp, err = ctx.RoundTrip(r)
@@ -116,6 +131,8 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 				if resp == nil {
 					ctx.Logf("error read response %v %v:", r.URL.Host, err.Error())
 					http.Error(w, err.Error(), 500)
+
+					proxy.onDone(ctx)
 					return
 				}
 			}
@@ -136,11 +153,18 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 		copyHeaders(w.Header(), resp.Header)
 		w.WriteHeader(resp.StatusCode)
+
+		// bandwidth
+		dumpData, _ = httputil.DumpResponse(resp, true)
+		ctx.AddBandwidth(int64(len(dumpData)), false)
+
 		nr, err := io.Copy(w, resp.Body)
 		if err := resp.Body.Close(); err != nil {
 			ctx.Warnf("Can't close response body %v", err)
 		}
 		ctx.Logf("Copied %v bytes to client error=%v", nr, err)
+
+		proxy.onDone(ctx)
 	}
 }
 

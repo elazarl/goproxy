@@ -104,21 +104,29 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 
 		targetTCP, targetOK := targetSiteCon.(*net.TCPConn)
 		proxyClientTCP, clientOK := proxyClient.(*net.TCPConn)
-		if targetOK && clientOK {
-			go copyAndClose(ctx, targetTCP, proxyClientTCP)
-			go copyAndClose(ctx, proxyClientTCP, targetTCP)
-		} else {
-			go func() {
+
+		// start a goroutine to handle connections
+		go func() {
+			if targetOK && clientOK {
 				var wg sync.WaitGroup
 				wg.Add(2)
-				go copyOrWarn(ctx, targetSiteCon, proxyClient, &wg)
-				go copyOrWarn(ctx, proxyClient, targetSiteCon, &wg)
+				go copyAndClose(ctx, targetTCP, proxyClientTCP, true, &wg)
+				go copyAndClose(ctx, proxyClientTCP, targetTCP, false, &wg)
+				wg.Wait()
+
+				proxy.onDone(ctx)
+			} else {
+				var wg sync.WaitGroup
+				wg.Add(2)
+				go copyOrWarn(ctx, targetSiteCon, proxyClient, true, &wg)
+				go copyOrWarn(ctx, proxyClient, targetSiteCon, false, &wg)
 				wg.Wait()
 				proxyClient.Close()
 				targetSiteCon.Close()
 
-			}()
-		}
+				proxy.onDone(ctx)
+			}
+		}()
 
 	case ConnectHijack:
 		ctx.Logf("Hijacking CONNECT to %s", host)
@@ -286,20 +294,29 @@ func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
 	}
 }
 
-func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader, wg *sync.WaitGroup) {
-	if _, err := io.Copy(dst, src); err != nil {
+func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader, isInbounce bool, wg *sync.WaitGroup) {
+	written, err := io.Copy(dst, src)
+	if err != nil {
 		ctx.Warnf("Error copying to client: %s", err)
 	}
+
+	ctx.AddBandwidth(written, isInbounce)
+
 	wg.Done()
 }
 
-func copyAndClose(ctx *ProxyCtx, dst, src *net.TCPConn) {
-	if _, err := io.Copy(dst, src); err != nil {
+func copyAndClose(ctx *ProxyCtx, dst, src *net.TCPConn, isInbounce bool, wg *sync.WaitGroup) {
+	written, err := io.Copy(dst, src)
+	if err != nil {
 		ctx.Warnf("Error copying to client: %s", err)
 	}
 
-	dst.CloseWrite()
-	src.CloseRead()
+	ctx.AddBandwidth(written, isInbounce)
+
+	err = dst.CloseWrite()
+	err = src.CloseRead()
+
+	wg.Done()
 }
 
 func dialerFromEnv(proxy *ProxyHttpServer) func(network, addr string) (net.Conn, error) {
