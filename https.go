@@ -306,6 +306,8 @@ func copyAndClose(ctx *ProxyCtx, dst, src *net.TCPConn, wg *sync.WaitGroup) {
 		ctx.Warnf("Error copying to client: %s", err)
 	}
 
+	dst.CloseWrite()
+	src.CloseRead()
 	wg.Done()
 }
 
