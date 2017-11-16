@@ -50,10 +50,12 @@ func isEof(r *bufio.Reader) bool {
 	return false
 }
 
-func (proxy *ProxyHttpServer) filterRequest(r *http.Request, ctx *ProxyCtx) (req *http.Request, resp *http.Response) {
-	req = r
+func (proxy *ProxyHttpServer) filterRequest(reqOrig *http.Request, ctx *ProxyCtx) (req *http.Request, resp *http.Response) {
+	req = reqOrig
+	ctx.Req = req
 	for _, h := range proxy.reqHandlers {
-		req, resp = h.Handle(r, ctx)
+		req, resp = h.Handle(req, ctx)
+		ctx.Req = req
 		// non-nil resp means the handler decided to skip sending the request
 		// and return canned response instead.
 		if resp != nil {

@@ -3,6 +3,7 @@ package goproxy_test
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
@@ -121,6 +122,44 @@ func TestAlwaysHook(t *testing.T) {
 		req.URL.Path = "/bobo"
 		return req, nil
 	})
+	client, l := oneShotProxy(proxy, t)
+	defer l.Close()
+
+	if result := string(getOrFail(srv.URL+("/momo"), client, t)); result != "bobo" {
+		t.Error("Redirecting all requests from 127.0.0.1 to bobo, didn't work." +
+			" (Might break if Go's client sets RemoteAddr to IPv6 address). Got: " +
+			result)
+	}
+}
+
+func TestReplaceRequest(t *testing.T) {
+	type contextKey string
+	const testkey1 contextKey = "testkey1"
+	proxy := goproxy.NewProxyHttpServer()
+
+	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		req.URL.Path = "/bobo"
+		oldCtx := req.Context()
+		newCtx := context.WithValue(oldCtx, testkey1, "testvalue1")
+		return req.WithContext(newCtx), nil
+	})
+	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		if req.URL.Path != "/bobo" {
+			t.Error("The previous request is not provided")
+		}
+
+		if ctx.Req.URL.Path != "/bobo" {
+			t.Error("The previous request in ProxyCtx is not provided")
+		}
+
+		reqCtx := req.Context()
+		s, ok := reqCtx.Value(testkey1).(string)
+		if !ok || s != "testvalue1" {
+			t.Error("The previous context in the request is not provided")
+		}
+		return req, nil
+	})
+
 	client, l := oneShotProxy(proxy, t)
 	defer l.Close()
 
