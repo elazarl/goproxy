@@ -1,6 +1,7 @@
 package goproxy
 
 import (
+	"net"
 	"net/http"
 	"regexp"
 	"sync/atomic"
@@ -14,6 +15,8 @@ type ProxyCtx struct {
 	// Will contain the remote server's response (if available. nil if the request wasn't send yet)
 	Resp         *http.Response
 	RoundTripper RoundTripper
+	ConnectDial  func(network string, addr string) (net.Conn, error)
+	ProxyURL     string
 	// will contain the recent error that occured while trying to send receive or parse traffic
 	Error error
 	// A handle for the user to keep data in the context, from the call of ReqHandler to the
@@ -45,6 +48,16 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 		return ctx.RoundTripper.RoundTrip(req, ctx)
 	}
 	return ctx.proxy.Tr.RoundTrip(req)
+}
+
+func (ctx *ProxyCtx) connectDial(network, addr string) (net.Conn, error) {
+	if ctx.ConnectDial != nil {
+		return ctx.ConnectDial(network, addr)
+	}
+	if ctx.proxy.ConnectDial != nil {
+		return ctx.proxy.ConnectDial(network, addr)
+	}
+	return ctx.proxy.dial(network, addr)
 }
 
 func (ctx *ProxyCtx) printf(msg string, argv ...interface{}) {
