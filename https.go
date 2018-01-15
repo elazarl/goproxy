@@ -110,7 +110,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		} else {
 			go func() {
 				var wg sync.WaitGroup
-				wg.Add(2)
+				wg.Add(1)
 				go copyOrWarn(ctx, targetSiteCon, proxyClient, &wg)
 				go copyOrWarn(ctx, proxyClient, targetSiteCon, &wg)
 				wg.Wait()
