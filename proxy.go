@@ -135,9 +135,14 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		// We keep the original body to remove the header only if things changed.
 		// This will prevent problems with HEAD requests where there's no body, yet,
 		// the Content-Length header should be set.
-		if origBody != resp.Body {
-			resp.Header.Del("Content-Length")
-		}
+
+		// Note from Benji
+		// The way we use goproxy, I do not think this is neede for us
+		// https://github.com/SpectoLabs/hoverfly/issues/697
+
+		// if origBody != resp.Body {
+		// resp.Header.Del("Content-Length")
+		// }
 		copyHeaders(w.Header(), resp.Header)
 		w.WriteHeader(resp.StatusCode)
 		nr, err := io.Copy(w, resp.Body)
