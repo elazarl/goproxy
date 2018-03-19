@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/SpectoLabs/goproxy"
 	"github.com/rogpeppe/go-charset/charset"
 	_ "github.com/rogpeppe/go-charset/data"
 	"github.com/elazarl/goproxy"
