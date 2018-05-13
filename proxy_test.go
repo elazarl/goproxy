@@ -766,6 +766,81 @@ func TestHasGoproxyCA(t *testing.T) {
 	}
 }
 
+type TestCertStorage struct {
+	certs  map[string]*tls.Certificate
+	loads  int
+	stores int
+}
+
+func (tcs *TestCertStorage) Store(hostname string, cert *tls.Certificate) {
+	tcs.stores++
+	tcs.certs[hostname] = cert
+}
+
+func (tcs *TestCertStorage) Load(hostname string) *tls.Certificate {
+	tcs.loads++
+	return tcs.certs[hostname]
+}
+
+func (tcs *TestCertStorage) statLoads() int {
+	return tcs.loads
+}
+
+func (tcs *TestCertStorage) statStores() int {
+	return tcs.stores
+}
+
+func newTestCertStorage() *TestCertStorage {
+	tcs := &TestCertStorage{}
+	tcs.certs = make(map[string]*tls.Certificate)
+
+	return tcs
+}
+
+func TestProxyWithCertStorage(t *testing.T) {
+	tcs := newTestCertStorage()
+	t.Logf("TestProxyWithCertStorage started")
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.CertStore = tcs
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		req.URL.Path = "/bobo"
+		return req, nil
+	})
+
+	s := httptest.NewServer(proxy)
+
+	proxyUrl, _ := url.Parse(s.URL)
+	goproxyCA := x509.NewCertPool()
+	goproxyCA.AddCert(goproxy.GoproxyCa.Leaf)
+
+	tr := &http.Transport{TLSClientConfig: &tls.Config{RootCAs: goproxyCA}, Proxy: http.ProxyURL(proxyUrl)}
+	client := &http.Client{Transport: tr}
+
+	if resp := string(getOrFail(https.URL+"/bobo", client, t)); resp != "bobo" {
+		t.Error("Wrong response when mitm", resp, "expected bobo")
+	}
+
+	if tcs.statLoads() != 1 {
+		t.Fatal("TestCertStorage.Load has not been called")
+	}
+	if tcs.statStores() != 1 {
+		t.Fatal("TestCertStorage.Store has not been called")
+	}
+
+	// Another round - this time the certificate can be loaded
+	if resp := string(getOrFail(https.URL+"/bobo", client, t)); resp != "bobo" {
+		t.Error("Wrong response when mitm", resp, "expected bobo")
+	}
+
+	if tcs.statLoads() != 2 {
+		t.Fatal("TestCertStorage.Load has not been called")
+	}
+	if tcs.statStores() != 1 {
+		t.Fatal("TestCertStorage.Store has not been called")
+	}
+}
+
 func TestHttpsMitmURLRewrite(t *testing.T) {
 	scheme := "https"
 
