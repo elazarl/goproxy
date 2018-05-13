@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"fmt"
 )
 
 type ConnectActionLiteral int
@@ -65,7 +66,7 @@ func (proxy *ProxyHttpServer) connectDial(network, addr string) (c net.Conn, err
 }
 
 func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request) {
-	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy}
+	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy, certStore: proxy.CertStore}
 
 	hij, ok := w.(http.Hijacker)
 	if !ok {
@@ -398,14 +399,26 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxy(https_proxy string) func(net
 
 func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls.Config, error) {
 	return func(host string, ctx *ProxyCtx) (*tls.Config, error) {
+		var err error
+		var cert *tls.Certificate
+
+		hostname := stripPort(host)
 		config := *defaultTLSConfig
 		ctx.Logf("signing for %s", stripPort(host))
-		cert, err := signHost(*ca, []string{stripPort(host)})
-		if err != nil {
-			ctx.Warnf("Cannot sign host certificate with provided CA: %s", err)
-			return nil, err
+		if ctx.certStore != nil {
+			cert = ctx.certStore.Load(hostname)
 		}
-		config.Certificates = append(config.Certificates, cert)
+		if cert == nil {
+			cert, err = signHost(*ca, []string{hostname})
+			if err != nil {
+				ctx.Warnf("Cannot sign host certificate with provided CA: %s", err)
+				return nil, err
+			}
+			if ctx.certStore != nil {
+				ctx.certStore.Store(hostname, cert)
+			}
+		}
+		config.Certificates = append(config.Certificates, *cert)
 		return &config, nil
 	}
 }
