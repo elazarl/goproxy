@@ -3,12 +3,13 @@ package goproxy
 import (
 	"bufio"
 	"io"
-	"log"
 	"net"
 	"net/http"
-	"os"
 	"regexp"
 	"sync/atomic"
+
+	"github.com/sirupsen/logrus"
+	"github.com/x-cray/logrus-prefixed-formatter"
 )
 
 // The basic proxy type. Implements http.Handler.
@@ -20,7 +21,7 @@ type ProxyHttpServer struct {
 	KeepDestinationHeaders bool
 	// setting Verbose to true will log information on each request sent to the proxy
 	Verbose         bool
-	Logger          *log.Logger
+	Logger          *logrus.Entry
 	NonproxyHandler http.Handler
 	reqHandlers     []ReqHandler
 	respHandlers    []RespHandler
@@ -150,8 +151,12 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 // NewProxyHttpServer creates and returns a proxy server, logging to stderr by default
 func NewProxyHttpServer() *ProxyHttpServer {
+	l := logrus.New()
+	l.Formatter = new(prefixed.TextFormatter)
+	l.Level = logrus.DebugLevel
+
 	proxy := ProxyHttpServer{
-		Logger:        log.New(os.Stderr, "", log.LstdFlags),
+		Logger:        l.WithFields(logrus.Fields{"prefix": "goproxy"}),
 		reqHandlers:   []ReqHandler{},
 		respHandlers:  []RespHandler{},
 		httpsHandlers: []HttpsHandler{},
