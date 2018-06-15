@@ -2,6 +2,7 @@ package goproxy
 
 import (
 	"crypto/tls"
+	"net"
 	"net/http"
 	"regexp"
 )
@@ -23,6 +24,14 @@ type ProxyCtx struct {
 	Session   int64
 	certStore CertStorage
 	proxy     *ProxyHttpServer
+
+	// Username obtained on auth phase (if any)
+	User string
+	// Password obtained on auth phase (if any)
+	Password string
+	// ConnectDial will be used to create TCP connections for CONNECT requests
+	// if nil profxy.Dial will be used
+	ConnectDial func(network string, addr string) (net.Conn, error)
 }
 
 type RoundTripper interface {
@@ -90,4 +99,12 @@ func (ctx *ProxyCtx) Charset() string {
 		return ""
 	}
 	return charsets[1]
+}
+
+func (ctx *ProxyCtx) connectDial(network string, addr string) (net.Conn, error) {
+	if ctx.ConnectDial != nil {
+		return ctx.ConnectDial(network, addr)
+	}
+
+	return ctx.proxy.dial(network, addr)
 }

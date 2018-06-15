@@ -30,21 +30,22 @@ func BasicUnauthorized(req *http.Request, realm string) *http.Response {
 
 var proxyAuthorizationHeader = "Proxy-Authorization"
 
-func auth(req *http.Request, f func(user, passwd string) bool) bool {
+func auth(req *http.Request, f func(user, passwd string) bool) (string, string, bool) {
 	authheader := strings.SplitN(req.Header.Get(proxyAuthorizationHeader), " ", 2)
 	req.Header.Del(proxyAuthorizationHeader)
 	if len(authheader) != 2 || authheader[0] != "Basic" {
-		return false
+		return "", "", false
 	}
 	userpassraw, err := base64.StdEncoding.DecodeString(authheader[1])
 	if err != nil {
-		return false
+		return "", "", false
 	}
 	userpass := strings.SplitN(string(userpassraw), ":", 2)
 	if len(userpass) != 2 {
-		return false
+		return "", "", false
 	}
-	return f(userpass[0], userpass[1])
+
+	return userpass[0], userpass[1], f(userpass[0], userpass[1])
 }
 
 // Basic returns a basic HTTP authentication handler for requests
@@ -52,9 +53,14 @@ func auth(req *http.Request, f func(user, passwd string) bool) bool {
 // You probably want to use auth.ProxyBasic(proxy) to enable authentication for all proxy activities
 func Basic(realm string, f func(user, passwd string) bool) goproxy.ReqHandler {
 	return goproxy.FuncReqHandler(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-		if !auth(req, f) {
+		user, pass, ok := auth(req, f)
+		if !ok {
 			return nil, BasicUnauthorized(req, realm)
 		}
+
+		ctx.User = user
+		ctx.Password = pass
+
 		return req, nil
 	})
 }
@@ -64,10 +70,15 @@ func Basic(realm string, f func(user, passwd string) bool) goproxy.ReqHandler {
 // You probably want to use auth.ProxyBasic(proxy) to enable authentication for all proxy activities
 func BasicConnect(realm string, f func(user, passwd string) bool) goproxy.HttpsHandler {
 	return goproxy.FuncHttpsHandler(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
-		if !auth(ctx.Req, f) {
+		user, pass, ok := auth(ctx.Req, f)
+		if !ok {
 			ctx.Resp = BasicUnauthorized(ctx.Req, realm)
 			return goproxy.RejectConnect, host
 		}
+
+		ctx.User = user
+		ctx.Password = pass
+
 		return goproxy.OkConnect, host
 	})
 }
