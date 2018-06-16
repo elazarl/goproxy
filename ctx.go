@@ -30,7 +30,7 @@ type ProxyCtx struct {
 	// Password obtained on auth phase (if any)
 	Password string
 	// ConnectDial will be used to create TCP connections for CONNECT requests
-	// if nil profxy.Dial will be used
+	// if nil proxy.Dial will be used
 	ConnectDial func(network string, addr string) (net.Conn, error)
 }
 
