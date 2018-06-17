@@ -32,6 +32,8 @@ type ProxyCtx struct {
 	// ConnectDial will be used to create TCP connections for CONNECT requests
 	// if nil proxy.Dial will be used
 	ConnectDial func(network string, addr string) (net.Conn, error)
+	// OnDone called on request|connect proxyng done if not nil
+	OnDone func()
 }
 
 type RoundTripper interface {

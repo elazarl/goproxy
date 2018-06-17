@@ -98,12 +98,12 @@ func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 
 // Standard net/http function. Shouldn't be used directly, http.Serve will use it.
 func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy}
+
 	//r.Header["X-Forwarded-For"] = w.RemoteAddr()
 	if r.Method == "CONNECT" {
-		proxy.handleHttps(w, r)
+		proxy.handleHttps(w, r, ctx)
 	} else {
-		ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy}
-
 		var err error
 		ctx.Logf("Got request %v %v %v %v", r.URL.Path, r.Host, r.Method, r.URL.String())
 		if !r.URL.IsAbs() {
@@ -158,6 +158,10 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			ctx.Warnf("Can't close response body %v", err)
 		}
 		ctx.Logf("Copied %v bytes to client error=%v", nr, err)
+	}
+
+	if ctx.OnDone != nil {
+		ctx.OnDone()
 	}
 }
 
