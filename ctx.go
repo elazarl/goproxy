@@ -34,6 +34,9 @@ type ProxyCtx struct {
 	ConnectDial func(network string, addr string) (net.Conn, error)
 	// OnDone called on request|connect proxyng done if not nil
 	OnDone func()
+	// Resolve is a function called to convert destination name to destination address.
+	// If nil proxy.Resolve is used.
+	Resolve func(addr string) (*net.TCPAddr, error)
 }
 
 type RoundTripper interface {

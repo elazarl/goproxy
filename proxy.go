@@ -30,6 +30,9 @@ type ProxyHttpServer struct {
 	// if nil Tr.Dial will be used
 	ConnectDial func(network string, addr string) (net.Conn, error)
 	CertStore   CertStorage
+	// Resolver method Resolve will be used to convert destination name to destination address.
+	// If nil net.ResolveTCPAddr will be used for relosolving.
+	Resolver Resolver
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)

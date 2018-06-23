@@ -54,7 +54,24 @@ func (proxy *ProxyHttpServer) dial(network, addr string) (c net.Conn, err error)
 	if proxy.Tr.Dial != nil {
 		return proxy.Tr.Dial(network, addr)
 	}
-	return net.Dial(network, addr)
+
+	if proxy.Resolver != nil {
+
+	}
+
+	dst, err := proxy.resolve(addr)
+	if err != nil {
+		return nil, err
+	}
+	return net.DialTCP("tcp", &net.TCPAddr{IP: net.IPv4zero}, dst)
+}
+
+func (proxy *ProxyHttpServer) resolve(addr string) (*net.TCPAddr, error) {
+	if proxy.Resolver != nil {
+		return proxy.Resolver.Resolve(addr)
+	}
+
+	return net.ResolveTCPAddr("tcp", addr)
 }
 
 func (proxy *ProxyHttpServer) connectDial(network, addr string) (c net.Conn, err error) {
