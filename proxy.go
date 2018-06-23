@@ -29,6 +29,9 @@ type ProxyHttpServer struct {
 	// ConnectDial will be used to create TCP connections for CONNECT requests
 	// if nil Tr.Dial will be used
 	ConnectDial func(network string, addr string) (net.Conn, error)
+	// Resolver method Resolve will be used to convert destination name to destination address.
+	// If nil net.ResolveTCPAddr will be used for relosolving.
+	Resolver Resolver
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
