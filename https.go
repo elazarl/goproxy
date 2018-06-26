@@ -243,11 +243,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				// Since we don't know the length of resp, return chunked encoded response
 				// TODO: use a more reasonable scheme
 
-				// Note from Benji
-				// The way we use goproxy, I do not think this is neede for us
-				// https://github.com/SpectoLabs/hoverfly/issues/697
-
-				// resp.Header.Del("Content-Length")
+				resp.Header.Del("Content-Length")
 				resp.Header.Set("Transfer-Encoding", "chunked")
 				if err := resp.Header.Write(rawClientTls); err != nil {
 					ctx.Warnf("Cannot write TLS response header from mitm'd client: %v", err)
