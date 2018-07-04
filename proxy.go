@@ -2,6 +2,7 @@ package goproxy
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -149,7 +150,8 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 		copyHeaders(w.Header(), resp.Header, proxy.KeepDestinationHeaders)
 		w.WriteHeader(resp.StatusCode)
-		nr, err := io.Copy(w, resp.Body)
+		//nr, err := io.Copy(w, resp.Body)
+		nr, err := loopCopy(fmt.Sprintf("%9.9d", atomic.AddUint64(&serverID, 1)), "out", w, resp.Body)
 		if err := resp.Body.Close(); err != nil {
 			ctx.Warnf("Can't close response body %v", err)
 		}
