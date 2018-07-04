@@ -118,17 +118,23 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 	//r.Header["X-Forwarded-For"] = w.RemoteAddr()
 	if r.Method == "CONNECT" {
+		zap.L().Info("here")
 		proxy.handleHttps(w, r, ctx)
 	} else {
+		zap.L().Info("here")
 		var err error
 		ctx.Logf("Got request %v %v %v %v", r.URL.Path, r.Host, r.Method, r.URL.String())
 		if !r.URL.IsAbs() {
+			zap.L().Info("here")
 			proxy.NonproxyHandler.ServeHTTP(w, r)
 			return
 		}
+		zap.L().Info("here")
 		r, resp := proxy.filterRequest(r, ctx)
+		zap.L().Info("here")
 
 		if resp == nil {
+			zap.L().Info("here")
 			removeProxyHeaders(ctx, r)
 			resp, err = ctx.RoundTrip(r)
 			if err != nil {
