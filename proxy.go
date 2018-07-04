@@ -9,8 +9,6 @@ import (
 	"os"
 	"regexp"
 	"sync/atomic"
-
-	"go.uber.org/zap"
 )
 
 // The basic proxy type. Implements http.Handler.
@@ -64,9 +62,7 @@ func isEof(r *bufio.Reader) bool {
 
 func (proxy *ProxyHttpServer) filterRequest(r *http.Request, ctx *ProxyCtx) (req *http.Request, resp *http.Response) {
 	req = r
-	zap.L().Info("here", zap.Int("handlers", len(proxy.reqHandlers)))
 	for _, h := range proxy.reqHandlers {
-		zap.L().Info("here")
 		req, resp = h.Handle(r, ctx)
 		// non-nil resp means the handler decided to skip sending the request
 		// and return canned response instead.
@@ -117,23 +113,17 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 	//r.Header["X-Forwarded-For"] = w.RemoteAddr()
 	if r.Method == "CONNECT" {
-		zap.L().Info("here")
 		proxy.handleHttps(w, r, ctx)
 	} else {
-		zap.L().Info("here")
 		var err error
 		ctx.Logf("Got request %v %v %v %v", r.URL.Path, r.Host, r.Method, r.URL.String())
 		if !r.URL.IsAbs() {
-			zap.L().Info("here")
 			proxy.NonproxyHandler.ServeHTTP(w, r)
 			return
 		}
-		zap.L().Info("here")
 		r, resp := proxy.filterRequest(r, ctx)
-		zap.L().Info("here")
 
 		if resp == nil {
-			zap.L().Info("here")
 			removeProxyHeaders(ctx, r)
 			resp, err = ctx.RoundTrip(r)
 			if err != nil {
