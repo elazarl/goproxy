@@ -2,50 +2,17 @@ package goproxy
 
 import (
 	"io"
-
-	"go.uber.org/zap"
 )
 
 func passPortion(
-	server string,
-	dir string,
 	in io.Reader,
 	out io.Writer,
 	buf []byte,
 ) (n int, done bool, readErr error, writeErr error) {
-	zap.L().Debug(
-		"start read",
-		zap.String("conn", server),
-		zap.String("dir", dir),
-	)
-
 	n, readErr = in.Read(buf)
 
-	zap.L().Debug(
-		"done read",
-		zap.String("conn", server),
-		zap.String("dir", dir),
-		zap.Int("bytes", n),
-		zap.Error(readErr),
-	)
 	if n > 0 {
-		zap.L().Debug(
-			"start write",
-			zap.String("conn", server),
-			zap.String("dir", dir),
-			zap.String("data", string(buf[:n])),
-		)
-
 		_, writeErr = out.Write(buf[:n])
-
-		zap.L().Debug(
-			"done write",
-			zap.String("conn", server),
-			zap.String("dir", dir),
-			zap.Int("bytes", n),
-			zap.Error(writeErr),
-		)
-
 		if writeErr != nil {
 			n = 0
 			return
@@ -66,8 +33,6 @@ func passPortion(
 }
 
 func loopCopy(
-	server string,
-	dir string,
 	out io.Writer,
 	in io.Reader,
 ) (int, error) {
@@ -75,43 +40,15 @@ func loopCopy(
 	total := 0
 
 	for {
-		n, done, readErr, writeErr := passPortion(server, dir, in, out, buf)
+		n, done, readErr, writeErr := passPortion(in, out, buf)
 		total += n
 
 		if readErr != nil {
-			zap.L().Debug(
-				"reading",
-				zap.String("conn", server),
-				zap.String("dir", dir),
-				zap.Bool("done", done),
-				zap.Int("bytes", n),
-				zap.Int("total", total),
-				zap.Error(readErr),
-			)
 			return total, readErr
 		}
 		if writeErr != nil {
-			zap.L().Error(
-				"writing",
-				zap.String("conn", server),
-				zap.String("dir", dir),
-				zap.Bool("done", done),
-				zap.Int("bytes", n),
-				zap.Int("total", total),
-				zap.Error(writeErr),
-			)
-			// close the whole socket so the reading goroutine will know
 			return total, writeErr
 		}
-
-		zap.L().Debug(
-			"passed",
-			zap.String("conn", server),
-			zap.String("dir", dir),
-			zap.Bool("done", done),
-			zap.Int("bytes", n),
-			zap.Int("total", total),
-		)
 
 		if done {
 			return total, nil
