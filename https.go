@@ -126,8 +126,8 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			go func() {
 				var wg sync.WaitGroup
 				wg.Add(2)
-				go copyOrWarn(ctx, targetSiteCon, proxyClient, &wg, "to")
-				go copyOrWarn(ctx, proxyClient, targetSiteCon, &wg, "from")
+				go copyOrWarn(ctx, targetSiteCon, proxyClient, &wg, "from")
+				go copyOrWarn(ctx, proxyClient, targetSiteCon, &wg, " to ")
 				wg.Wait()
 				proxyClient.Close()
 				targetSiteCon.Close()
