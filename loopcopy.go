@@ -33,6 +33,7 @@ func passPortion(
 			"start write",
 			zap.String("conn", server),
 			zap.String("dir", dir),
+			zap.String("data", string(buf[:n])),
 		)
 
 		_, writeErr = out.Write(buf[:n])
