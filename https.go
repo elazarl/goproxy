@@ -120,15 +120,16 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 
 		targetTCP, targetOK := targetSiteCon.(*net.TCPConn)
 		proxyClientTCP, clientOK := proxyClient.(*net.TCPConn)
+		server := fmt.Sprintf("%9.9d", atomic.AddUint64(&serverID, 1))
 		if targetOK && clientOK {
-			go copyAndClose(ctx, targetTCP, proxyClientTCP, "in")
-			go copyAndClose(ctx, proxyClientTCP, targetTCP, "out")
+			go copyAndClose(ctx, targetTCP, proxyClientTCP, server, "in")
+			go copyAndClose(ctx, proxyClientTCP, targetTCP, server, "out")
 		} else {
 			go func() {
 				var wg sync.WaitGroup
 				wg.Add(2)
-				go copyOrWarn(ctx, targetSiteCon, proxyClient, &wg, "in")
-				go copyOrWarn(ctx, proxyClient, targetSiteCon, &wg, "out")
+				go copyOrWarn(ctx, targetSiteCon, proxyClient, &wg, server, "in")
+				go copyOrWarn(ctx, proxyClient, targetSiteCon, &wg, server, "out")
 				wg.Wait()
 				proxyClient.Close()
 				targetSiteCon.Close()
@@ -304,9 +305,9 @@ func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
 
 var serverID = uint64(0)
 
-func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader, wg *sync.WaitGroup, dir string) {
+func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader, wg *sync.WaitGroup, server string, dir string) {
 	// n, err := io.Copy(dst, src)
-	n, err := loopCopy(fmt.Sprintf("%9.9d", atomic.AddUint64(&serverID, 1)), dir, dst, src)
+	n, err := loopCopy(server, dir, dst, src)
 	if err != nil {
 		ctx.Warnf("Error copying to client: %s", err)
 	}
@@ -315,9 +316,9 @@ func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader, wg *sync.WaitGroup,
 	ctx.Logf("Passed %s client: %d", dir, n)
 }
 
-func copyAndClose(ctx *ProxyCtx, dst, src *net.TCPConn, dir string) {
+func copyAndClose(ctx *ProxyCtx, dst, src *net.TCPConn, server string, dir string) {
 	// n, err := io.Copy(dst, src)
-	n, err := loopCopy(fmt.Sprintf("%9.9d", atomic.AddUint64(&serverID, 1)), dir, dst, src)
+	n, err := loopCopy(server, dir, dst, src)
 	if err != nil {
 		ctx.Warnf("Error copying to client: %s", err)
 	}
