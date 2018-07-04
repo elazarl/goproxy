@@ -34,6 +34,9 @@ type ProxyHttpServer struct {
 	// Resolver method Resolve will be used to convert destination name to destination address.
 	// If nil net.ResolveTCPAddr will be used for relosolving.
 	Resolver Resolver
+	// ConnectOK is a message will be passed along with code 200 as successful CONNECT answer
+	// If empty string "HTTP/1.0 200 OK\r\n\r\n" will be used
+	ConnectOK []byte
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)

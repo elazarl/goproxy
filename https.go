@@ -30,6 +30,10 @@ const (
 )
 
 var (
+	msgConnectOK = []byte("HTTP/1.0 200 OK\r\n\r\n")
+)
+
+var (
 	OkConnect       = &ConnectAction{Action: ConnectAccept, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
 	MitmConnect     = &ConnectAction{Action: ConnectMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
 	HTTPMitmConnect = &ConnectAction{Action: ConnectHTTPMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
@@ -116,7 +120,12 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			return
 		}
 		ctx.Logf("Accepting CONNECT to %s", host)
-		proxyClient.Write([]byte("HTTP/1.0 200 Connection established\r\n\r\n"))
+
+		if ctx.proxy.ConnectOK != nil {
+			proxyClient.Write(ctx.proxy.ConnectOK)
+		} else {
+			proxyClient.Write(msgConnectOK)
+		}
 
 		targetTCP, targetOK := targetSiteCon.(*net.TCPConn)
 		proxyClientTCP, clientOK := proxyClient.(*net.TCPConn)
