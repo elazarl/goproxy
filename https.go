@@ -126,8 +126,8 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			go func() {
 				var wg sync.WaitGroup
 				wg.Add(2)
-				go copyOrWarn(ctx, targetSiteCon, proxyClient, &wg)
-				go copyOrWarn(ctx, proxyClient, targetSiteCon, &wg)
+				go copyOrWarn(ctx, targetSiteCon, proxyClient, &wg, "to")
+				go copyOrWarn(ctx, proxyClient, targetSiteCon, &wg, "from")
 				wg.Wait()
 				proxyClient.Close()
 				targetSiteCon.Close()
@@ -301,14 +301,14 @@ func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
 	}
 }
 
-func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader, wg *sync.WaitGroup) {
+func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader, wg *sync.WaitGroup, dir string) {
 	n, err := io.Copy(dst, src)
 	if err != nil {
 		ctx.Warnf("Error copying to client: %s", err)
 	}
 	wg.Done()
 
-	ctx.Logf("Passed to client: %d", n)
+	ctx.Logf("Passed %s client: %d", dir, n)
 }
 
 func copyAndClose(ctx *ProxyCtx, dst, src *net.TCPConn) {
@@ -317,7 +317,7 @@ func copyAndClose(ctx *ProxyCtx, dst, src *net.TCPConn) {
 		ctx.Warnf("Error copying to client: %s", err)
 	}
 
-	ctx.Logf("Passed to client: %d", n)
+	ctx.Logf("Passed from %s to %s: %d", src.RemoteAddr().String(), dst.RemoteAddr().String(), n)
 
 	dst.CloseWrite()
 	src.CloseRead()
