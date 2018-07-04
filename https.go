@@ -273,7 +273,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					return
 				}
 				chunked := newChunkedWriter(rawClientTls)
-				if _, err := io.Copy(chunked, resp.Body); err != nil {
+				if _, err := loopCopy(chunked, resp.Body); err != nil {
 					ctx.Warnf("Cannot write TLS response body from mitm'd client: %v", err)
 					return
 				}
