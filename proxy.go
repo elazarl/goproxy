@@ -9,6 +9,8 @@ import (
 	"os"
 	"regexp"
 	"sync/atomic"
+
+	"go.uber.org/zap"
 )
 
 // The basic proxy type. Implements http.Handler.
@@ -62,7 +64,9 @@ func isEof(r *bufio.Reader) bool {
 
 func (proxy *ProxyHttpServer) filterRequest(r *http.Request, ctx *ProxyCtx) (req *http.Request, resp *http.Response) {
 	req = r
+	zap.L().Info("here", zap.Int("handlers", len(proxy.reqHandlers)))
 	for _, h := range proxy.reqHandlers {
+		zap.L().Info("here")
 		req, resp = h.Handle(r, ctx)
 		// non-nil resp means the handler decided to skip sending the request
 		// and return canned response instead.
