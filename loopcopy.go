@@ -39,6 +39,8 @@ func loopCopy(
 	id string,
 	logger *log.Logger,
 ) (int, error) {
+	logger.Printf("%s: started")
+
 	buf := make([]byte, 16384)
 	total := 0
 
