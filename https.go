@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
@@ -129,14 +130,14 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		targetTCP, targetOK := targetSiteCon.(*net.TCPConn)
 		proxyClientTCP, clientOK := proxyClient.(*net.TCPConn)
 		if targetOK && clientOK {
-			go copyAndClose(ctx, targetTCP, proxyClientTCP)
-			go copyAndClose(ctx, proxyClientTCP, targetTCP)
+			go copyAndClose(ctx, targetTCP, proxyClientTCP, fmt.Sprintf("%d https in", ctx.Session))
+			go copyAndClose(ctx, proxyClientTCP, targetTCP, fmt.Sprintf("%d https out", ctx.Session))
 		} else {
 			go func() {
 				var wg sync.WaitGroup
 				wg.Add(2)
-				go copyOrWarn(ctx, targetSiteCon, proxyClient, &wg)
-				go copyOrWarn(ctx, proxyClient, targetSiteCon, &wg)
+				go copyOrWarn(ctx, targetSiteCon, proxyClient, fmt.Sprintf("%d https-non-tcp in", ctx.Session), &wg)
+				go copyOrWarn(ctx, proxyClient, targetSiteCon, fmt.Sprintf("%d https-non-tcp out", ctx.Session), &wg)
 				wg.Wait()
 				proxyClient.Close()
 				targetSiteCon.Close()
@@ -273,7 +274,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					return
 				}
 				chunked := newChunkedWriter(rawClientTls)
-				if _, err := loopCopy(chunked, resp.Body); err != nil {
+				if _, err := loopCopy(chunked, resp.Body, fmt.Sprintf("%d https-chunked out", ctx.Session), ctx.proxy.Logger); err != nil {
 					ctx.Warnf("Cannot write TLS response body from mitm'd client: %v", err)
 					return
 				}
@@ -310,15 +311,15 @@ func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
 	}
 }
 
-func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader, wg *sync.WaitGroup) {
-	if _, err := loopCopy(dst, src); err != nil {
+func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader, id string, wg *sync.WaitGroup) {
+	if _, err := loopCopy(dst, src, id, ctx.proxy.Logger); err != nil {
 		ctx.Warnf("Error copying to client: %s", err)
 	}
 	wg.Done()
 }
 
-func copyAndClose(ctx *ProxyCtx, dst, src *net.TCPConn) {
-	if _, err := loopCopy(dst, src); err != nil {
+func copyAndClose(ctx *ProxyCtx, dst, src *net.TCPConn, id string) {
+	if _, err := loopCopy(dst, src, id, ctx.proxy.Logger); err != nil {
 		ctx.Warnf("Error copying to client: %s", err)
 	}
 

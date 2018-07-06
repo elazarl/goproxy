@@ -2,6 +2,7 @@ package goproxy
 
 import (
 	"io"
+	"log"
 )
 
 func passPortion(
@@ -35,6 +36,8 @@ func passPortion(
 func loopCopy(
 	out io.Writer,
 	in io.Reader,
+	id string,
+	logger *log.Logger,
 ) (int, error) {
 	buf := make([]byte, 16384)
 	total := 0
@@ -44,13 +47,16 @@ func loopCopy(
 		total += n
 
 		if readErr != nil {
+			logger.Printf("%s: %d of %d bytes: read error: %v", id, n, total, readErr)
 			return total, readErr
 		}
 		if writeErr != nil {
+			logger.Printf("%s: %d of %d bytes: write error: %v", id, n, total, writeErr)
 			return total, writeErr
 		}
 
 		if done {
+			logger.Printf("%s: done, %d bytes", id, total)
 			return total, nil
 		}
 	}
