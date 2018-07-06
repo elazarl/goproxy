@@ -15,7 +15,6 @@ func passPortion(
 	if n > 0 {
 		_, writeErr = out.Write(buf[:n])
 		if writeErr != nil {
-			n = 0
 			return
 		}
 	}
