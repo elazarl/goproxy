@@ -3,6 +3,7 @@ package goproxy
 import (
 	"bufio"
 	"crypto/tls"
+	"encoding/base64"
 	"errors"
 	"io"
 	"io/ioutil"
@@ -277,6 +278,15 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 	}
 }
 
+// See 2 (end of page 4) http://www.ietf.org/rfc/rfc2617.txt
+// "To receive authorization, the client sends the userid and password,
+// separated by a single colon (":") character, within a base64
+// encoded string in the credentials."
+// It is not meant to be urlencoded.
+func proxyBasicAuth(auth string) string {
+	return base64.StdEncoding.EncodeToString([]byte(auth))
+}
+
 func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
 	if _, err := io.WriteString(w, "HTTP/1.1 502 Bad Gateway\r\n\r\n"); err != nil {
 		ctx.Warnf("Error responding to client: %s", err)
@@ -336,6 +346,11 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy strin
 			if connectReqHandler != nil {
 				connectReqHandler(connectReq)
 			}
+
+			if u.User != nil {
+				connectReq.Header.Set("Proxy-Authorization", "Basic "+proxyBasicAuth(u.User.String()))
+			}
+
 			c, err := proxy.dial(network, u.Host)
 			if err != nil {
 				return nil, err
