@@ -119,6 +119,10 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 		r, resp := proxy.filterRequest(r, ctx)
 
+		if r.URL.User != nil {
+			r.Header.Set("Proxy-Authorization", "Basic "+proxyBasicAuth(r.URL.String()))
+		}
+
 		if resp == nil {
 			removeProxyHeaders(ctx, r)
 			resp, err = ctx.RoundTrip(r)
