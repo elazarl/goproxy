@@ -97,7 +97,6 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		if !hasPort.MatchString(host) {
 			host += ":80"
 		}
-
 		proxy.filterRequest(r, ctx)
 
 		targetSiteCon, err := proxy.connectDial("tcp", host)
