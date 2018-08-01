@@ -3,16 +3,18 @@ package goproxy
 import (
 	"bufio"
 	"io"
-	"log"
 	"net"
 	"net/http"
-	"os"
 	"regexp"
 	"sync/atomic"
+
+	"github.com/sirupsen/logrus"
 )
 
 type Logger interface {
-	Printf(format string, v ...interface{})
+	Info(...interface{})
+	Error(...interface{})
+	Warn(...interface{})
 }
 
 // The basic proxy type. Implements http.Handler.
@@ -85,7 +87,7 @@ func (proxy *ProxyHttpServer) filterResponse(respOrig *http.Response, ctx *Proxy
 
 func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 	r.RequestURI = "" // this must be reset when serving a request with the client
-	ctx.Logf("Sending request %v %v", r.Method, r.URL.String())
+	ctx.Printf("Sending request %v %v", r.Method, r.URL.String())
 	// If no Accept-Encoding header exists, Transport will add the headers it can accept
 	// and would wrap the response body with the relevant reader.
 	r.Header.Del("Accept-Encoding")
@@ -112,7 +114,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy}
 
 		var err error
-		ctx.Logf("Got request %v %v %v %v", r.URL.Path, r.Host, r.Method, r.URL.String())
+		ctx.Printf("Got request %v %v %v %v", r.URL.Path, r.Host, r.Method, r.URL.String())
 		if !r.URL.IsAbs() {
 			proxy.NonproxyHandler.ServeHTTP(w, r)
 			return
@@ -130,17 +132,17 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 				ctx.Error = err
 				resp = proxy.filterResponse(nil, ctx)
 				if resp == nil {
-					ctx.Logf("error read response %v %v:", r.URL.Host, err.Error())
+					ctx.Printf("error read response %v %v:", r.URL.Host, err.Error())
 					http.Error(w, err.Error(), 500)
 					return
 				}
 			}
-			ctx.Logf("Received response %v", resp.Status)
+			ctx.Printf("Received response %v", resp.Status)
 		}
 		origBody := resp.Body
 		resp = proxy.filterResponse(resp, ctx)
 		defer origBody.Close()
-		ctx.Logf("Copying response to client %v [%d]", resp.Status, resp.StatusCode)
+		ctx.Printf("Copying response to client %v [%v]", resp.Status, resp.StatusCode)
 		// http.ResponseWriter will take care of filling the correct response length
 		// Setting it now, might impose wrong value, contradicting the actual new
 		// body the user returned.
@@ -156,14 +158,14 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		if err := resp.Body.Close(); err != nil {
 			ctx.Warnf("Can't close response body %v", err)
 		}
-		ctx.Logf("Copied %v bytes to client error=%v", nr, err)
+		ctx.Printf("Copied %v bytes to client", nr)
 	}
 }
 
 // NewProxyHttpServer creates and returns a proxy server, logging to stderr by default
 func NewProxyHttpServer() *ProxyHttpServer {
 	proxy := ProxyHttpServer{
-		Logger:        log.New(os.Stderr, "", log.LstdFlags),
+		Logger:        logrus.StandardLogger(),
 		reqHandlers:   []ReqHandler{},
 		respHandlers:  []RespHandler{},
 		httpsHandlers: []HttpsHandler{},

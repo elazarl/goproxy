@@ -78,7 +78,8 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		panic("Cannot hijack connection " + e.Error())
 	}
 
-	ctx.Logf("Running %d CONNECT handlers", len(proxy.httpsHandlers))
+	ctx.Printf("Running %d CONNECT handlers", len(proxy.httpsHandlers))
+
 	todo, host := OkConnect, r.URL.Host
 	for i, h := range proxy.httpsHandlers {
 		newtodo, newhost := h.HandleConnect(host, ctx)
@@ -86,21 +87,25 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		// If found a result, break the loop immediately
 		if newtodo != nil {
 			todo, host = newtodo, newhost
-			ctx.Logf("on %dth handler: %v %s", i, todo, host)
+			ctx.Printf("on %dth handler: %v %s", i, todo, host)
 			break
 		}
 	}
+
 	switch todo.Action {
 	case ConnectAccept:
 		if !hasPort.MatchString(host) {
 			host += ":80"
 		}
+
+		proxy.filterRequest(r, ctx)
+
 		targetSiteCon, err := proxy.connectDial("tcp", host)
 		if err != nil {
 			httpError(proxyClient, ctx, err)
 			return
 		}
-		ctx.Logf("Accepting CONNECT to %s", host)
+		ctx.Printf("Accepting CONNECT to %v", host)
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 
 		targetTCP, targetOK := targetSiteCon.(*net.TCPConn)
@@ -122,12 +127,12 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		}
 
 	case ConnectHijack:
-		ctx.Logf("Hijacking CONNECT to %s", host)
+		ctx.Printf("Hijacking CONNECT to %s", host)
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 		todo.Hijack(r, proxyClient, ctx)
 	case ConnectHTTPMitm:
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
-		ctx.Logf("Assuming CONNECT is plain HTTP tunneling, mitm proxying it")
+		ctx.Printf("Assuming CONNECT is plain HTTP tunneling, mitm proxying it")
 		targetSiteCon, err := proxy.connectDial("tcp", host)
 		if err != nil {
 			ctx.Warnf("Error dialing to %s: %s", host, err.Error())
@@ -164,7 +169,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		}
 	case ConnectMitm:
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
-		ctx.Logf("Assuming CONNECT is TLS, mitm proxying it")
+		ctx.Printf("Assuming CONNECT is TLS, mitm proxying it")
 		// this goes in a separate goroutine, so that the net/http server won't think we're
 		// still handling the request even after hijacking the connection. Those HTTP CONNECT
 		// request can take forever, and the server will be stuck when "closed".
@@ -198,7 +203,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					return
 				}
 				req.RemoteAddr = r.RemoteAddr // since we're converting the request, need to carry over the original connecting IP as well
-				ctx.Logf("req %v", r.Host)
+				ctx.Printf("req %v", r.Host)
 
 				if !httpsRegexp.MatchString(req.URL.String()) {
 					req.URL, err = url.Parse("https://" + r.Host + req.URL.String())
@@ -220,7 +225,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						ctx.Warnf("Cannot read TLS response from mitm'd server %v", err)
 						return
 					}
-					ctx.Logf("resp %v", resp.Status)
+					ctx.Printf("resp %v", resp.Status)
 				}
 				resp = proxy.filterResponse(resp, ctx)
 				defer resp.Body.Close()
@@ -263,7 +268,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					return
 				}
 			}
-			ctx.Logf("Exiting on EOF")
+			ctx.Printf("Exiting on EOF")
 		}()
 	case ConnectProxyAuthHijack:
 		proxyClient.Write([]byte("HTTP/1.1 407 Proxy Authentication Required\r\n"))
@@ -288,6 +293,7 @@ func proxyBasicAuth(auth string) string {
 }
 
 func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
+	ctx.Errorf("target connection returned err, %v", err)
 	if _, err := io.WriteString(w, "HTTP/1.1 502 Bad Gateway\r\n\r\n"); err != nil {
 		ctx.Warnf("Error responding to client: %s", err)
 	}
@@ -424,7 +430,7 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy strin
 func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls.Config, error) {
 	return func(host string, ctx *ProxyCtx) (*tls.Config, error) {
 		config := *defaultTLSConfig
-		ctx.Logf("signing for %s", stripPort(host))
+		ctx.Printf("signing for %s", stripPort(host))
 		cert, err := signHost(*ca, []string{stripPort(host)})
 		if err != nil {
 			ctx.Warnf("Cannot sign host certificate with provided CA: %s", err)
