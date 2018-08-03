@@ -92,12 +92,15 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	ctx.TargHost = host
+
 	switch todo.Action {
 	case ConnectAccept:
 		if !hasPort.MatchString(host) {
 			host += ":80"
 		}
-		proxy.filterRequest(r, ctx)
+		var resp *http.Response
+		r, resp = proxy.filterRequest(r, ctx)
 
 		targetSiteCon, err := proxy.connectDial("tcp", host)
 		if err != nil {
@@ -106,6 +109,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		}
 		ctx.Printf("Accepting CONNECT to %v", host)
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+
+		if resp == nil {
+			resp = &http.Response{}
+		}
+		proxy.filterResponse(resp, ctx)
 
 		targetTCP, targetOK := targetSiteCon.(*net.TCPConn)
 		proxyClientTCP, clientOK := proxyClient.(*net.TCPConn)

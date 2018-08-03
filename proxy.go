@@ -111,7 +111,12 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	if r.Method == "CONNECT" {
 		proxy.handleHttps(w, r)
 	} else {
-		ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy}
+		ctx := &ProxyCtx{
+			Req:      r,
+			Session:  atomic.AddInt64(&proxy.sess, 1),
+			proxy:    proxy,
+			TargHost: r.Host,
+		}
 
 		var err error
 		ctx.Printf("Got request %v %v %v %v", r.URL.Path, r.Host, r.Method, r.URL.String())

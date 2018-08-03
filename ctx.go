@@ -4,11 +4,15 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+
+	"github.com/sirupsen/logrus"
 )
 
 // ProxyCtx is the Proxy context, contains useful information about every request. It is passed to
 // every user function. Also used as a logger.
 type ProxyCtx struct {
+	logrus.Fields
+
 	// Will contain the client request from the proxy
 	Req *http.Request
 	// Will contain the remote server's response (if available. nil if the request wasn't send yet)
@@ -19,6 +23,10 @@ type ProxyCtx struct {
 	// A handle for the user to keep data in the context, from the call of ReqHandler to the
 	// call of RespHandler
 	UserData interface{}
+
+	TargHost  string
+	ProxyHost string
+
 	// Will connect a request to a response
 	Session int64
 	proxy   *ProxyHttpServer
@@ -47,11 +55,27 @@ func (ctx *ProxyCtx) Printf(format string, args ...interface{}) {
 }
 
 func (ctx *ProxyCtx) Errorf(format string, args ...interface{}) {
-	ctx.proxy.Logger.Error(fmt.Sprintf(format, args...))
+	errmsg := fmt.Errorf(format, args...)
+	if ctx.Error == nil {
+		ctx.Error = errmsg
+	}
+	ctx.proxy.Logger.Error(errmsg)
 }
 
 func (ctx *ProxyCtx) Warnf(format string, args ...interface{}) {
 	ctx.proxy.Logger.Warn(fmt.Sprintf(format, args...))
+}
+
+func (ctx *ProxyCtx) StatsField(ns string, value map[string]interface{}) logrus.Fields {
+	if len(ns) == 0 || len(value) == 0 {
+		return logrus.Fields{}
+	}
+	ctx.Fields = logrus.Fields{
+		"stats": map[string]interface{}{
+			ns: value,
+		},
+	}
+	return ctx.Fields
 }
 
 var charsetFinder = regexp.MustCompile("charset=([^ ;]*)")
