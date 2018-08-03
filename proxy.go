@@ -135,7 +135,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			resp, err = ctx.RoundTrip(r)
 			if err != nil {
 				ctx.Error = err
-				resp = proxy.filterResponse(nil, ctx)
+				resp = proxy.filterResponse(&http.Response{}, ctx)
 				if resp == nil {
 					ctx.Printf("error read response %v %v:", r.URL.Host, err.Error())
 					http.Error(w, err.Error(), 500)
