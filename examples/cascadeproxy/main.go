@@ -64,6 +64,7 @@ func main() {
 	// start middle proxy server
 	middleProxy := goproxy.NewProxyHttpServer()
 	middleProxy.Verbose = true
+	middleProxy.KeepProxyHeaders = true
 	middleProxy.Tr.Proxy = func(req *http.Request) (*url.URL, error) {
 		return url.Parse("http://localhost:8082")
 	}

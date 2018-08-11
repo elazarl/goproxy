@@ -29,6 +29,8 @@ type ProxyHttpServer struct {
 	// ConnectDial will be used to create TCP connections for CONNECT requests
 	// if nil Tr.Dial will be used
 	ConnectDial func(network string, addr string) (net.Conn, error)
+	// allow proxy headers to pass
+	KeepProxyHeaders bool
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
@@ -112,7 +114,9 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		r, resp := proxy.filterRequest(r, ctx)
 
 		if resp == nil {
-			removeProxyHeaders(ctx, r)
+			if !proxy.KeepProxyHeaders {
+				removeProxyHeaders(ctx, r)
+			}
 			resp, err = ctx.RoundTrip(r)
 			if err != nil {
 				ctx.Error = err
