@@ -305,7 +305,6 @@ func (t *Transport) getIdleConn(cm *connectMethod) (pconn *persistConn) {
 			return
 		}
 	}
-	return
 }
 
 func (t *Transport) dial(network, addr string) (c net.Conn, raddr string, ip *net.TCPAddr, err error) {
@@ -479,12 +478,12 @@ type connectMethod struct {
 	targetAddr   string   // Not used if proxy + http targetScheme (4th example in table)
 }
 
-func (ck *connectMethod) String() string {
+func (cm *connectMethod) String() string {
 	proxyStr := ""
-	if ck.proxyURL != nil {
-		proxyStr = ck.proxyURL.String()
+	if cm.proxyURL != nil {
+		proxyStr = cm.proxyURL.String()
 	}
-	return strings.Join([]string{proxyStr, ck.targetScheme, ck.targetAddr}, "|")
+	return strings.Join([]string{proxyStr, cm.targetScheme, cm.targetAddr}, "|")
 }
 
 // addr returns the first hop "host:port" to which we need to TCP connect.
@@ -655,7 +654,6 @@ type requestAndChan struct {
 func (pc *persistConn) roundTrip(req *transportRequest) (resp *http.Response, err error) {
 	if pc.mutateHeaderFunc != nil {
 		panic("mutateHeaderFunc not supported in modified Transport")
-		pc.mutateHeaderFunc(req.extraHeaders())
 	}
 
 	// Ask for a compressed version if the caller didn't set their
