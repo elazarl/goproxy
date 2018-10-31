@@ -14,7 +14,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 )
 
@@ -133,16 +132,12 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			go copyAndClose(ctx, targetTCP, proxyClientTCP, fmt.Sprintf("%d https in", ctx.Session))
 			go copyAndClose(ctx, proxyClientTCP, targetTCP, fmt.Sprintf("%d https out", ctx.Session))
 		} else {
-			go func() {
-				var wg sync.WaitGroup
-				wg.Add(2)
-				go copyOrWarn(ctx, targetSiteCon, proxyClient, fmt.Sprintf("%d https-non-tcp in", ctx.Session), &wg)
-				go copyOrWarn(ctx, proxyClient, targetSiteCon, fmt.Sprintf("%d https-non-tcp out", ctx.Session), &wg)
-				wg.Wait()
-				proxyClient.Close()
-				targetSiteCon.Close()
-
-			}()
+			go pipeInOut(
+				proxyClient.(rwCloser),
+				targetSiteCon.(rwCloser),
+				fmt.Sprintf("%d https-non-tcp", ctx.Session),
+				ctx.proxy.Logger,
+			)
 		}
 
 	case ConnectHijack:
@@ -309,13 +304,6 @@ func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
 	if err := w.Close(); err != nil {
 		ctx.Warnf("Error closing client connection: %s", err)
 	}
-}
-
-func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader, id string, wg *sync.WaitGroup) {
-	if _, err := loopCopy(dst, src, id, ctx.proxy.Logger); err != nil {
-		ctx.Warnf("Error copying to client: %s", err)
-	}
-	wg.Done()
 }
 
 func copyAndClose(ctx *ProxyCtx, dst, src *net.TCPConn, id string) {
