@@ -132,7 +132,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			go copyAndClose(ctx, targetTCP, proxyClientTCP, fmt.Sprintf("%d https in", ctx.Session))
 			go copyAndClose(ctx, proxyClientTCP, targetTCP, fmt.Sprintf("%d https out", ctx.Session))
 		} else {
-			ctx.Logf("incoming %T, outgoing %T", proxyClient, targetSiteCon)
+			ctx.Warnf("incoming %T, outgoing %T", proxyClient, targetSiteCon)
 			go pipeInOut(
 				proxyClient.(rwCloser),
 				targetSiteCon.(rwCloser),
