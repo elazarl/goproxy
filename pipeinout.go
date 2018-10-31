@@ -6,7 +6,13 @@ import (
 	"sync"
 )
 
-type rwCloser interface {
+type incomingConn interface {
+	Read(b []byte) (n int, err error)
+	Write(b []byte) (n int, err error)
+	Close() error
+}
+
+type outgoingConn interface {
 	Read(b []byte) (n int, err error)
 	Write(b []byte) (n int, err error)
 	CloseWrite() error
@@ -14,8 +20,8 @@ type rwCloser interface {
 }
 
 func pipeInOut(
-	incoming rwCloser,
-	outgoing rwCloser,
+	incoming incomingConn,
+	outgoing outgoingConn,
 	id string,
 	logger *log.Logger,
 ) {
@@ -34,8 +40,8 @@ func pipeInOut(
 }
 
 func incomingReadLoop(
-	incoming rwCloser,
-	outgoing rwCloser,
+	incoming incomingConn,
+	outgoing outgoingConn,
 	id string,
 	logger *log.Logger,
 ) bool {
@@ -61,8 +67,8 @@ func incomingReadLoop(
 }
 
 func outgoingReadLoop(
-	incoming rwCloser,
-	outgoing rwCloser,
+	incoming incomingConn,
+	outgoing outgoingConn,
 	id string,
 	logger *log.Logger,
 	wg *sync.WaitGroup,

@@ -134,8 +134,8 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		} else {
 			ctx.Warnf("incoming %T, outgoing %T", proxyClient, targetSiteCon)
 			go pipeInOut(
-				proxyClient.(rwCloser),
-				targetSiteCon.(rwCloser),
+				proxyClient,
+				targetSiteCon.(outgoingConn),
 				fmt.Sprintf("%d https-non-tcp", ctx.Session),
 				ctx.proxy.Logger,
 			)
