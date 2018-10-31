@@ -9,7 +9,6 @@ import (
 type rwCloser interface {
 	Read(b []byte) (n int, err error)
 	Write(b []byte) (n int, err error)
-	CloseRead() error
 	CloseWrite() error
 	Close() error
 }
@@ -90,5 +89,5 @@ func outgoingReadLoop(
 		}
 	}
 
-	incoming.CloseRead()
+	incoming.Close()
 }
