@@ -118,7 +118,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			httpError(proxyClient, ctx, err)
 			return
 		}
-		ctx.Logf("Accepting CONNECT to %s", host)
+		ctx.Logf("%d Accepting CONNECT to %s", ctx.Session, host)
 
 		if ctx.proxy.ConnectOK != nil {
 			proxyClient.Write(ctx.proxy.ConnectOK)
@@ -126,19 +126,12 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			proxyClient.Write(msgConnectOK)
 		}
 
-		targetTCP, targetOK := targetSiteCon.(*net.TCPConn)
-		proxyClientTCP, clientOK := proxyClient.(*net.TCPConn)
-		if targetOK && clientOK {
-			go copyAndClose(ctx, targetTCP, proxyClientTCP, fmt.Sprintf("%d https in", ctx.Session))
-			go copyAndClose(ctx, proxyClientTCP, targetTCP, fmt.Sprintf("%d https out", ctx.Session))
-		} else {
-			go pipeInOut(
-				proxyClient,
-				targetSiteCon.(outgoingConn),
-				fmt.Sprintf("%d https-non-tcp", ctx.Session),
-				ctx.proxy.Logger,
-			)
-		}
+		pipeInOut(
+			proxyClient,
+			targetSiteCon.(outgoingConn),
+			fmt.Sprintf("%d CONNECT", ctx.Session),
+			ctx.proxy.Logger,
+		)
 
 	case ConnectHijack:
 		ctx.Logf("Hijacking CONNECT to %s", host)
