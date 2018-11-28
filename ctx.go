@@ -21,15 +21,13 @@ type ProxyCtx struct {
 	UserData interface{}
 	// Will connect a request to a response
 	Session int64
-	signer  Signer
+	signer  func(ca *tls.Certificate, hostname []string) (*tls.Certificate, error)
 	proxy   *ProxyHttpServer
 }
 
 type RoundTripper interface {
 	RoundTrip(req *http.Request, ctx *ProxyCtx) (*http.Response, error)
 }
-
-type Signer func(ca *tls.Certificate, hostname []string) (*tls.Certificate, error)
 
 type RoundTripperFunc func(req *http.Request, ctx *ProxyCtx) (*http.Response, error)
 

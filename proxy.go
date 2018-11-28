@@ -2,6 +2,7 @@ package goproxy
 
 import (
 	"bufio"
+	"crypto/tls"
 	"io"
 	"log"
 	"net"
@@ -29,7 +30,9 @@ type ProxyHttpServer struct {
 	// ConnectDial will be used to create TCP connections for CONNECT requests
 	// if nil Tr.Dial will be used
 	ConnectDial func(network string, addr string) (net.Conn, error)
-	Signer      Signer
+	// Signer can be set by consumers with their own implementation.  This allows
+	// f.e. for caching of Certificates.
+	Signer func(ca *tls.Certificate, hostname []string) (*tls.Certificate, error)
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
