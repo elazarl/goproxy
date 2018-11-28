@@ -38,14 +38,14 @@ func getBrowser(args []string) string {
 }
 
 func TestSingerTls(t *testing.T) {
-	cert, err := signHost(GoproxyCa, []string{"example.com", "1.1.1.1", "localhost"})
+	cert, err := signHost(&GoproxyCa, []string{"example.com", "1.1.1.1", "localhost"})
 	orFatal("singHost", err, t)
 	cert.Leaf, err = x509.ParseCertificate(cert.Certificate[0])
 	orFatal("ParseCertificate", err, t)
 	expected := "key verifies with Go"
 	server := httptest.NewUnstartedServer(ConstantHanlder(expected))
 	defer server.Close()
-	server.TLS = &tls.Config{Certificates: []tls.Certificate{cert, GoproxyCa}}
+	server.TLS = &tls.Config{Certificates: []tls.Certificate{*cert, GoproxyCa}}
 	server.TLS.BuildNameToCertificate()
 	server.StartTLS()
 	certpool := x509.NewCertPool()
@@ -71,7 +71,7 @@ func TestSingerTls(t *testing.T) {
 }
 
 func TestSingerX509(t *testing.T) {
-	cert, err := signHost(GoproxyCa, []string{"example.com", "1.1.1.1", "localhost"})
+	cert, err := signHost(&GoproxyCa, []string{"example.com", "1.1.1.1", "localhost"})
 	orFatal("singHost", err, t)
 	cert.Leaf, err = x509.ParseCertificate(cert.Certificate[0])
 	orFatal("ParseCertificate", err, t)

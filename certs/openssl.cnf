@@ -10,7 +10,7 @@ basicConstraints = critical,CA:true
 distinguished_name	= req_distinguished_name
 [ req_distinguished_name ]
 countryName			= Country Name (2 letter code)
-countryName_default		= IL
+countryName_default		= DE
 countryName_min			= 2
 countryName_max			= 2
 
@@ -35,5 +35,5 @@ commonName_default		= goproxy.github.io
 commonName_max			= 64
 
 emailAddress			= Email Address
-emailAddress_default		= elazarl@gmail.com
+emailAddress_default		= oec-go@kesim.org
 emailAddress_max		= 64

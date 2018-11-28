@@ -65,7 +65,10 @@ func (proxy *ProxyHttpServer) connectDial(network, addr string) (c net.Conn, err
 }
 
 func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request) {
-	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy}
+	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy, signer: signHost}
+	if proxy.Signer != nil {
+		ctx.signer = proxy.Signer
+	}
 
 	hij, ok := w.(http.Hijacker)
 	if !ok {
@@ -105,8 +108,16 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		targetTCP, targetOK := targetSiteCon.(*net.TCPConn)
 		proxyClientTCP, clientOK := proxyClient.(*net.TCPConn)
 		if targetOK && clientOK {
-			go copyAndClose(ctx, targetTCP, proxyClientTCP)
-			go copyAndClose(ctx, proxyClientTCP, targetTCP)
+			go func() {
+				var wg sync.WaitGroup
+				wg.Add(2)
+				go copyAndClose(ctx, targetTCP, proxyClientTCP, &wg)
+				go copyAndClose(ctx, proxyClientTCP, targetTCP, &wg)
+				wg.Wait()
+				proxyClient.Close()
+				targetSiteCon.Close()
+
+			}()
 		} else {
 			go func() {
 				var wg sync.WaitGroup
@@ -293,13 +304,14 @@ func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader, wg *sync.WaitGroup)
 	wg.Done()
 }
 
-func copyAndClose(ctx *ProxyCtx, dst, src *net.TCPConn) {
+func copyAndClose(ctx *ProxyCtx, dst, src *net.TCPConn, wg *sync.WaitGroup) {
 	if _, err := io.Copy(dst, src); err != nil {
 		ctx.Warnf("Error copying to client: %s", err)
 	}
 
 	dst.CloseWrite()
 	src.CloseRead()
+	wg.Done()
 }
 
 func dialerFromEnv(proxy *ProxyHttpServer) func(network, addr string) (net.Conn, error) {
@@ -408,14 +420,21 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy strin
 
 func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls.Config, error) {
 	return func(host string, ctx *ProxyCtx) (*tls.Config, error) {
+		var err error
+		var cert *tls.Certificate
+
+		hostname := stripPort(host)
 		config := *defaultTLSConfig
-		ctx.Logf("signing for %s", stripPort(host))
-		cert, err := signHost(*ca, []string{stripPort(host)})
-		if err != nil {
-			ctx.Warnf("Cannot sign host certificate with provided CA: %s", err)
-			return nil, err
+		ctx.Logf("signing for %s", hostname)
+		cert, err = ctx.signer(ca, []string{hostname})
+
+		if cert == nil {
+			if err != nil {
+				ctx.Warnf("Cannot sign host certificate with provided CA: %s", err)
+				return nil, err
+			}
 		}
-		config.Certificates = append(config.Certificates, cert)
+		config.Certificates = append(config.Certificates, *cert)
 		return &config, nil
 	}
 }
