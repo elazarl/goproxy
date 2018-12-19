@@ -2,6 +2,7 @@ package goproxy
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/tls"
 	"errors"
 	"io"
@@ -184,8 +185,9 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				ctx.Warnf("Cannot handshake client %v %v", r.Host, err)
 				return
 			}
-			defer rawClientTls.Close()
+
 			clientTlsReader := bufio.NewReader(rawClientTls)
+
 			for !isEof(clientTlsReader) {
 				req, err := http.ReadRequest(clientTlsReader)
 				var ctx = &ProxyCtx{Req: req, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy, UserData: ctx.UserData}
@@ -209,6 +211,13 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 
 				req, resp := proxy.filterRequest(req, ctx)
 				if resp == nil {
+					if req.Header.Get("Upgrade") != "" {
+						proxy.WebSocketHandler.ServeHTTP(dumbResponseWriter{rawClientTls}, req)
+						return
+					} else {
+						defer rawClientTls.Close()
+					}
+
 					if err != nil {
 						ctx.Warnf("Illegal URL %s", "https://"+r.Host+req.URL.Path)
 						return
@@ -239,6 +248,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				resp.Header.Del("Content-Length")
 				resp.Header.Set("Transfer-Encoding", "chunked")
 				// Force connection close otherwise chrome will keep CONNECT tunnel open forever
+
 				resp.Header.Set("Connection", "close")
 				if err := resp.Header.Write(rawClientTls); err != nil {
 					ctx.Warnf("Cannot write TLS response header from mitm'd client: %v", err)
@@ -248,7 +258,9 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					ctx.Warnf("Cannot write TLS response header end from mitm'd client: %v", err)
 					return
 				}
+
 				chunked := newChunkedWriter(rawClientTls)
+
 				if _, err := io.Copy(chunked, resp.Body); err != nil {
 					ctx.Warnf("Cannot write TLS response body from mitm'd client: %v", err)
 					return
@@ -275,6 +287,30 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		}
 		proxyClient.Close()
 	}
+}
+
+type dumbResponseWriter struct {
+	net.Conn
+}
+
+func (dumb dumbResponseWriter) Header() http.Header {
+	//	panic("Header() should not be called on this ResponseWriter")
+	return make(http.Header)
+}
+
+func (dumb dumbResponseWriter) Write(buf []byte) (int, error) {
+	if bytes.Equal(buf, []byte("HTTP/1.0 200 OK\r\n\r\n")) {
+		return len(buf), nil // throw away the HTTP OK response from the faux CONNECT request
+	}
+	return dumb.Conn.Write(buf)
+}
+
+func (dumb dumbResponseWriter) WriteHeader(code int) {
+	//	panic("WriteHeader() should not be called on this ResponseWriter")
+}
+
+func (dumb dumbResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return dumb, bufio.NewReadWriter(bufio.NewReader(dumb), bufio.NewWriter(dumb)), nil
 }
 
 func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {

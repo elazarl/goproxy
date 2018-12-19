@@ -22,10 +22,11 @@ type ProxyHttpServer struct {
 	Verbose         bool
 	Logger          Logger
 	NonproxyHandler http.Handler
-	reqHandlers     []ReqHandler
-	respHandlers    []RespHandler
-	httpsHandlers   []HttpsHandler
-	Tr              *http.Transport
+	WebSocketHandler http.Handler
+	reqHandlers   []ReqHandler
+	respHandlers  []RespHandler
+	httpsHandlers []HttpsHandler
+	Tr            *http.Transport
 	// ConnectDial will be used to create TCP connections for CONNECT requests
 	// if nil Tr.Dial will be used
 	ConnectDial func(network string, addr string) (net.Conn, error)
@@ -110,9 +111,15 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			proxy.NonproxyHandler.ServeHTTP(w, r)
 			return
 		}
+
 		r, resp := proxy.filterRequest(r, ctx)
 
 		if resp == nil {
+			if r.Header.Get("Upgrade") != "" {
+				proxy.WebSocketHandler.ServeHTTP(w, r)
+				return
+			}
+
 			removeProxyHeaders(ctx, r)
 			resp, err = ctx.RoundTrip(r)
 			if err != nil {
