@@ -562,6 +562,46 @@ func TestNoProxyHeadersHttps(t *testing.T) {
 	client.Do(req)
 }
 
+type VerifyAcceptEncodingValue struct {
+	*testing.T
+	ExpectedValue string
+}
+
+func (v VerifyAcceptEncodingValue) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if val := r.Header.Get("Accept-Encoding"); val != v.ExpectedValue {
+		v.Errorf("Unexpected value for Accept-Encoding: wanted '%v' got '%v'", v.ExpectedValue, val)
+	}
+}
+
+func TestKeepAcceptEncodingFalse(t *testing.T) {
+	// We put in a custom value for Accept-Encoding but this will be removed by the proxy and
+	// we expect to see "gzip" at the server (the "gzip" gets added by the proxy outbound transport,
+	// default behaviour when DisableCompression is not set).
+	s := httptest.NewServer(VerifyAcceptEncodingValue{T: t, ExpectedValue: "gzip"})
+	proxy := goproxy.NewProxyHttpServer()
+	client, l := oneShotProxy(proxy, t)
+	defer l.Close()
+	req, err := http.NewRequest("GET", s.URL, nil)
+	panicOnErr(err, "bad request")
+	req.Header.Add("Accept-Encoding", "WhateverYouLike")
+	client.Do(req)
+}
+
+func TestKeepAcceptEncodingTrue(t *testing.T) {
+	// With KeepAcceptEncoding: true, when put in a custom value for Accept-Encoding we expect
+	// the proxy not to interfere with that.
+	const expectedAcceptEncoding = "MonkeyButter"
+	s := httptest.NewServer(VerifyAcceptEncodingValue{T: t, ExpectedValue: expectedAcceptEncoding})
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.KeepAcceptEncoding = true
+	client, l := oneShotProxy(proxy, t)
+	defer l.Close()
+	req, err := http.NewRequest("GET", s.URL, nil)
+	panicOnErr(err, "bad request")
+	req.Header.Add("Accept-Encoding", expectedAcceptEncoding)
+	client.Do(req)
+}
+
 func TestHeadReqHasContentLength(t *testing.T) {
 	client, l := oneShotProxy(goproxy.NewProxyHttpServer(), t)
 	defer l.Close()
