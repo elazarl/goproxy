@@ -130,7 +130,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			proxyClient,
 			targetSiteCon.(outgoingConn),
 			fmt.Sprintf("%d CONNECT", ctx.Session),
-			ctx.proxy.Logger,
+			ctx.logger(),
 		)
 
 	case ConnectHijack:
@@ -262,7 +262,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					return
 				}
 				chunked := newChunkedWriter(rawClientTls)
-				if _, err := loopCopy(chunked, resp.Body, fmt.Sprintf("%d https-chunked out", ctx.Session), ctx.proxy.Logger); err != nil {
+				if _, err := loopCopy(chunked, resp.Body, fmt.Sprintf("%d https-chunked out", ctx.Session), ctx.logger()); err != nil {
 					ctx.Warnf("Cannot write TLS response body from mitm'd client: %v", err)
 					return
 				}
@@ -300,7 +300,7 @@ func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
 }
 
 func copyAndClose(ctx *ProxyCtx, dst, src *net.TCPConn, id string) {
-	if _, err := loopCopy(dst, src, id, ctx.proxy.Logger); err != nil {
+	if _, err := loopCopy(dst, src, id, ctx.logger()); err != nil {
 		ctx.Warnf("Error copying to client: %s", err)
 	}
 

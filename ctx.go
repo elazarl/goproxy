@@ -2,6 +2,7 @@ package goproxy
 
 import (
 	"crypto/tls"
+	"log"
 	"net"
 	"net/http"
 	"regexp"
@@ -34,6 +35,8 @@ type ProxyCtx struct {
 	ConnectDial func(network string, addr string) (net.Conn, error)
 	// OnDone called on request|connect proxyng done if not nil
 	OnDone func()
+	// Logger is a context logger. Proxy logger used if nil.
+	Logger *log.Logger
 }
 
 type RoundTripper interface {
@@ -62,8 +65,15 @@ func (ctx *ProxyCtx) Resolver() Resolver {
 	return ctx.proxy.Resolver
 }
 
+func (ctx *ProxyCtx) logger() Logger {
+	if ctx.Logger != nil {
+		return ctx.Logger
+	}
+	return ctx.proxy.Logger
+}
+
 func (ctx *ProxyCtx) printf(msg string, argv ...interface{}) {
-	ctx.proxy.Logger.Printf("[%03d] "+msg+"\n", append([]interface{}{ctx.Session & 0xFF}, argv...)...)
+	ctx.logger().Printf("[%03d] "+msg+"\n", append([]interface{}{ctx.Session & 0xFF}, argv...)...)
 }
 
 // Logf prints a message to the proxy's log. Should be used in a ProxyHttpServer's filter

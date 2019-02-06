@@ -2,7 +2,6 @@ package goproxy
 
 import (
 	"io"
-	"log"
 )
 
 func passPortion(
@@ -36,7 +35,7 @@ func loopCopy(
 	out io.Writer,
 	in io.Reader,
 	id string,
-	logger *log.Logger,
+	logger Logger,
 ) (int, error) {
 	logger.Printf("%s: started", id)
 

@@ -2,7 +2,6 @@ package goproxy
 
 import (
 	"io"
-	"log"
 	"sync"
 	"time"
 )
@@ -24,7 +23,7 @@ func pipeInOut(
 	incoming incomingConn,
 	outgoing outgoingConn,
 	id string,
-	logger *log.Logger,
+	logger Logger,
 ) {
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
@@ -44,7 +43,7 @@ func incomingReadLoop(
 	incoming incomingConn,
 	outgoing outgoingConn,
 	id string,
-	logger *log.Logger,
+	logger Logger,
 ) bool {
 	sTime := time.Now()
 	buf := make([]byte, 16384)
@@ -75,7 +74,7 @@ func outgoingReadLoop(
 	incoming incomingConn,
 	outgoing outgoingConn,
 	id string,
-	logger *log.Logger,
+	logger Logger,
 	wg *sync.WaitGroup,
 ) {
 	defer wg.Done()
