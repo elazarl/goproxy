@@ -1,0 +1,14 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: circleci/golang:1.11
+
+    environment:
+      GOPATH: /go
+
+    working_directory: /go/src/github.com/SpectoLabs/goproxy
+
+    steps:
+      - checkout
+      - run: go test -v
