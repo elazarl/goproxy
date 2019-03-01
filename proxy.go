@@ -137,8 +137,10 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		// the Content-Length header should be set.
 
 		// Note from Benji
-		// The way we use goproxy, I do not think this is neede for us
+		// The way we use goproxy, I do not think this is needed for us
 		// https://github.com/SpectoLabs/hoverfly/issues/697
+		// Hoverfly does not use proxy.filterResponse to change response body, hence the content length is not changed
+		// Hoverfly manages the Content Length header on its own
 
 		// if origBody != resp.Body {
 		// resp.Header.Del("Content-Length")

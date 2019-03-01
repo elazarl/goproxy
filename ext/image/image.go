@@ -73,6 +73,7 @@ func HandleImage(f func(img image.Image, ctx *ProxyCtx) image.Image) RespHandler
 			panic("unhandlable type" + contentType)
 		}
 		resp.Body = ioutil.NopCloser(buf)
+		resp.Header.Del("Content-Length")
 		return resp
 	})
 }

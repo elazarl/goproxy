@@ -136,6 +136,7 @@ func TestReplaceResponse(t *testing.T) {
 	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
 		resp.StatusCode = http.StatusOK
 		resp.Body = ioutil.NopCloser(bytes.NewBufferString("chico"))
+		resp.Header.Set("Transfer-Encoding", "chunked")
 		return resp
 	})
 
@@ -147,11 +148,12 @@ func TestReplaceResponse(t *testing.T) {
 	}
 }
 
-func TestReplaceReponseForUrl(t *testing.T) {
+func TestReplaceResponseForUrl(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.OnResponse(goproxy.UrlIs("/koko")).DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
 		resp.StatusCode = http.StatusOK
 		resp.Body = ioutil.NopCloser(bytes.NewBufferString("chico"))
+		resp.Header.Set("Transfer-Encoding", "chunked")
 		return resp
 	})
 
