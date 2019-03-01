@@ -7,8 +7,6 @@ import (
 	"io/ioutil"
 	"strings"
 	"testing"
-
-	. "github.com/SpectoLabs/goproxy/regretable"
 )
 
 func TestRegretableReader(t *testing.T) {
