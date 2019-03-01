@@ -93,6 +93,8 @@ func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 	//   options that are desired for that particular connection and MUST NOT
 	//   be communicated by proxies over further connections.
 	r.Header.Del("Connection")
+	// If request.Close is not set to false, the transfer.writeHeader function will still write the "Connection: close" header
+	r.Close = false
 }
 
 // Standard net/http function. Shouldn't be used directly, http.Serve will use it.
