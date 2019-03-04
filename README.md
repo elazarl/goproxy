@@ -47,11 +47,11 @@ To get a taste of `goproxy`, a basic HTTP/HTTPS transparent proxy
 
     package main
 
-    import (
-        "github.com/elazarl/goproxy"
-        "log"
-        "net/http"
-    )
+import (
+    "github.com/SpectoLabs/goproxy"
+    "log"
+    "net/http"
+)
 
     func main() {
         proxy := goproxy.NewProxyHttpServer()
