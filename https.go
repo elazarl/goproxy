@@ -41,9 +41,9 @@ func stripPort(s string) string {
 	return s[:ix]
 }
 
-func (proxy *ProxyHttpServer) dial(network, addr string) (c net.Conn, err error) {
+func (proxy *ProxyHttpServer) dial(network, addr string, userdata interface{}) (c net.Conn, err error) {
 	if proxy.Tr.Dial != nil {
-		return proxy.Tr.Dial(network, addr)
+		return proxy.Tr.Dial(network, addr, userdata)
 	}
 	return net.Dial(network, addr)
 }
@@ -83,9 +83,9 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		var targetSiteCon net.Conn
 		var e error
 		if https_proxy != "" {
-			targetSiteCon, e = proxy.dial("tcp", https_proxy)
+			targetSiteCon, e = proxy.dial("tcp", https_proxy, ctx.UserData)
 		} else {
-			targetSiteCon, e = proxy.dial("tcp", host)
+			targetSiteCon, e = proxy.dial("tcp", host, ctx.UserData)
 		}
 		if e != nil {
 			if _, err := io.WriteString(proxyClient, "HTTP/1.1 502 Bad Gateway\r\n\r\n"); err != nil {
@@ -175,7 +175,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						return
 					}
 					removeProxyHeaders(ctx, req)
-					resp, err = proxy.Tr.RoundTrip(req)
+					resp, err = proxy.Tr.RoundTrip(req, ctx.UserData)
 					if err != nil {
 						ctx.Warnf("Cannot read TLS response from mitm'd server %v", err)
 						return
