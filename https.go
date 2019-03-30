@@ -412,19 +412,21 @@ func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls
 		hostname := stripPort(host)
 		config := *defaultTLSConfig
 		ctx.Logf("signing for %s", stripPort(host))
+
+		genCert := func() (*tls.Certificate, error) {
+			return signHost(*ca, []string{hostname})
+		}
 		if ctx.certStore != nil {
-			cert = ctx.certStore.Load(hostname)
+			cert, err = ctx.certStore.Fetch(hostname, genCert)
+		} else {
+			cert, err = genCert()
 		}
-		if cert == nil {
-			cert, err = signHost(*ca, []string{hostname})
-			if err != nil {
-				ctx.Warnf("Cannot sign host certificate with provided CA: %s", err)
-				return nil, err
-			}
-			if ctx.certStore != nil {
-				ctx.certStore.Store(hostname, cert)
-			}
+
+		if err != nil {
+			ctx.Warnf("Cannot sign host certificate with provided CA: %s", err)
+			return nil, err
 		}
+
 		config.Certificates = append(config.Certificates, *cert)
 		return &config, nil
 	}
