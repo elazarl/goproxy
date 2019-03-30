@@ -30,8 +30,7 @@ type RoundTripper interface {
 }
 
 type CertStorage interface {
-	Store(hostname string, cert *tls.Certificate)
-	Load(hostname string) *tls.Certificate
+	Fetch(hostname string, gen func() (*tls.Certificate, error)) (*tls.Certificate, error)
 }
 
 type RoundTripperFunc func(req *http.Request, ctx *ProxyCtx) (*http.Response, error)
