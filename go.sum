@@ -1,0 +1,4 @@
+github.com/inconshreveable/go-vhost v0.0.0-20160627193104-06d84117953b h1:IpLPmn6Re21F0MaV6Zsc5RdSE6KuoFpWmHiUSEs3PrE=
+github.com/inconshreveable/go-vhost v0.0.0-20160627193104-06d84117953b/go.mod h1:aA6DnFhALT3zH0y+A39we+zbrdMC2N0X/q21e6FI0LU=
+github.com/rogpeppe/go-charset v0.0.0-20180617210344-2471d30d28b4 h1:BN/Nyn2nWMoqGRA7G7paDNDqTXE30mXGqzzybrfo05w=
+github.com/rogpeppe/go-charset v0.0.0-20180617210344-2471d30d28b4/go.mod h1:qgYeAmZ5ZIpBWTGllZSQnw97Dj+woV0toclVaRGI8pc=
