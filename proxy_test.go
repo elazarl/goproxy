@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"fmt"
 	"image"
 	"io"
 	"io/ioutil"
@@ -19,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/elazarl/goproxy"
-	"github.com/elazarl/goproxy/ext/image"
+	goproxy_image "github.com/elazarl/goproxy/ext/image"
 )
 
 var acceptAllCerts = &tls.Config{InsecureSkipVerify: true}
@@ -768,26 +769,35 @@ func TestHasGoproxyCA(t *testing.T) {
 
 type TestCertStorage struct {
 	certs  map[string]*tls.Certificate
-	loads  int
-	stores int
+	hits   int
+	misses int
 }
 
-func (tcs *TestCertStorage) Store(hostname string, cert *tls.Certificate) {
-	tcs.stores++
-	tcs.certs[hostname] = cert
+func (tcs *TestCertStorage) Fetch(hostname string, gen func() (*tls.Certificate, error)) (*tls.Certificate, error) {
+	var cert *tls.Certificate
+	var err error
+	cert, ok := tcs.certs[hostname]
+	if ok {
+		fmt.Printf("hit %v\n", cert == nil)
+		tcs.hits++
+	} else {
+		cert, err = gen()
+		if err != nil {
+			return nil, err
+		}
+		fmt.Printf("miss %v\n", cert == nil)
+		tcs.certs[hostname] = cert
+		tcs.misses++
+	}
+	return cert, err
 }
 
-func (tcs *TestCertStorage) Load(hostname string) *tls.Certificate {
-	tcs.loads++
-	return tcs.certs[hostname]
+func (tcs *TestCertStorage) statHits() int {
+	return tcs.hits
 }
 
-func (tcs *TestCertStorage) statLoads() int {
-	return tcs.loads
-}
-
-func (tcs *TestCertStorage) statStores() int {
-	return tcs.stores
+func (tcs *TestCertStorage) statMisses() int {
+	return tcs.misses
 }
 
 func newTestCertStorage() *TestCertStorage {
@@ -821,11 +831,11 @@ func TestProxyWithCertStorage(t *testing.T) {
 		t.Error("Wrong response when mitm", resp, "expected bobo")
 	}
 
-	if tcs.statLoads() != 1 {
-		t.Fatal("TestCertStorage.Load has not been called")
+	if tcs.statHits() != 0 {
+		t.Fatalf("Expected 0 cache hits, got %d", tcs.statHits())
 	}
-	if tcs.statStores() != 1 {
-		t.Fatal("TestCertStorage.Store has not been called")
+	if tcs.statMisses() != 1 {
+		t.Fatalf("Expected 1 cache miss, got %d", tcs.statMisses())
 	}
 
 	// Another round - this time the certificate can be loaded
@@ -833,11 +843,11 @@ func TestProxyWithCertStorage(t *testing.T) {
 		t.Error("Wrong response when mitm", resp, "expected bobo")
 	}
 
-	if tcs.statLoads() != 2 {
-		t.Fatal("TestCertStorage.Load has not been called")
+	if tcs.statHits() != 1 {
+		t.Fatalf("Expected 1 cache hit, got %d", tcs.statHits())
 	}
-	if tcs.statStores() != 1 {
-		t.Fatal("TestCertStorage.Store has not been called")
+	if tcs.statMisses() != 1 {
+		t.Fatalf("Expected 1 cache miss, got %d", tcs.statMisses())
 	}
 }
 
