@@ -261,6 +261,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					ctx.Warnf("Cannot write TLS response chunked trailer from mitm'd client: %v", err)
 					return
 				}
+
+				if req.Close {
+					ctx.Logf("Non-persistent connection; closing")
+					return
+				}
 			}
 			ctx.Logf("Exiting on EOF")
 		}()
