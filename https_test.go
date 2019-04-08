@@ -15,9 +15,10 @@ var proxytests = map[string]struct {
 	"never proxy http": {"", "daproxy", "http://foo.bar/baz", ""},
 
 	"do not proxy https without a proxy configured":   {"", "", "https://foo.bar/baz", ""},
-	"proxy https with a proxy configured":             {"", "daproxy", "https://foo.bar/baz", "http://daproxy"},
-	"proxy https with an https proxy configured":      {"", "https://daproxy", "https://foo.bar/baz", "https://daproxy"},
-	"proxy https with a non-matching no_proxy":        {"other.bar", "daproxy", "https://foo.bar/baz", "http://daproxy"},
+	"proxy https with a proxy configured":             {"", "daproxy", "https://foo.bar/baz", "daproxy:http"},
+	"proxy https with a proxy configured with a port": {"", "http://daproxy:123", "https://foo.bar/baz", "daproxy:123"},
+	"proxy https with an https proxy configured":      {"", "https://daproxy", "https://foo.bar/baz", "daproxy:https"},
+	"proxy https with a non-matching no_proxy":        {"other.bar", "daproxy", "https://foo.bar/baz", "daproxy:http"},
 	"do not proxy https with a full no_proxy match":   {"foo.bar", "daproxy", "https://foo.bar/baz", ""},
 	"do not proxy https with a suffix no_proxy match": {".bar", "daproxy", "https://foo.bar/baz", ""},
 }

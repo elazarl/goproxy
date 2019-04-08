@@ -3,6 +3,7 @@ package goproxy
 import (
 	"bufio"
 	"crypto/tls"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -52,10 +53,16 @@ func httpsProxyFromEnv(reqURL *url.URL) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if proxyURL != nil {
-		return proxyURL.String(), nil
+	if proxyURL == nil {
+		return "", nil
 	}
-	return "", nil
+
+	service := proxyURL.Port()
+	if service == "" {
+		service = proxyURL.Scheme
+	}
+
+	return fmt.Sprintf("%s:%s", proxyURL.Hostname(), service), nil
 }
 
 func (proxy *ProxyHttpServer) dial(network, addr string, userdata interface{}) (c net.Conn, err error) {
