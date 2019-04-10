@@ -49,7 +49,13 @@ func httpsProxyFromEnv(reqURL *url.URL) (string, error) {
 	// return anything from HTTPProxy
 	cfg.HTTPProxy = ""
 
-	proxyURL, err := cfg.ProxyFunc()(reqURL)
+	// The request URL provided to the proxy for a CONNECT request does
+	// not necessarily have an https scheme but ProxyFunc uses the scheme
+	// to determine which env var to introspect.
+	reqSchemeURL := reqURL
+	reqSchemeURL.Scheme = "https"
+
+	proxyURL, err := cfg.ProxyFunc()(reqSchemeURL)
 	if err != nil {
 		return "", err
 	}
