@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"fmt"
 	"image"
 	"io"
 	"io/ioutil"
@@ -19,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/elazarl/goproxy"
-	"github.com/elazarl/goproxy/ext/image"
+	goproxy_image "github.com/elazarl/goproxy/ext/image"
 )
 
 var acceptAllCerts = &tls.Config{InsecureSkipVerify: true}
@@ -763,6 +764,90 @@ func TestHasGoproxyCA(t *testing.T) {
 
 	if resp := string(getOrFail(https.URL+"/bobo", client, t)); resp != "bobo" {
 		t.Error("Wrong response when mitm", resp, "expected bobo")
+	}
+}
+
+type TestCertStorage struct {
+	certs  map[string]*tls.Certificate
+	hits   int
+	misses int
+}
+
+func (tcs *TestCertStorage) Fetch(hostname string, gen func() (*tls.Certificate, error)) (*tls.Certificate, error) {
+	var cert *tls.Certificate
+	var err error
+	cert, ok := tcs.certs[hostname]
+	if ok {
+		fmt.Printf("hit %v\n", cert == nil)
+		tcs.hits++
+	} else {
+		cert, err = gen()
+		if err != nil {
+			return nil, err
+		}
+		fmt.Printf("miss %v\n", cert == nil)
+		tcs.certs[hostname] = cert
+		tcs.misses++
+	}
+	return cert, err
+}
+
+func (tcs *TestCertStorage) statHits() int {
+	return tcs.hits
+}
+
+func (tcs *TestCertStorage) statMisses() int {
+	return tcs.misses
+}
+
+func newTestCertStorage() *TestCertStorage {
+	tcs := &TestCertStorage{}
+	tcs.certs = make(map[string]*tls.Certificate)
+
+	return tcs
+}
+
+func TestProxyWithCertStorage(t *testing.T) {
+	tcs := newTestCertStorage()
+	t.Logf("TestProxyWithCertStorage started")
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.CertStore = tcs
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		req.URL.Path = "/bobo"
+		return req, nil
+	})
+
+	s := httptest.NewServer(proxy)
+
+	proxyUrl, _ := url.Parse(s.URL)
+	goproxyCA := x509.NewCertPool()
+	goproxyCA.AddCert(goproxy.GoproxyCa.Leaf)
+
+	tr := &http.Transport{TLSClientConfig: &tls.Config{RootCAs: goproxyCA}, Proxy: http.ProxyURL(proxyUrl)}
+	client := &http.Client{Transport: tr}
+
+	if resp := string(getOrFail(https.URL+"/bobo", client, t)); resp != "bobo" {
+		t.Error("Wrong response when mitm", resp, "expected bobo")
+	}
+
+	if tcs.statHits() != 0 {
+		t.Fatalf("Expected 0 cache hits, got %d", tcs.statHits())
+	}
+	if tcs.statMisses() != 1 {
+		t.Fatalf("Expected 1 cache miss, got %d", tcs.statMisses())
+	}
+
+	// Another round - this time the certificate can be loaded
+	if resp := string(getOrFail(https.URL+"/bobo", client, t)); resp != "bobo" {
+		t.Error("Wrong response when mitm", resp, "expected bobo")
+	}
+
+	if tcs.statHits() != 1 {
+		t.Fatalf("Expected 1 cache hit, got %d", tcs.statHits())
+	}
+	if tcs.statMisses() != 1 {
+		t.Fatalf("Expected 1 cache miss, got %d", tcs.statMisses())
 	}
 }
 
