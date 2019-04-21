@@ -137,8 +137,9 @@ For example:
 // This rejects the HTTPS request to *.reddit.com during HTTP CONNECT phase
 proxy.OnRequest(goproxy.ReqHostMatches(regexp.MustCompile("reddit.*:443$"))).HandleConnect(goproxy.RejectConnect)
 
-// This will NOT reject the HTTP request with URL ending with gif, due to the fact that proxy 
-// only got the URL.Hostname and URL.Port during the HTTP CONNECT phase.
+// This will NOT reject the HTTPS request with URL ending with gif, due to the fact that proxy 
+// only got the URL.Hostname and URL.Port during the HTTP CONNECT phase if the scheme is HTTPS, which is
+// quiet common these days.
 proxy.OnRequest(goproxy.UrlMatches(regexp.MustCompile(`.*gif$`))).HandleConnect(goproxy.RejectConnect)
 
 // The correct way to manipulate the HTTP request using URL.Path as condition is:
