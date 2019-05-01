@@ -234,7 +234,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					ctx.Warnf("Cannot write TLS response HTTP status from mitm'd client: %v", err)
 					return
 				}
-				if req.Method == "HEAD" {
+				if req != nil && req.Method == "HEAD" {
 					// If this was a HEAD request, there should be no body, so just return the headers unchanged
 					if err := resp.Header.Write(rawClientTls); err != nil {
 						ctx.Warnf("Cannot write TLS response header from mitm'd client: %v", err)
