@@ -234,32 +234,44 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					ctx.Warnf("Cannot write TLS response HTTP status from mitm'd client: %v", err)
 					return
 				}
-				// Since we don't know the length of resp, return chunked encoded response
-				// TODO: use a more reasonable scheme
-				resp.Header.Del("Content-Length")
-				resp.Header.Set("Transfer-Encoding", "chunked")
-				// Force connection close otherwise chrome will keep CONNECT tunnel open forever
-				resp.Header.Set("Connection", "close")
-				if err := resp.Header.Write(rawClientTls); err != nil {
-					ctx.Warnf("Cannot write TLS response header from mitm'd client: %v", err)
-					return
-				}
-				if _, err = io.WriteString(rawClientTls, "\r\n"); err != nil {
-					ctx.Warnf("Cannot write TLS response header end from mitm'd client: %v", err)
-					return
-				}
-				chunked := newChunkedWriter(rawClientTls)
-				if _, err := io.Copy(chunked, resp.Body); err != nil {
-					ctx.Warnf("Cannot write TLS response body from mitm'd client: %v", err)
-					return
-				}
-				if err := chunked.Close(); err != nil {
-					ctx.Warnf("Cannot write TLS chunked EOF from mitm'd client: %v", err)
-					return
-				}
-				if _, err = io.WriteString(rawClientTls, "\r\n"); err != nil {
-					ctx.Warnf("Cannot write TLS response chunked trailer from mitm'd client: %v", err)
-					return
+				if req.Method == "HEAD" {
+					// If this was a HEAD request, there should be no body, so just return the headers unchanged
+					if err := resp.Header.Write(rawClientTls); err != nil {
+						ctx.Warnf("Cannot write TLS response header from mitm'd client: %v", err)
+						return
+					}
+					if _, err = io.WriteString(rawClientTls, "\r\n"); err != nil {
+						ctx.Warnf("Cannot write TLS response header end from mitm'd client: %v", err)
+						return
+					}
+				} else {
+					// Since we don't know the length of resp, return chunked encoded response
+					// TODO: use a more reasonable scheme
+					resp.Header.Del("Content-Length")
+					resp.Header.Set("Transfer-Encoding", "chunked")
+					// Force connection close otherwise chrome will keep CONNECT tunnel open forever
+					resp.Header.Set("Connection", "close")
+					if err := resp.Header.Write(rawClientTls); err != nil {
+						ctx.Warnf("Cannot write TLS response header from mitm'd client: %v", err)
+						return
+					}
+					if _, err = io.WriteString(rawClientTls, "\r\n"); err != nil {
+						ctx.Warnf("Cannot write TLS response header end from mitm'd client: %v", err)
+						return
+					}
+					chunked := newChunkedWriter(rawClientTls)
+					if _, err := io.Copy(chunked, resp.Body); err != nil {
+						ctx.Warnf("Cannot write TLS response body from mitm'd client: %v", err)
+						return
+					}
+					if err := chunked.Close(); err != nil {
+						ctx.Warnf("Cannot write TLS chunked EOF from mitm'd client: %v", err)
+						return
+					}
+					if _, err = io.WriteString(rawClientTls, "\r\n"); err != nil {
+						ctx.Warnf("Cannot write TLS response chunked trailer from mitm'd client: %v", err)
+						return
+					}
 				}
 			}
 			ctx.Logf("Exiting on EOF")
