@@ -4,7 +4,6 @@ import (
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
-	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha1"
 	"crypto/tls"
@@ -75,15 +74,19 @@ func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err er
 		}
 	}
 
-	csprng := rand.Reader
+	var csprng CounterEncryptorRand
+	if csprng, err = NewCounterEncryptorRandFromKey(ca.PrivateKey, hash); err != nil {
+		return
+	}
+
 	var certpriv crypto.Signer
 	switch ca.PrivateKey.(type) {
 	case *rsa.PrivateKey:
-		if certpriv, err = rsa.GenerateKey(csprng, 2048); err != nil {
+		if certpriv, err = rsa.GenerateKey(&csprng, 2048); err != nil {
 			return
 		}
 	case *ecdsa.PrivateKey:
-		if certpriv, err = ecdsa.GenerateKey(elliptic.P256(), csprng); err != nil {
+		if certpriv, err = ecdsa.GenerateKey(elliptic.P256(), &csprng); err != nil {
 			return
 		}
 	default:
@@ -91,7 +94,7 @@ func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err er
 	}
 
 	var derBytes []byte
-	if derBytes, err = x509.CreateCertificate(csprng, &template, x509ca, certpriv.Public(), ca.PrivateKey); err != nil {
+	if derBytes, err = x509.CreateCertificate(&csprng, &template, x509ca, certpriv.Public(), ca.PrivateKey); err != nil {
 		return
 	}
 	return &tls.Certificate{
