@@ -222,6 +222,7 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 
 			for !isEof(clientTls) {
 				// 1. read the the request from the client.
+				ctx.Warnf("AT THE BEGINNING")
 				req, err := http.ReadRequest(clientTls)
 				if err != nil {
 					if err != io.EOF {
@@ -260,7 +261,7 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 				if resp == nil {
 					// err is from the call to url.Parse above
 					if err != nil {
-						ctx.Warnf("Illegal URL %s", "https://"+r.Host+req.URL.Path)
+						nctx.Warnf("Illegal URL %s", "https://"+r.Host+req.URL.Path)
 						return
 					}
 
@@ -269,25 +270,25 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 					// Send the request to the target
 					resp, err = nctx.RoundTrip(req)
 					if err != nil {
-						ctx.Warnf("Cannot read TLS response from mitm'd server %v", err)
+						nctx.Warnf("Cannot read TLS response from mitm'd server %v", err)
 						return
 					}
 					nctx.Logf("resp %v", resp.Status)
 				}
 
-				resp.Header.Set("Connection", "close")
-
 				// 4. Filter the response.
 				filtered := proxy.filterResponse(resp, nctx)
+
+				// 5. Write the filtered response to the client
+				filtered.Header.Set("Connection", "close")
 				err = filtered.Write(rawClientTls)
-
-				resp.Body.Close()
 				filtered.Body.Close()
-
 				if err != nil {
-					httpError(rawClientTls, nctx, err)
+					nctx.Warnf("Failed to write response to client: %v", err)
 					return
 				}
+				nctx.Warnf("DONE")
+				ctx.Warnf("AT THE END")
 			}
 			ctx.Logf("Exiting on EOF")
 		}()
