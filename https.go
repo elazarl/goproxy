@@ -288,7 +288,7 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 				}
 
 				if req.Close {
-					ctx.Logf("Non-persistent connection; closing")
+					ctx.Warnf("Non-persistent connection; closing")
 					return
 				}
 			}
