@@ -218,18 +218,11 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 			}
 			defer rawClientTls.Close()
 
-			var (
-				req  *http.Request
-				resp *http.Response
-				err  error
-				nctx *ProxyCtx
-
-				clientTls = bufio.NewReader(rawClientTls)
-			)
+			clientTls := bufio.NewReader(rawClientTls)
 
 			for !isEof(clientTls) {
 				// 1. read the the request from the client.
-				req, err = http.ReadRequest(clientTls)
+				req, err := http.ReadRequest(clientTls)
 				if err != nil {
 					if err != io.EOF {
 						ctx.Warnf("Cannot read TLS request from mitm'd client %v %v", r.Host, err)
@@ -239,7 +232,7 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 
 				// 2. Setup a new ProxyCtx for the intercepted
 				// stream.
-				nctx = &ProxyCtx{
+				nctx := &ProxyCtx{
 					Req:      req,
 					Session:  atomic.AddInt64(&proxy.sess, 1),
 					proxy:    proxy,
@@ -263,7 +256,7 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 				nctx.Req = req
 
 				// 3. Filter the request.
-				req, resp = proxy.filterRequest(req, nctx)
+				req, resp := proxy.filterRequest(req, nctx)
 				if resp == nil {
 					// err is from the call to url.Parse above
 					if err != nil {
@@ -293,7 +286,6 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 
 				if err != nil {
 					httpError(rawClientTls, nctx, err)
-					ctx.Warnf("filtered.Write err: %v\n", err)
 					return
 				}
 			}
