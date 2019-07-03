@@ -228,6 +228,9 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 						ctx.Warnf("Cannot read TLS request from mitm'd client %v %v", r.Host, err)
 					}
 					return
+				} else if req == nil {
+					ctx.Warnf("Empty request from mitm'd client")
+					return
 				}
 
 				// 2. Setup a new ProxyCtx for the intercepted
