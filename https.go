@@ -282,8 +282,10 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				resp = proxy.filterResponse(resp, nctx)
 				if err = resp.Write(rawClientTls); err != nil {
 					httpError(rawClientTls, nctx, err)
+					resp.Body.Close()
 					return
 				}
+				resp.Body.Close()
 
 				ctx.Warnf("send without chunking")
 
