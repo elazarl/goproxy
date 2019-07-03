@@ -284,16 +284,15 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 
 				// 4. Filter the response.
 				filtered := proxy.filterResponse(resp, nctx)
-				if err = resp.Write(rawClientTls); err != nil {
-					httpError(rawClientTls, nctx, err)
-					resp.Body.Close()
-					filtered.Body.Close()
-					return
-				}
+				err = filtered.Write(rawClientTls)
+
 				resp.Body.Close()
 				filtered.Body.Close()
-				ctx.Warnf("done with req %v\n", req)
 
+				if err != nil {
+					httpError(rawClientTls, nctx, err)
+					return
+				}
 			}
 			ctx.Logf("Exiting on EOF")
 		}()
