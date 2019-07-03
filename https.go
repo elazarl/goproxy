@@ -63,7 +63,7 @@ func (proxy *ProxyHttpServer) connectDial(network, addr string) (c net.Conn, err
 	return proxy.ConnectDial(network, addr)
 }
 
-func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request) {
+func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	hij, ok := w.(http.Hijacker)
 	if !ok {
 		panic("httpserver does not support hijacking")
@@ -180,16 +180,15 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					httpError(proxyClient, ctx, err)
 					return
 				}
-				defer resp.Body.Close()
 			}
 
 			// 3. filter the response
 			resp = proxy.filterResponse(resp, ctx)
 			if err = resp.Write(proxyClient); err != nil {
+				resp.Body.Close()
 				httpError(proxyClient, ctx, err)
 				return
 			}
-
 			resp.Body.Close()
 		}
 
@@ -220,11 +219,12 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			defer rawClientTls.Close()
 
 			var (
-				req       *http.Request
-				resp      *http.Response
-				err       error
+				req  *http.Request
+				resp *http.Response
+				err  error
+				nctx *ProxyCtx
+
 				clientTls = bufio.NewReader(rawClientTls)
-				nctx      *ProxyCtx
 			)
 
 			for !isEof(clientTls) {
@@ -254,7 +254,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 
 				if !httpsRegexp.MatchString(req.URL.String()) {
 					req.URL, err = url.Parse("https://" + r.Host + req.URL.String())
-					// TODO: how do we handle the error case here?
+					// err is handled below
 				}
 
 				// Put the original request from the client
@@ -265,11 +265,14 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				// 3. Filter the request.
 				req, resp = proxy.filterRequest(req, nctx)
 				if resp == nil {
+					// err is from the call to url.Parse above
 					if err != nil {
 						ctx.Warnf("Illegal URL %s", "https://"+r.Host+req.URL.Path)
 						return
 					}
+
 					removeProxyHeaders(nctx, req)
+					// Send the request to the target
 					resp, err = nctx.RoundTrip(req)
 					if err != nil {
 						ctx.Warnf("Cannot read TLS response from mitm'd server %v", err)
@@ -278,7 +281,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					nctx.Logf("resp %v", resp.Status)
 				}
 
-				// 4. Filter the Response
+				// 4. Filter the response.
 				resp = proxy.filterResponse(resp, nctx)
 				if err = resp.Write(rawClientTls); err != nil {
 					httpError(rawClientTls, nctx, err)
@@ -287,14 +290,14 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				}
 				resp.Body.Close()
 
-				ctx.Warnf("send without chunking")
-
 			}
 			ctx.Logf("Exiting on EOF")
 		}()
+
 	case ConnectProxyAuthHijack:
 		proxyClient.Write([]byte("HTTP/1.1 407 Proxy Authentication Required\r\n"))
 		todo.Hijack(r, proxyClient, ctx)
+
 	case ConnectReject:
 		if ctx.Resp != nil {
 			if err := ctx.Resp.Write(proxyClient); err != nil {

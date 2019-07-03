@@ -102,9 +102,13 @@ func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 // Standard net/http function. Shouldn't be used directly, http.Serve will use it.
 func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "CONNECT" {
-		proxy.handleHttps(w, r)
+		proxy.handleConnect(w, r)
 	} else {
-		ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy}
+		ctx := &ProxyCtx{
+			Req:     r,
+			Session: atomic.AddInt64(&proxy.sess, 1),
+			proxy:   proxy,
+		}
 
 		var err error
 		ctx.Logf("Got request %v %v %v %v", r.URL.Path, r.Host, r.Method, r.URL.String())
