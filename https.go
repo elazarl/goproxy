@@ -282,10 +282,10 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 					nctx.Logf("resp %v", resp.Status)
 				}
 
+				resp.Header.Set("Connection", "close")
+
 				// 4. Filter the response.
 				filtered := proxy.filterResponse(resp, nctx)
-
-				filtered.Header.Set("Connection", "close")
 				err = filtered.Write(rawClientTls)
 
 				resp.Body.Close()
@@ -293,6 +293,7 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 
 				if err != nil {
 					httpError(rawClientTls, nctx, err)
+					ctx.Warnf("filtered.Write err: %v\n", err)
 					return
 				}
 			}
