@@ -222,7 +222,6 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 
 			for !isEof(clientTls) {
 				// 1. read the the request from the client.
-				ctx.Warnf("AT THE BEGINNING")
 				req, err := http.ReadRequest(clientTls)
 				if err != nil {
 					if err != io.EOF {
@@ -287,8 +286,11 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 					nctx.Warnf("Failed to write response to client: %v", err)
 					return
 				}
-				nctx.Warnf("DONE")
-				ctx.Warnf("AT THE END")
+
+				if req.Close {
+					ctx.Logf("Non-persistent connection; closing")
+					return
+				}
 			}
 			ctx.Logf("Exiting on EOF")
 		}()
