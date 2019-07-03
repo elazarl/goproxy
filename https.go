@@ -259,18 +259,21 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 				nctx.Req = req
 
 				// 3. Filter the request.
-				req, resp := proxy.filterRequest(req, nctx)
+				filreq, resp := proxy.filterRequest(req, nctx)
 				if resp == nil {
 					// err is from the call to url.Parse above
 					if err != nil {
-						nctx.Warnf("Illegal URL %s", "https://"+r.Host+req.URL.Path)
+						nctx.Warnf("Illegal URL %s", "https://"+r.Host+filreq.URL.Path)
+						return
+					} else if filreq == nil {
+						nctx.Warnf("Empty filtered request")
 						return
 					}
 
-					removeProxyHeaders(nctx, req)
+					removeProxyHeaders(nctx, filreq)
 
 					// Send the request to the target
-					resp, err = nctx.RoundTrip(req)
+					resp, err = nctx.RoundTrip(filreq)
 					if err != nil {
 						nctx.Warnf("Cannot read TLS response from mitm'd server %v", err)
 						return
