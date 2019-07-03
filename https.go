@@ -292,6 +292,7 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 				}
 				resp.Body.Close()
 				filtered.Body.Close()
+				ctx.Warnf("done with req %v\n", req)
 
 			}
 			ctx.Logf("Exiting on EOF")
