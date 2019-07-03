@@ -272,6 +272,7 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 					}
 
 					removeProxyHeaders(nctx, req)
+
 					// Send the request to the target
 					resp, err = nctx.RoundTrip(req)
 					if err != nil {
@@ -282,13 +283,15 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 				}
 
 				// 4. Filter the response.
-				resp = proxy.filterResponse(resp, nctx)
+				filtered := proxy.filterResponse(resp, nctx)
 				if err = resp.Write(rawClientTls); err != nil {
 					httpError(rawClientTls, nctx, err)
 					resp.Body.Close()
+					filtered.Body.Close()
 					return
 				}
 				resp.Body.Close()
+				filtered.Body.Close()
 
 			}
 			ctx.Logf("Exiting on EOF")
