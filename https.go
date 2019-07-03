@@ -184,12 +184,13 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 
 			// 3. filter the response
 			resp = proxy.filterResponse(resp, ctx)
-			if err = resp.Write(proxyClient); err != nil {
-				resp.Body.Close()
+			err = resp.Write(proxyClient)
+			resp.Body.Close()
+
+			if err != nil {
 				httpError(proxyClient, ctx, err)
 				return
 			}
-			resp.Body.Close()
 		}
 
 	case ConnectMitm:
@@ -296,6 +297,8 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 				if req.Close {
 					ctx.Warnf("Non-persistent connection; closing")
 					return
+				} else {
+					rawClientTls.Write([]byte("\r\n"))
 				}
 			}
 			ctx.Logf("Exiting on EOF")
