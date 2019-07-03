@@ -189,7 +189,6 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				httpError(proxyClient, ctx, err)
 				return
 			}
-			ctx.Warnf("send without chunking")
 
 			resp.Body.Close()
 		}
@@ -285,6 +284,8 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					httpError(rawClientTls, nctx, err)
 					return
 				}
+
+				ctx.Warnf("send without chunking")
 
 			}
 			ctx.Logf("Exiting on EOF")
