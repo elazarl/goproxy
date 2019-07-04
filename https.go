@@ -141,57 +141,36 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 		todo.Hijack(r, proxyClient, ctx)
 
 	case ConnectHTTPMitm:
-		targetSite, err := proxy.connectDial("tcp", host)
-		if err != nil {
-			ctx.Warnf("Error dialing to %s: %s", host, err.Error())
-			return
-		}
-
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 		ctx.Logf("Assuming CONNECT is plain HTTP tunneling, mitm proxying it")
 
 		client := bufio.NewReader(proxyClient)
-		remote := bufio.NewReader(targetSite)
 
 		var (
-			req  *http.Request
-			resp *http.Response
+			req *http.Request
+			err error
 		)
 
 		for {
-			// 1. read the request from the client
 			req, err = http.ReadRequest(client)
 			if err != nil {
 				if err != io.EOF {
-					ctx.Warnf("cannot read request of MITM HTTP client: %+#v", err)
+					ctx.Warnf("Cannot read request of MITM HTTP client: %+#v", err)
 				}
-				return
+				break
 			}
 
-			// 2. filter the client request
-			req, resp = proxy.filterRequest(req, ctx)
-			if resp == nil {
-				if err = req.Write(targetSite); err != nil {
-					httpError(proxyClient, ctx, err)
-					return
-				}
-				resp, err = http.ReadResponse(remote, req)
+			req.URL, err = url.Parse("http://" + req.Host + req.URL.String())
+
+			if end, err := proxy.handleRequest(NewConnResponseWriter(proxyClient), req); end {
 				if err != nil {
-					httpError(proxyClient, ctx, err)
-					return
+					ctx.Warnf("Error during serving MITM HTTP request: %+#v", err)
 				}
-			}
-
-			// 3. filter the response
-			resp = proxy.filterResponse(resp, ctx)
-			err = resp.Write(proxyClient)
-			resp.Body.Close()
-
-			if err != nil {
-				httpError(proxyClient, ctx, err)
-				return
+				break
 			}
 		}
+
+		proxyClient.Close()
 
 	case ConnectMitm:
 		// This goes in a separate goroutine, so that the net/http server won't think we're
@@ -218,88 +197,36 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 				return
 			}
 			defer rawClientTls.Close()
+			defer proxyClient.Close()
 
 			clientTls := bufio.NewReader(rawClientTls)
 
 			for {
-				// 1. Read a request from the client.
+				// Read a request from the client.
 				req, err := http.ReadRequest(clientTls)
 				if err != nil {
 					if err != io.EOF {
 						ctx.Warnf("Cannot read TLS request from mitm'd client %v %v", r.Host, err)
-						return
 					}
 					// EOF
 					break
-				} else if req == nil {
-					ctx.Warnf("Empty request from mitm'd client")
-					return
 				}
-
-				// 2. Setup a new ProxyCtx for the intercepted
-				// stream.
-				nctx := &ProxyCtx{
-					Req:     req,
-					Session: atomic.AddInt64(&proxy.sess, 1),
-					proxy:   proxy,
-				}
-
-				// Since we're converting the request, we need
-				// to carry over the original connecting IP as
-				// well.
-				req.RemoteAddr = r.RemoteAddr
-				nctx.Logf("req %v", r.Host)
 
 				if !httpsRegexp.MatchString(req.URL.String()) {
 					req.URL, err = url.Parse("https://" + r.Host + req.URL.String())
 					// err is handled below
 				}
 
-				// Put the original request from the client
-				// into the context so is available at later
-				// time.
-				nctx.Req = req
-
-				// 3. Filter the request.
-				filreq, resp := proxy.filterRequest(req, nctx)
-				if resp == nil {
-					// err is from the call to url.Parse above
+				if end, err := proxy.handleRequest(NewConnResponseWriter(rawClientTls), req); end {
 					if err != nil {
-						nctx.Warnf("Illegal URL %s", "https://"+r.Host+filreq.URL.Path)
-						return
-					} else if filreq == nil {
-						nctx.Warnf("Empty filtered request")
-						return
+						ctx.Warnf("Error during serving MITM HTTPS request: %+#v", err)
 					}
-
-					removeProxyHeaders(nctx, filreq)
-
-					// Send the request to the target
-					resp, err = nctx.RoundTrip(filreq)
-					if err != nil {
-						nctx.Warnf("Cannot read TLS response from mitm'd server %v", err)
-						return
-					}
-					nctx.Logf("resp %v", resp.Status)
-				}
-
-				// 4. Filter the response.
-				filtered := proxy.filterResponse(resp, nctx)
-
-				// 5. Write the filtered response to the client
-				err = filtered.Write(rawClientTls)
-				resp.Body.Close()
-				filtered.Body.Close()
-				if err != nil {
-					nctx.Warnf("Failed to write response to client: %v", err)
-					return
-				}
-
-				if nctx.Req.Close {
-					nctx.Warnf("Non-persistent connection; closing")
+					break
 				}
 			}
+
 			ctx.Logf("Exiting on EOF")
+			proxyClient.Close()
 		}()
 
 	case ConnectProxyAuthHijack:
