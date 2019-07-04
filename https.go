@@ -221,7 +221,7 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 
 			clientTls := bufio.NewReader(rawClientTls)
 
-			for !isEof(clientTls) {
+			for {
 				// 1. read the the request from the client.
 				req, err := http.ReadRequest(clientTls)
 				if err != nil {
@@ -229,6 +229,7 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 						ctx.Warnf("Cannot read TLS request from mitm'd client %v %v", r.Host, err)
 						return
 					}
+					// EOF
 					break
 				} else if req == nil {
 					ctx.Warnf("Empty request from mitm'd client")
@@ -289,6 +290,7 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 				// 5. Write the filtered response to the client
 				filtered.Header.Set("Connection", "close")
 				err = filtered.Write(rawClientTls)
+				resp.Body.Close()
 				filtered.Body.Close()
 				if err != nil {
 					nctx.Warnf("Failed to write response to client: %v", err)
