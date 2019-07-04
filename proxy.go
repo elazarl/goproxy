@@ -17,10 +17,11 @@ type ProxyHttpServer struct {
 	// session variable must be aligned in i386
 	// see http://golang.org/src/pkg/sync/atomic/doc.go#L41
 	sess int64
-	// KeepDestinationHeaders indicates the proxy should retain any headers present in the http.Response before proxying
-	KeepDestinationHeaders bool
-	// setting Verbose to true will log information on each request sent to the proxy
-	Verbose         bool
+
+	KeepDestinationHeaders bool // retain all headers in http.Response before proxying
+	KeepAcceptEncoding     bool // suppress modification to Accept-Encoding header by the proxy
+
+	Verbose         bool // log information on each request sent to the proxy?
 	Logger          *log.Logger
 	NonproxyHandler http.Handler
 	reqHandlers     []ReqHandler
@@ -82,9 +83,11 @@ func (proxy *ProxyHttpServer) filterResponse(respOrig *http.Response, ctx *Proxy
 func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 	r.RequestURI = "" // this must be reset when serving a request with the client
 	ctx.Logf("Sending request %v %v", r.Method, r.URL.String())
-	// If no Accept-Encoding header exists, Transport will add the headers it can accept
-	// and would wrap the response body with the relevant reader.
-	// r.Header.Del("Accept-Encoding")
+	if !ctx.proxy.KeepAcceptEncoding {
+		// If no Accept-Encoding header exists, Transport will add the headers it can accept
+		// and would wrap the response body with the relevant reader.
+		r.Header.Del("Accept-Encoding")
+	}
 	// curl can add that, see
 	// https://jdebp.eu./FGA/web-proxy-connection-header.html
 	r.Header.Del("Proxy-Connection")
@@ -96,11 +99,8 @@ func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 	//   The Connection general-header field allows the sender to specify
 	//   options that are desired for that particular connection and MUST NOT
 	//   be communicated by proxies over further connections.
-	if !ctx.KeepConnection {
-		ctx.Warnf("Deleting `Connection` header %q", r.Header.Get("Connection"))
-		r.Header.Del("Connection")
-		r.Close = false
-	}
+	r.Header.Del("Connection")
+	r.Close = false
 }
 
 // Standard net/http function. Shouldn't be used directly, http.Serve will use it.
@@ -169,7 +169,11 @@ func NewProxyHttpServer() *ProxyHttpServer {
 		NonproxyHandler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, "This is a proxy server. Does not respond to non-proxy requests.", 500)
 		}),
-		Tr: &http.Transport{TLSClientConfig: tlsClientSkipVerify, Proxy: http.ProxyFromEnvironment},
+		Tr: &http.Transport{
+			TLSClientConfig:    tlsClientSkipVerify,
+			Proxy:              http.ProxyFromEnvironment,
+			DisableCompression: true,
+		},
 	}
 	proxy.ConnectDial = dialerFromEnv(&proxy)
 
