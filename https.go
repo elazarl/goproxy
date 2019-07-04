@@ -297,8 +297,6 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 				if req.Close {
 					ctx.Warnf("Non-persistent connection; closing")
 					return
-				} else {
-					rawClientTls.Write([]byte("\r\n"))
 				}
 			}
 			ctx.Logf("Exiting on EOF")
