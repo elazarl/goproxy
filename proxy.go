@@ -97,6 +97,7 @@ func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 	//   options that are desired for that particular connection and MUST NOT
 	//   be communicated by proxies over further connections.
 	if !ctx.KeepConnection {
+		ctx.Warnf("Deleting `Connection` header %q", r.Header.Get("Connection"))
 		r.Header.Del("Connection")
 		r.Close = false
 	}
