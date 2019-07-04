@@ -239,10 +239,10 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 				// 2. Setup a new ProxyCtx for the intercepted
 				// stream.
 				nctx := &ProxyCtx{
-					Req:            req,
-					Session:        atomic.AddInt64(&proxy.sess, 1),
-					proxy:          proxy,
-					UserData:       ctx.UserData,
+					Req:     req,
+					Session: atomic.AddInt64(&proxy.sess, 1),
+					proxy:   proxy,
+					// UserData:       ctx.UserData,
 					KeepConnection: true,
 				}
 
