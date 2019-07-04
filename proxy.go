@@ -263,6 +263,7 @@ func (proxy *ProxyHttpServer) handleWsRequest(ctx *ProxyCtx, writer http.Respons
 
 	ctx.Logf("Relying websocket connection %s with protocols: %v", base.URL.String(), proto)
 
+	ctx.Warnf("trying to dial %v, RemoteAddr: %q", base.URL, base.RemoteAddr)
 	remote, resp, err := proxy.WsDialer.Dial(
 		base.URL.String(),
 		nil,
@@ -321,6 +322,5 @@ func NewProxyHttpServer() *ProxyHttpServer {
 		},
 	}
 	proxy.ConnectDial = dialerFromEnv(&proxy)
-
 	return &proxy
 }
