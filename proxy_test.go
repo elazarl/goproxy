@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/oec/goproxy"
-	"github.com/oec/goproxy/ext/image"
+	. "github.com/oec/goproxy/ext/image"
 )
 
 var acceptAllCerts = &tls.Config{InsecureSkipVerify: true}
@@ -277,7 +277,7 @@ func TestConstantImageHandler(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
 	//panda := getImage("panda.png", t)
 	football := getImage("test_data/football.png", t)
-	proxy.OnResponse().Do(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
+	proxy.OnResponse().Do(HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
 		return football
 	}))
 
@@ -301,7 +301,7 @@ func TestImageHandler(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
 	football := getImage("test_data/football.png", t)
 
-	proxy.OnResponse(goproxy.UrlIs("/test_data/panda.png")).Do(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
+	proxy.OnResponse(goproxy.UrlIs("/test_data/panda.png")).Do(HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
 		return football
 	}))
 
@@ -361,10 +361,10 @@ func TestReplaceImage(t *testing.T) {
 	panda := getImage("test_data/panda.png", t)
 	football := getImage("test_data/football.png", t)
 
-	proxy.OnResponse(goproxy.UrlIs("/test_data/panda.png")).Do(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
+	proxy.OnResponse(goproxy.UrlIs("/test_data/panda.png")).Do(HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
 		return football
 	}))
-	proxy.OnResponse(goproxy.UrlIs("/test_data/football.png")).Do(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
+	proxy.OnResponse(goproxy.UrlIs("/test_data/football.png")).Do(HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
 		return panda
 	}))
 
@@ -644,6 +644,7 @@ func TestGoproxyThroughProxy(t *testing.T) {
 		b, err := ioutil.ReadAll(resp.Body)
 		panicOnErr(err, "readAll resp")
 		resp.Body = ioutil.NopCloser(bytes.NewBufferString(string(b) + " " + string(b)))
+		resp.ContentLength = int64(2*len(b) + 1)
 		return resp
 	}
 	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
@@ -692,7 +693,7 @@ func TestGoproxyHijackConnect(t *testing.T) {
 
 func readResponse(buf *bufio.Reader) string {
 	req, err := http.NewRequest("GET", srv.URL, nil)
-	panicOnErr(err, "NewRequest")
+	panicOnErr(err, "NewRequest GET")
 	resp, err := http.ReadResponse(buf, req)
 	panicOnErr(err, "resp.Read")
 	defer resp.Body.Close()
@@ -702,8 +703,9 @@ func readResponse(buf *bufio.Reader) string {
 }
 
 func writeConnect(w io.Writer) {
-	req, err := http.NewRequest("CONNECT", srv.URL[len("http://"):], nil)
-	panicOnErr(err, "NewRequest")
+	// req, err := http.NewRequest("CONNECT", srv.URL[len("http://"):], nil)
+	req, err := http.NewRequest("CONNECT", srv.URL, nil)
+	panicOnErr(err, "NewRequest CONNECT")
 	req.Write(w)
 	panicOnErr(err, "req(CONNECT).Write")
 }
