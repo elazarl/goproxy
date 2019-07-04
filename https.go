@@ -274,7 +274,7 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 						return
 					}
 
-					removeProxyHeaders(nctx, filreq)
+					// removeProxyHeaders(nctx, filreq)
 
 					// Send the request to the target
 					resp, err = nctx.RoundTrip(filreq)
