@@ -214,7 +214,10 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 
 				if !httpsRegexp.MatchString(req.URL.String()) {
 					req.URL, err = url.Parse("https://" + r.Host + req.URL.String())
-					// err is handled below
+					if err != nil {
+						ctx.Warnf("Couldn't create https-URL for host %q and URL %q: %+#v", r.Host, req.URL.String(), err)
+						break
+					}
 				}
 
 				if end, err := proxy.handleRequest(NewConnResponseWriter(rawClientTls), req); end {
