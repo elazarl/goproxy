@@ -70,6 +70,10 @@ func (proxy *ProxyHttpServer) filterRequest(r *http.Request, ctx *ProxyCtx) (req
 func (proxy *ProxyHttpServer) filterResponse(respOrig *http.Response, ctx *ProxyCtx) (resp *http.Response) {
 	resp = respOrig
 	for _, h := range proxy.respHandlers {
+		if resp == nil {
+			// resp is nil, no need to run the next handler
+			return
+		}
 		ctx.Resp = resp
 		resp = h.Handle(resp, ctx)
 	}
@@ -118,16 +122,28 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			if err != nil {
 				ctx.Error = err
 				resp = proxy.filterResponse(nil, ctx)
-				if resp == nil {
-					ctx.Logf("error read response %v %v:", r.URL.Host, err.Error())
-					http.Error(w, err.Error(), 500)
-					return
-				}
+
 			}
-			ctx.Logf("Received response %v", resp.Status)
+			if resp != nil {
+				ctx.Logf("Received response %v", resp.Status)
+			}
+		}
+		resp = proxy.filterResponse(resp, ctx)
+
+		if resp == nil {
+			var errorString string
+			if ctx.Error != nil {
+				errorString = "error read response " + r.URL.Host + " : " + ctx.Error.Error()
+				ctx.Logf(errorString)
+				http.Error(w, ctx.Error.Error(), 500)
+			} else {
+				errorString = "error read response " + r.URL.Host
+				ctx.Logf(errorString)
+				http.Error(w, errorString, 500)
+			}
+			return
 		}
 		origBody := resp.Body
-		resp = proxy.filterResponse(resp, ctx)
 		defer origBody.Close()
 		ctx.Logf("Copying response to client %v [%d]", resp.Status, resp.StatusCode)
 		// http.ResponseWriter will take care of filling the correct response length

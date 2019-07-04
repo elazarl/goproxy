@@ -3,10 +3,13 @@ package goproxy_test
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
+	"github.com/elazarl/goproxy"
+	goproxy_image "github.com/elazarl/goproxy/ext/image"
 	"image"
 	"io"
 	"io/ioutil"
@@ -16,11 +19,10 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"testing"
-
-	"github.com/elazarl/goproxy"
-	goproxy_image "github.com/elazarl/goproxy/ext/image"
+	"time"
 )
 
 var acceptAllCerts = &tls.Config{InsecureSkipVerify: true}
@@ -918,4 +920,53 @@ func TestHttpsMitmURLRewrite(t *testing.T) {
 			t.Errorf("Expected status: %d, got: %d", http.StatusAccepted, resp.StatusCode)
 		}
 	}
+}
+
+func returnNil(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+	return nil
+}
+
+func TestSimpleHttpRequest(t *testing.T) {
+	proxy := goproxy.NewProxyHttpServer()
+
+	var server *http.Server
+	go func() {
+		fmt.Println("serving end proxy server at localhost:5000")
+		server = &http.Server{
+			Addr:    "localhost:5000",
+			Handler: proxy,
+		}
+		err := server.ListenAndServe()
+		if err == nil {
+			t.Error("Error shutdown should always return error", err)
+		}
+	}()
+
+	time.Sleep(1 * time.Second)
+	u, _ := url.Parse("http://localhost:5000")
+	tr := &http.Transport{
+		Proxy: http.ProxyURL(u),
+		// Disable HTTP/2.
+		TLSNextProto: make(map[string]func(authority string, c *tls.Conn) http.RoundTripper),
+	}
+	client := http.Client{Transport: tr}
+
+	resp, err := client.Get("http://google.de")
+	if err != nil || resp.StatusCode != 200 {
+		t.Error("Error while requesting google with http", err)
+	}
+	resp, err = client.Get("http://google20012312031.de")
+	fmt.Println(resp)
+	if resp == nil {
+		t.Error("Error while requesting random string with http", resp)
+	}
+	proxy.OnResponse(goproxy.UrlMatches(regexp.MustCompile(".*"))).DoFunc(returnNil)
+
+	resp, err = client.Get("http://google20012312031.de")
+	fmt.Println(resp)
+	if resp == nil {
+		t.Error("Error while requesting random string with http", resp)
+	}
+
+	server.Shutdown(context.TODO())
 }
