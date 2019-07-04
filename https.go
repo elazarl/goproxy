@@ -273,7 +273,7 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 						return
 					}
 
-					removeProxyHeaders(nctx, filreq)
+					// removeProxyHeaders(nctx, filreq)
 
 					// Send the request to the target
 					resp, err = nctx.RoundTrip(filreq)
@@ -288,7 +288,6 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 				filtered := proxy.filterResponse(resp, nctx)
 
 				// 5. Write the filtered response to the client
-				filtered.Header.Set("Connection", "close")
 				err = filtered.Write(rawClientTls)
 				resp.Body.Close()
 				filtered.Body.Close()
