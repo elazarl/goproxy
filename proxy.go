@@ -20,14 +20,13 @@ type ProxyHttpServer struct {
 
 	KeepDestinationHeaders bool // retain all headers in http.Response before proxying
 	KeepAcceptEncoding     bool // suppress modification to Accept-Encoding header by the proxy
-
-	Verbose         bool // log information on each request sent to the proxy?
-	Logger          *log.Logger
-	NonproxyHandler http.Handler
-	reqHandlers     []ReqHandler
-	respHandlers    []RespHandler
-	httpsHandlers   []HttpsHandler
-	Tr              *http.Transport
+	Verbose                bool // if true, logs information on each request
+	Logger                 *log.Logger
+	NonproxyHandler        http.Handler
+	reqHandlers            []ReqHandler
+	respHandlers           []RespHandler
+	httpsHandlers          []HttpsHandler
+	Tr                     *http.Transport
 	// ConnectDial will be used to create TCP connections for CONNECT requests
 	// if nil Tr.Dial will be used
 	ConnectDial func(network string, addr string) (net.Conn, error)

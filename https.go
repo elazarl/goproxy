@@ -222,7 +222,7 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 			clientTls := bufio.NewReader(rawClientTls)
 
 			for {
-				// 1. read the the request from the client.
+				// 1. Read a request from the client.
 				req, err := http.ReadRequest(clientTls)
 				if err != nil {
 					if err != io.EOF {
@@ -242,12 +242,10 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 					Req:     req,
 					Session: atomic.AddInt64(&proxy.sess, 1),
 					proxy:   proxy,
-					// UserData:       ctx.UserData,
-					KeepConnection: true,
 				}
 
-				// Since we're converting the request, need to
-				// carry over the original connecting IP as
+				// Since we're converting the request, we need
+				// to carry over the original connecting IP as
 				// well.
 				req.RemoteAddr = r.RemoteAddr
 				nctx.Logf("req %v", r.Host)
