@@ -61,5 +61,6 @@ func Error(out http.ResponseWriter, error string, code int) {
 		proxy:     nil,
 	}
 
+	ctx.Warnf("error: %q", error)
 	writeResponse(ctx, resp, out)
 }
