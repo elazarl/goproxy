@@ -162,6 +162,8 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 
 			req.URL, err = url.Parse("http://" + req.Host + req.URL.String())
 
+			req.RemoteAddr = r.RemoteAddr
+
 			if end, err := proxy.handleRequest(NewConnResponseWriter(proxyClient), req); end {
 				if err != nil {
 					ctx.Warnf("Error during serving MITM HTTP request: %+#v", err)
@@ -220,6 +222,8 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 						break
 					}
 				}
+
+				req.RemoteAddr = r.RemoteAddr
 
 				if end, err := proxy.handleRequest(NewConnResponseWriter(rawClientTls), req); end {
 					if err != nil {
