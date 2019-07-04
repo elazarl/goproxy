@@ -235,6 +235,7 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 					ctx.Warnf("Empty request from mitm'd client")
 					return
 				}
+				ctx.Warnf("got request: %v", req)
 
 				// 2. Setup a new ProxyCtx for the intercepted
 				// stream.
