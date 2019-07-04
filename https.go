@@ -222,6 +222,7 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 			clientTls := bufio.NewReader(rawClientTls)
 
 			for {
+				ctx.Warnf("waiting for request")
 				// 1. read the the request from the client.
 				req, err := http.ReadRequest(clientTls)
 				if err != nil {
@@ -235,7 +236,6 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 					ctx.Warnf("Empty request from mitm'd client")
 					return
 				}
-				ctx.Warnf("got request: %v", req)
 
 				// 2. Setup a new ProxyCtx for the intercepted
 				// stream.
@@ -251,6 +251,7 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 				// well.
 				req.RemoteAddr = r.RemoteAddr
 				nctx.Logf("req %v", r.Host)
+				nctx.Warnf("got request: %v", req)
 
 				if !httpsRegexp.MatchString(req.URL.String()) {
 					req.URL, err = url.Parse("https://" + r.Host + req.URL.String())
@@ -283,6 +284,7 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 						return
 					}
 					nctx.Logf("resp %v", resp.Status)
+					nctx.Warnf("resp %v", resp.Status)
 				}
 
 				// 4. Filter the response.
@@ -291,6 +293,7 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 				// 5. Write the filtered response to the client
 				filtered.Header.Set("Connection", "close")
 				err = filtered.Write(rawClientTls)
+				nctx.Warnf("wrote to rawClientTls")
 				resp.Body.Close()
 				filtered.Body.Close()
 				if err != nil {
@@ -299,7 +302,7 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 				}
 
 				if req.Close {
-					ctx.Warnf("Non-persistent connection; closing")
+					nctx.Warnf("Non-persistent connection; closing")
 					return
 				}
 			}
