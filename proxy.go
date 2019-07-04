@@ -269,7 +269,7 @@ func (proxy *ProxyHttpServer) handleWsRequest(ctx *ProxyCtx, writer http.Respons
 	)
 
 	if err != nil {
-		ctx.Warnf("error ws-dialing %v: %v", base.URL, err)
+		ctx.Warnf("error ws-dialing %v: %v, resp: %v", base.URL, err, resp)
 		if err == websocket.ErrBadHandshake {
 			writeResponse(ctx, resp, writer)
 		} else {
