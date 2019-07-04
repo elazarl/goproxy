@@ -239,10 +239,11 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 				// 2. Setup a new ProxyCtx for the intercepted
 				// stream.
 				nctx := &ProxyCtx{
-					Req:      req,
-					Session:  atomic.AddInt64(&proxy.sess, 1),
-					proxy:    proxy,
-					UserData: ctx.UserData,
+					Req:            req,
+					Session:        atomic.AddInt64(&proxy.sess, 1),
+					proxy:          proxy,
+					UserData:       ctx.UserData,
+					KeepConnection: true,
 				}
 
 				// Since we're converting the request, need to
@@ -273,7 +274,7 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 						return
 					}
 
-					// removeProxyHeaders(nctx, filreq)
+					removeProxyHeaders(nctx, filreq)
 
 					// Send the request to the target
 					resp, err = nctx.RoundTrip(filreq)
@@ -291,7 +292,6 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 				err = filtered.Write(rawClientTls)
 				resp.Body.Close()
 				filtered.Body.Close()
-				nctx.Warnf("wrote to rawClientTls: %v\n", filtered)
 				if err != nil {
 					nctx.Warnf("Failed to write response to client: %v", err)
 					return
