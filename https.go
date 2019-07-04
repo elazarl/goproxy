@@ -199,9 +199,9 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 				return
 			}
 			defer rawClientTls.Close()
-			defer proxyClient.Close()
 
 			clientTls := bufio.NewReader(rawClientTls)
+			writer := NewConnResponseWriter(rawClientTls)
 
 			for {
 				// Read a request from the client.
@@ -216,7 +216,6 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 
 				if !httpsRegexp.MatchString(req.URL.String()) {
 					req.URL, err = url.Parse("https://" + r.Host + req.URL.String())
-					ctx.Warnf("url-rewrite: %q", req.URL)
 					if err != nil {
 						ctx.Warnf("Couldn't create https-URL for host %q and URL %q: %+#v", r.Host, req.URL.String(), err)
 						break
@@ -224,8 +223,7 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 				}
 
 				req.RemoteAddr = r.RemoteAddr
-
-				if end, err := proxy.handleRequest(NewConnResponseWriter(rawClientTls), req); end {
+				if end, err := proxy.handleRequest(writer, req); end {
 					if err != nil {
 						ctx.Warnf("Error during serving MITM HTTPS request: %+#v", err)
 					}

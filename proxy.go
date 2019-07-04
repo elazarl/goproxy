@@ -178,6 +178,7 @@ func (proxy *ProxyHttpServer) handleRequest(writer http.ResponseWriter, base *ht
 		Websocket: websocket.IsWebSocketUpgrade(base),
 		proxy:     proxy,
 	}
+
 	// Clean-up
 	base.RequestURI = ""
 
@@ -308,6 +309,15 @@ func NewProxyHttpServer() *ProxyHttpServer {
 			TLSClientConfig:    tlsClientSkipVerify,
 			Proxy:              http.ProxyFromEnvironment,
 			DisableCompression: true,
+		},
+		WsDialer: &websocket.Dialer{},
+		WsServer: &websocket.Upgrader{
+			CheckOrigin: func(r *http.Request) bool {
+				return true
+			},
+			Error: func(w http.ResponseWriter, r *http.Request, status int, reason error) {
+				Error(w, reason.Error(), status)
+			},
 		},
 	}
 	proxy.ConnectDial = dialerFromEnv(&proxy)
