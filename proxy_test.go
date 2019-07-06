@@ -94,7 +94,11 @@ func oneShotProxy(proxy *goproxy.ProxyHttpServer, t *testing.T) (client *http.Cl
 	s = httptest.NewServer(proxy)
 
 	proxyUrl, _ := url.Parse(s.URL)
-	tr := &http.Transport{TLSClientConfig: acceptAllCerts, Proxy: http.ProxyURL(proxyUrl)}
+	tr := &http.Transport{
+		TLSClientConfig:   acceptAllCerts,
+		Proxy:             http.ProxyURL(proxyUrl),
+		DisableKeepAlives: true, // BUG: adds Connection: close
+	}
 	client = &http.Client{Transport: tr}
 	return
 }
@@ -451,7 +455,7 @@ func TestConnectHandler(t *testing.T) {
 
 func TestMitmIsFiltered(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
-	//proxy.Verbose = true
+	// proxy.Verbose = true
 	proxy.OnRequest(goproxy.ReqHostIs(https.Listener.Addr().String())).HandleConnect(goproxy.AlwaysMitm)
 	proxy.OnRequest(goproxy.UrlIs("/momo")).DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		return nil, goproxy.TextResponse(req, "koko")
@@ -530,7 +534,7 @@ type VerifyNoProxyHeaders struct {
 }
 
 func (v VerifyNoProxyHeaders) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("Connection") != "" || r.Header.Get("Proxy-Connection") != "" ||
+	if r.Header.Get("Proxy-Connection") != "" ||
 		r.Header.Get("Proxy-Authenticate") != "" || r.Header.Get("Proxy-Authorization") != "" {
 		v.Error("Got Connection header from goproxy", r.Header)
 	}
@@ -542,7 +546,6 @@ func TestNoProxyHeaders(t *testing.T) {
 	defer l.Close()
 	req, err := http.NewRequest("GET", s.URL, nil)
 	panicOnErr(err, "bad request")
-	req.Header.Add("Connection", "close")
 	req.Header.Add("Proxy-Connection", "close")
 	req.Header.Add("Proxy-Authenticate", "auth")
 	req.Header.Add("Proxy-Authorization", "auth")
@@ -557,7 +560,6 @@ func TestNoProxyHeadersHttps(t *testing.T) {
 	defer l.Close()
 	req, err := http.NewRequest("GET", s.URL, nil)
 	panicOnErr(err, "bad request")
-	req.Header.Add("Connection", "close")
 	req.Header.Add("Proxy-Connection", "close")
 	client.Do(req)
 }
@@ -746,8 +748,9 @@ func TestSelfRequest(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
 	_, l := oneShotProxy(proxy, t)
 	defer l.Close()
-	if !strings.Contains(string(getOrFail(l.URL, http.DefaultClient, t)), "non-proxy") {
-		t.Fatal("non proxy requests should fail")
+	r := string(getOrFail(l.URL, http.DefaultClient, t))
+	if !strings.Contains(r, "non-proxy") {
+		t.Fatalf("non proxy requests should fail for %v (instead: %#q)", l.URL, r)
 	}
 }
 
