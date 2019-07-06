@@ -50,7 +50,7 @@ func (ctx *ProxyCtx) printf(msg string, argv ...interface{}) {
 //		return r, nil
 //	})
 func (ctx *ProxyCtx) Logf(msg string, argv ...interface{}) {
-	if ctx.proxy.Verbose {
+	if ctx != nil && ctx.proxy != nil && ctx.proxy.Verbose {
 		ctx.printf("INFO: "+msg, argv...)
 	}
 }
@@ -67,7 +67,9 @@ func (ctx *ProxyCtx) Logf(msg string, argv ...interface{}) {
 //		return r, nil
 //	})
 func (ctx *ProxyCtx) Warnf(msg string, argv ...interface{}) {
-	ctx.printf("WARN: "+msg, argv...)
+	if ctx != nil && ctx.proxy != nil {
+		ctx.printf("WARN: "+msg, argv...)
+	}
 }
 
 var charsetFinder = regexp.MustCompile("charset=([^ ;]*)")
