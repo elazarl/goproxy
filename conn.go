@@ -33,7 +33,6 @@ func (w *connResponseWriter) WriteHeader(code int) {
 
 	w.header_written = true
 	w.header.Write(w.dst)
-	io.WriteString(w.dst, "\r\n")
 }
 
 func (w *connResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
