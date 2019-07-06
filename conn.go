@@ -3,6 +3,7 @@ package goproxy
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
@@ -11,19 +12,33 @@ import (
 )
 
 type connResponseWriter struct {
-	dst io.Writer
+	dst            io.Writer
+	header         http.Header
+	header_written bool
 }
 
 func (w *connResponseWriter) Header() http.Header {
-	panic("proxy: ConnectionResponseWriter does not implement Header()")
+	return w.header
 }
 
-func (w *connResponseWriter) Write(data []byte) (int, error) {
+func (w *connResponseWriter) Write(data []byte) (n int, e error) {
+	if !w.header_written {
+		w.WriteHeader(http.StatusOK)
+	}
 	return w.dst.Write(data)
 }
 
 func (w *connResponseWriter) WriteHeader(code int) {
-	panic("proxy: ConnectionResponseWriter does not implement WriteHeader(int)")
+	if w.header_written {
+		return
+	}
+
+	_, err := io.WriteString(w.dst, fmt.Sprintf("HTTP/1.1 %d %s\r\n", code, http.StatusText(code)))
+	if err != nil {
+		return
+	}
+	w.header.Write(w.dst)
+	w.header_written = true
 }
 
 func (w *connResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
@@ -43,15 +58,16 @@ func (w *connResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 
 func NewConnResponseWriter(dst io.Writer) *connResponseWriter {
 	return &connResponseWriter{
-		dst: dst,
+		dst:    dst,
+		header: map[string][]string{},
 	}
 }
 
-func Error(out http.ResponseWriter, error string, code int) {
+func Error(out http.ResponseWriter, err error, code int) {
 	resp := &http.Response{
 		StatusCode:    code,
 		ContentLength: -1,
-		Body:          ioutil.NopCloser(strings.NewReader(error)),
+		Body:          ioutil.NopCloser(strings.NewReader(err.Error())),
 	}
 
 	ctx := &ProxyCtx{
