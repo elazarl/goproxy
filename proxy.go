@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -261,7 +262,6 @@ func (proxy *ProxyHttpServer) handleHttpRequest(ctx *ProxyCtx, writer http.Respo
 // TODO: add handshake filter and message introspection
 func (proxy *ProxyHttpServer) handleWsRequest(ctx *ProxyCtx, writer http.ResponseWriter, base *http.Request) (bool, error) {
 	proto := websocket.Subprotocols(base)
-	wg := &sync.WaitGroup{}
 
 	switch base.URL.Scheme {
 	case "http":
@@ -269,6 +269,14 @@ func (proxy *ProxyHttpServer) handleWsRequest(ctx *ProxyCtx, writer http.Respons
 
 	case "https":
 		base.URL.Scheme = "wss"
+	}
+
+	var resp *http.Response
+	base, resp = proxy.filterRequest(base, ctx)
+	if resp != nil {
+		// a filter matched, let's return to the client
+		writeResponse(ctx, resp, writer)
+		return true, nil
 	}
 
 	ctx.Logf("Relying websocket connection %s with protocols: %v", base.URL.String(), proto)
@@ -280,6 +288,9 @@ func (proxy *ProxyHttpServer) handleWsRequest(ctx *ProxyCtx, writer http.Respons
 
 	if err != nil {
 		ctx.Warnf("error ws-dialing %v: %v, resp: %v", base.URL, err, resp)
+		if body, err := ioutil.ReadAll(resp.Body); err == nil {
+			ctx.Warnf("ws-error body: %s", string(body))
+		}
 		if err == websocket.ErrBadHandshake {
 			writeResponse(ctx, resp, writer)
 		} else {
@@ -300,9 +311,10 @@ func (proxy *ProxyHttpServer) handleWsRequest(ctx *ProxyCtx, writer http.Respons
 		return true, err
 	}
 
+	var wg sync.WaitGroup
 	wg.Add(2)
-	go wsRelay(ctx, remote, client, wg)
-	go wsRelay(ctx, client, remote, wg)
+	go wsRelay(ctx, remote, client, &wg)
+	go wsRelay(ctx, client, remote, &wg)
 	wg.Wait()
 
 	remote.Close()
@@ -322,9 +334,18 @@ func NewProxyHttpServer() *ProxyHttpServer {
 			http.Error(w, "This is a proxy server. Does not respond to non-proxy requests.", 500)
 		}),
 		Tr: &http.Transport{
-			TLSClientConfig:    tlsClientSkipVerify,
-			Proxy:              http.ProxyFromEnvironment,
-			DisableCompression: true,
+			Proxy: http.ProxyFromEnvironment,
+			DialContext: (&net.Dialer{
+				Timeout:   10 * time.Second,
+				KeepAlive: 30 * time.Second,
+				DualStack: true,
+			}).DialContext,
+			MaxIdleConns:          100,
+			IdleConnTimeout:       10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			TLSClientConfig:       tlsClientSkipVerify,
+			DisableCompression:    true,
 		},
 		WsDialer: &websocket.Dialer{TLSClientConfig: tlsClientSkipVerify},
 		WsServer: &websocket.Upgrader{
