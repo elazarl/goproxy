@@ -3,6 +3,7 @@ package goproxy
 import (
 	"bytes"
 	"crypto/tls"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -18,13 +19,9 @@ import (
 
 // The basic proxy type. Implements http.Handler.
 type ProxyHttpServer struct {
-	// session variable must be aligned in i386
-	// see http://golang.org/src/pkg/sync/atomic/doc.go#L41
-	sess int64
-
-	KeepDestinationHeaders bool // retain all headers in http.Response before proxying
-	KeepAcceptEncoding     bool // suppress modification to Accept-Encoding header by the proxy
-	Verbose                bool // if true, logs information on each request
+	sess                   int64 // session variable must be aligned in i386
+	KeepDestinationHeaders bool  // retain all headers in http.Response before proxying
+	Verbose                bool  // if true, logs information on each request
 	Logger                 *log.Logger
 	NonproxyHandler        http.Handler
 	reqHandlers            []ReqHandler
@@ -184,6 +181,11 @@ func (proxy *ProxyHttpServer) handleRequest(writer http.ResponseWriter, base *ht
 	// Clean-up
 	base.RequestURI = ""
 
+	if !base.URL.IsAbs() {
+		proxy.NonproxyHandler.ServeHTTP(writer, base)
+		return true, nil
+	}
+
 	if websocket.IsWebSocketUpgrade(base) {
 		return proxy.handleWsRequest(ctx, writer, base)
 	} else {
@@ -207,21 +209,26 @@ func (proxy *ProxyHttpServer) handleHttpRequest(ctx *ProxyCtx, writer http.Respo
 			req.Header.Del(h)
 		}
 
-		// Process
+		// Sent the request
 		resp, err = ctx.RoundTrip(req)
-
 	}
 
 	if err != nil {
 		ctx.Logf("Error reading response %v: %v", req.URL.Host, err.Error())
+		ctx.Warnf("error: %+#v", err)
 
-		// TODO: add gateway timeout error in case of timeout
-		switch err {
-		default:
-			http.Error(writer, err.Error(), http.StatusBadGateway)
+		if operr, ok := err.(*net.OpError); ok && operr.Timeout() {
+			Error(writer, fmt.Errorf("[proxy] timeout during request to remote server: %v", err), http.StatusGatewayTimeout)
+		} else {
+			Error(writer, fmt.Errorf("[proxy] error during request to remote server: %v", err), http.StatusBadGateway)
 		}
 
-		return false, err
+		// We put the error into the ctx and allow the filters to do
+		// their job on an empty response.  The ctx might contain
+		// other relevant information that is going to be processed.
+		ctx.Error = err
+		go proxy.filterResponse(nil, ctx)
+		return true, err
 	}
 
 	// Clean-up response
@@ -278,6 +285,12 @@ func (proxy *ProxyHttpServer) handleWsRequest(ctx *ProxyCtx, writer http.Respons
 		} else {
 			Error(writer, err, http.StatusBadGateway)
 		}
+
+		// We put the error into the ctx and allow the filters to do
+		// their job on an empty response.  The ctx might contain
+		// other relevant information that is going to be processed.
+		ctx.Error = err
+		go proxy.filterResponse(nil, ctx)
 		return true, err
 	}
 	resp = proxy.filterResponse(resp, ctx)
