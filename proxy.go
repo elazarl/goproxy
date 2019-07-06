@@ -167,16 +167,18 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		proxy.handleConnect(w, r)
 	} else {
 		// Common HTTP proxy
-		proxy.handleRequest(w, r)
+		proxy.handleRequest(w, r, nil)
 	}
 }
 
-func (proxy *ProxyHttpServer) handleRequest(writer http.ResponseWriter, base *http.Request) (bool, error) {
-	ctx := &ProxyCtx{
-		Req:       base,
-		Session:   atomic.AddInt64(&proxy.sess, 1),
-		Websocket: websocket.IsWebSocketUpgrade(base),
-		proxy:     proxy,
+func (proxy *ProxyHttpServer) handleRequest(writer http.ResponseWriter, base *http.Request, ctx *ProxyCtx) (bool, error) {
+	if ctx == nil {
+		ctx = &ProxyCtx{
+			Req:       base,
+			Session:   atomic.AddInt64(&proxy.sess, 1),
+			Websocket: websocket.IsWebSocketUpgrade(base),
+			proxy:     proxy,
+		}
 	}
 
 	// Clean-up
@@ -208,10 +210,6 @@ func (proxy *ProxyHttpServer) handleHttpRequest(ctx *ProxyCtx, writer http.Respo
 		// Process
 		resp, err = ctx.RoundTrip(req)
 
-		// Clean-up response
-		for _, h := range hopHeaders {
-			resp.Header.Del(h)
-		}
 	}
 
 	if err != nil {
@@ -224,6 +222,11 @@ func (proxy *ProxyHttpServer) handleHttpRequest(ctx *ProxyCtx, writer http.Respo
 		}
 
 		return false, err
+	}
+
+	// Clean-up response
+	for _, h := range hopHeaders {
+		resp.Header.Del(h)
 	}
 
 	body := resp.Body
@@ -265,7 +268,7 @@ func (proxy *ProxyHttpServer) handleWsRequest(ctx *ProxyCtx, writer http.Respons
 
 	remote, resp, err := proxy.WsDialer.Dial(
 		base.URL.String(),
-		nil,
+		http.Header(map[string][]string{"Origin": {"http://proxy/"}}), // TODO: configurable
 	)
 
 	if err != nil {
@@ -273,10 +276,11 @@ func (proxy *ProxyHttpServer) handleWsRequest(ctx *ProxyCtx, writer http.Respons
 		if err == websocket.ErrBadHandshake {
 			writeResponse(ctx, resp, writer)
 		} else {
-			Error(writer, err.Error(), http.StatusBadGateway)
+			Error(writer, err, http.StatusBadGateway)
 		}
 		return true, err
 	}
+	resp = proxy.filterResponse(resp, ctx)
 
 	client, err := proxy.WsServer.Upgrade(writer, base, nil)
 	if err != nil {
@@ -284,10 +288,8 @@ func (proxy *ProxyHttpServer) handleWsRequest(ctx *ProxyCtx, writer http.Respons
 	}
 
 	wg.Add(2)
-
 	go wsRelay(ctx, remote, client, wg)
 	go wsRelay(ctx, client, remote, wg)
-
 	wg.Wait()
 
 	remote.Close()
@@ -314,10 +316,10 @@ func NewProxyHttpServer() *ProxyHttpServer {
 		WsDialer: &websocket.Dialer{TLSClientConfig: tlsClientSkipVerify},
 		WsServer: &websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
-				return false
+				return true
 			},
 			Error: func(w http.ResponseWriter, r *http.Request, status int, reason error) {
-				Error(w, reason.Error(), status)
+				Error(w, reason, status)
 			},
 		},
 	}
