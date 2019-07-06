@@ -217,7 +217,7 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 			req, err := http.ReadRequest(clientTls)
 			if err != nil {
 				if err != io.EOF {
-					ctx.Warnf("Cannot read TLS request from mitm'd client %v %v", r.Host, err)
+					ctx.Warnf("Cannot read TLS request from mitm'd client for %v: %v", r.Host, err)
 				}
 				break
 			}
@@ -279,10 +279,16 @@ func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
 	}
 }
 
-func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader, wg *sync.WaitGroup) {
+func copyOrWarn(ctx *ProxyCtx, dst io.WriteCloser, src io.ReadCloser, wg *sync.WaitGroup) {
 	if _, err := io.Copy(dst, src); err != nil {
 		ctx.Warnf("Error copying to client: %s", err)
 	}
+
+	// Close both ends, so that another goroutine of this function in the
+	// other direction terminates as well.
+	src.Close()
+	dst.Close()
+
 	wg.Done()
 }
 
