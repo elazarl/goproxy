@@ -8,11 +8,10 @@ import (
 )
 
 func wsRelay(ctx *ProxyCtx, src, dst *websocket.Conn, wg *sync.WaitGroup) {
-	// TODO add detection of graceful shutdown (via t == websocket.CloseMessage)
-
 	// To avoid allocation of temp buf in io.Copy()
 	buf := make([]byte, 4*1024)
 
+	ctx.Logf("starting WS-relay, src: %p, dst: %p", src, dst)
 	for {
 		t, in, err := src.NextReader()
 
@@ -34,6 +33,12 @@ func wsRelay(ctx *ProxyCtx, src, dst *websocket.Conn, wg *sync.WaitGroup) {
 			break
 		}
 	}
+	ctx.Logf("done with WS-relay, src: %p, dst: %p", src, dst)
+
+	// We close both ends so that the other goroutine of this function
+	// serving the other direction can terminate.
+	src.Close()
+	dst.Close()
 
 	wg.Done()
 }
