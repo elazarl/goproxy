@@ -3,7 +3,6 @@ package goproxy
 import (
 	"bufio"
 	"errors"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
@@ -22,10 +21,9 @@ func (w *connResponseWriter) Header() http.Header {
 }
 
 func (w *connResponseWriter) Write(data []byte) (n int, e error) {
-	if !w.header_written {
-		w.WriteHeader(http.StatusOK)
-	}
-	return w.dst.Write(data)
+	w.WriteHeader(http.StatusOK)
+	n, e = w.dst.Write(data)
+	return
 }
 
 func (w *connResponseWriter) WriteHeader(code int) {
@@ -33,12 +31,9 @@ func (w *connResponseWriter) WriteHeader(code int) {
 		return
 	}
 
-	_, err := io.WriteString(w.dst, fmt.Sprintf("HTTP/1.1 %d %s\r\n", code, http.StatusText(code)))
-	if err != nil {
-		return
-	}
-	w.header.Write(w.dst)
 	w.header_written = true
+	w.header.Write(w.dst)
+	io.WriteString(w.dst, "\r\n")
 }
 
 func (w *connResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
