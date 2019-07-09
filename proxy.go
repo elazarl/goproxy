@@ -70,10 +70,6 @@ func (proxy *ProxyHttpServer) filterRequest(r *http.Request, ctx *ProxyCtx) (req
 func (proxy *ProxyHttpServer) filterResponse(respOrig *http.Response, ctx *ProxyCtx) (resp *http.Response) {
 	resp = respOrig
 	for _, h := range proxy.respHandlers {
-		if resp == nil {
-			// resp is nil, no need to run the next handler
-			return
-		}
 		ctx.Resp = resp
 		resp = h.Handle(resp, ctx)
 	}
