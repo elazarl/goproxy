@@ -243,8 +243,10 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				// Since we don't know the length of resp, return chunked encoded response
 				// TODO: use a more reasonable scheme
 
-				resp.Header.Del("Content-Length")
-				resp.Header.Set("Transfer-Encoding", "chunked")
+				if resp.StatusCode >= 200 && resp.StatusCode != 204 {
+					resp.Header.Del("Content-Length")
+					resp.Header.Set("Transfer-Encoding", "chunked")
+				}
 				if err := resp.Header.Write(rawClientTls); err != nil {
 					ctx.Warnf("Cannot write TLS response header from mitm'd client: %v", err)
 					return
@@ -253,18 +255,21 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					ctx.Warnf("Cannot write TLS response header end from mitm'd client: %v", err)
 					return
 				}
-				chunked := newChunkedWriter(rawClientTls)
-				if _, err := io.Copy(chunked, resp.Body); err != nil {
-					ctx.Warnf("Cannot write TLS response body from mitm'd client: %v", err)
-					return
-				}
-				if err := chunked.Close(); err != nil {
-					ctx.Warnf("Cannot write TLS chunked EOF from mitm'd client: %v", err)
-					return
-				}
-				if _, err = io.WriteString(rawClientTls, "\r\n"); err != nil {
-					ctx.Warnf("Cannot write TLS response chunked trailer from mitm'd client: %v", err)
-					return
+
+				if resp.Header.Get("Transfer-Encoding") == "chunked" {
+					chunked := newChunkedWriter(rawClientTls)
+					if _, err := io.Copy(chunked, resp.Body); err != nil {
+						ctx.Warnf("Cannot write TLS response body from mitm'd client: %v", err)
+						return
+					}
+					if err := chunked.Close(); err != nil {
+						ctx.Warnf("Cannot write TLS chunked EOF from mitm'd client: %v", err)
+						return
+					}
+					if _, err = io.WriteString(rawClientTls, "\r\n"); err != nil {
+						ctx.Warnf("Cannot write TLS response chunked trailer from mitm'd client: %v", err)
+						return
+					}
 				}
 			}
 			ctx.Logf("Exiting on EOF")

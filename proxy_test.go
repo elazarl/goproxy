@@ -436,6 +436,48 @@ func TestSimpleMitm(t *testing.T) {
 	}
 }
 
+
+func TestConnectMitmNotSetTransferEncodingHeaderIfStatusCodeIs204(t *testing.T) {
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.OnRequest(goproxy.ReqHostIs(https.Listener.Addr().String())).HandleConnect(goproxy.AlwaysMitm)
+	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		resp.StatusCode = 204
+		return resp
+	})
+
+	client, l := oneShotProxy(proxy, t)
+	defer l.Close()
+
+	resp, err := client.Get(https.URL+"/bobo")
+	if err != nil {
+		t.Fatal("Can't fetch url", err)
+	}
+
+	if resp.StatusCode != 204 {
+		t.Error("Wrong response status code when mitm", resp.StatusCode, "expected 204")
+	}
+
+	if resp.Header.Get("Transfer-Encoding") != "" {
+		t.Error("Transfer-Encoding header should not be set")
+	}
+}
+
+func TestConnectMitmNotWriteBodyWithChunkedEncodingIfStatusCodeIs204(t *testing.T) {
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.OnRequest(goproxy.ReqHostIs(https.Listener.Addr().String())).HandleConnect(goproxy.AlwaysMitm)
+	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		resp.StatusCode = 204
+		return resp
+	})
+
+	client, l := oneShotProxy(proxy, t)
+	defer l.Close()
+
+	if resp := string(getOrFail(https.URL+"/bobo", client, t)); resp != "" {
+		t.Error("Wrong response when mitm", resp, "expected empty body")
+	}
+}
+
 func TestConnectHandler(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
 	althttps := httptest.NewTLSServer(ConstantHanlder("althttps"))
