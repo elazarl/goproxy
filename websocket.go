@@ -11,7 +11,7 @@ func wsRelay(ctx *ProxyCtx, src, dst *websocket.Conn, wg *sync.WaitGroup) {
 	// To avoid allocation of temp buf in io.Copy()
 	buf := make([]byte, 4*1024)
 
-	ctx.Logf("starting WS-relay, src: %p, dst: %p", src, dst)
+	ctx.Logf("starting WS-relay, src: %s, dst: %s", src.RemoteAddr(), dst.RemoteAddr())
 	for {
 		t, in, err := src.NextReader()
 
@@ -33,7 +33,7 @@ func wsRelay(ctx *ProxyCtx, src, dst *websocket.Conn, wg *sync.WaitGroup) {
 			break
 		}
 	}
-	ctx.Logf("done with WS-relay, src: %p, dst: %p", src, dst)
+	ctx.Logf("done with WS-relay, src: %s, dst: %s", src.RemoteAddr(), dst.RemoteAddr())
 
 	// We close both ends so that the other goroutine of this function
 	// serving the other direction can terminate.

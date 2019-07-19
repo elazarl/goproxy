@@ -281,10 +281,13 @@ func (proxy *ProxyHttpServer) handleWsRequest(ctx *ProxyCtx, writer http.Respons
 
 	ctx.Logf("Relying websocket connection %s with protocols: %v", base.URL.String(), proto)
 
-	remote, resp, err := proxy.WsDialer.Dial(
-		base.URL.String(),
-		http.Header(map[string][]string{"Origin": {"http://proxy/"}}), // TODO: configurable
-	)
+	// TODO: The header needs to be configurable.
+	header := http.Header(map[string][]string{
+		"Origin":                 {"http://proxy/"},
+		"Sec-WebSocket-Protocol": proto,
+	})
+
+	remote, resp, err := proxy.WsDialer.Dial(base.URL.String(), header)
 
 	if err != nil {
 		ctx.Warnf("error ws-dialing %v: %v, resp: %v", base.URL, err, resp)
@@ -306,7 +309,7 @@ func (proxy *ProxyHttpServer) handleWsRequest(ctx *ProxyCtx, writer http.Respons
 	}
 	resp = proxy.filterResponse(resp, ctx)
 
-	client, err := proxy.WsServer.Upgrade(writer, base, nil)
+	client, err := proxy.WsServer.Upgrade(writer, base, header)
 	if err != nil {
 		return true, err
 	}
