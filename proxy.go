@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -282,10 +283,15 @@ func (proxy *ProxyHttpServer) handleWsRequest(ctx *ProxyCtx, writer http.Respons
 	ctx.Logf("Relying websocket connection %s with protocols: %v", base.URL.String(), proto)
 
 	// TODO: The header needs to be configurable.
-	header := http.Header(map[string][]string{
-		"Origin":                 {"http://proxy/"},
-		"Sec-WebSocket-Protocol": proto,
-	})
+	header := http.Header(map[string][]string{})
+	for k, v := range base.Header {
+		if k == "Upgrade" || k == "Connection" || strings.HasPrefix(strings.ToLower(k), "sec-websocket") {
+			continue
+		}
+		header[k] = v
+	}
+	header.Set("Origin", "http://proxy/")
+	header["Sec-WebSocket-Protocol"] = proto
 
 	remote, resp, err := proxy.WsDialer.Dial(base.URL.String(), header)
 
