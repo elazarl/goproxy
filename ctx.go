@@ -24,6 +24,7 @@ type ProxyCtx struct {
 	certStore CertStorage
 	Proxy     *ProxyHttpServer
 	
+	ForwardProxy  string
 	Accounting    string
 	BytesSent     int64
 	BytesReceived int64
@@ -47,6 +48,16 @@ func (f RoundTripperFunc) RoundTrip(req *http.Request, ctx *ProxyCtx) (*http.Res
 func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 	if ctx.RoundTripper != nil {
 		return ctx.RoundTripper.RoundTrip(req, ctx)
+	}
+	if ctx.ForwardProxy != nil {
+		tr := &http.Transport{
+			Proxy: func(req *http.Request) (*url.URL, error) {
+				return url.Parse("http://" + ctx.ForwardProxy)
+			},
+			Dial: proxy.NewConnectDialToProxy("http://" + ctx.ForwardProxy),
+		}
+
+		return tr.RoundTrip(req)
 	}
 	return ctx.Proxy.Tr.RoundTrip(req)
 }
