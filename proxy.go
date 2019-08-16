@@ -157,7 +157,12 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		if err := resp.Body.Close(); err != nil {
 			ctx.Warnf("Can't close response body %v", err)
 		}
+		ctx.BytesReceived += nr
 		ctx.Logf("Copied %v bytes to client error=%v", nr, err)
+		if ctx.Tail != nil {
+			ctx.Tail(ctx)
+		}
+
 	}
 }
 
