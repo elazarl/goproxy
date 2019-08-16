@@ -3,6 +3,7 @@ package goproxy
 import (
 	"crypto/tls"
 	"net/http"
+	"net/url"
 	"regexp"
 )
 
@@ -49,12 +50,12 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 	if ctx.RoundTripper != nil {
 		return ctx.RoundTripper.RoundTrip(req, ctx)
 	}
-	if ctx.ForwardProxy != nil {
+	if ctx.ForwardProxy != "" {
 		tr := &http.Transport{
 			Proxy: func(req *http.Request) (*url.URL, error) {
 				return url.Parse("http://" + ctx.ForwardProxy)
 			},
-			Dial: proxy.NewConnectDialToProxy("http://" + ctx.ForwardProxy),
+			Dial: ctx.Proxy.NewConnectDialToProxy("http://" + ctx.ForwardProxy),
 		}
 
 		return tr.RoundTrip(req)
