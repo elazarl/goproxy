@@ -26,6 +26,7 @@ type ProxyCtx struct {
 	Proxy     *ProxyHttpServer
 	
 	ForwardProxy  string
+	ProxyUser     string
 	Accounting    string
 	BytesSent     int64
 	BytesReceived int64
