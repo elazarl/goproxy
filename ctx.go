@@ -22,7 +22,7 @@ type ProxyCtx struct {
 	// Will connect a request to a response
 	Session   int64
 	certStore CertStorage
-	proxy     *ProxyHttpServer
+	Proxy     *ProxyHttpServer
 	
 	Accounting    string
 	BytesSent     int64
