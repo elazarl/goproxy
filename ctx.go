@@ -23,6 +23,11 @@ type ProxyCtx struct {
 	Session   int64
 	certStore CertStorage
 	proxy     *ProxyHttpServer
+	
+	Accounting    string
+	BytesSent     int64
+	BytesReceived int64
+	Tail  func(*ProxyCtx) error
 }
 
 type RoundTripper interface {
