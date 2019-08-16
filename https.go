@@ -65,7 +65,7 @@ func (proxy *ProxyHttpServer) connectDial(network, addr string) (c net.Conn, err
 }
 
 func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request) {
-	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy, certStore: proxy.CertStore}
+	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy, certStore: proxy.CertStore}
 
 	hij, ok := w.(http.Hijacker)
 	if !ok {
@@ -188,7 +188,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			clientTlsReader := bufio.NewReader(rawClientTls)
 			for !isEof(clientTlsReader) {
 				req, err := http.ReadRequest(clientTlsReader)
-				var ctx = &ProxyCtx{Req: req, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy, UserData: ctx.UserData}
+				var ctx = &ProxyCtx{Req: req, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy, UserData: ctx.UserData}
 				if err != nil && err != io.EOF {
 					return
 				}
