@@ -56,7 +56,6 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 			Proxy: func(req *http.Request) (*url.URL, error) {
 				return url.Parse("http://" + ctx.ForwardProxy)
 			},
-			Dial: ctx.Proxy.NewConnectDialToProxy("http://" + ctx.ForwardProxy),
 		}
 
 		return tr.RoundTrip(req)
