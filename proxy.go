@@ -106,10 +106,12 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 		var err error
 		ctx.Logf("Got request %v %v %v %v", r.URL.Path, r.Host, r.Method, r.URL.String())
+
 		if !r.URL.IsAbs() {
 			proxy.NonproxyHandler.ServeHTTP(w, r)
 			return
 		}
+
 		r, resp := proxy.filterRequest(r, ctx)
 
 		if resp == nil {
@@ -159,6 +161,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 		ctx.BytesReceived += nr
 		ctx.Logf("Copied %v bytes to client error=%v", nr, err)
+		ctx.Logf("Copied %v bytes from client error=%v", ctx.BytesSent, err)
 		if ctx.Tail != nil {
 			ctx.Tail(ctx)
 		}
