@@ -2,6 +2,7 @@ module github.com/elazarl/goproxy
 
 go 1.12
 
-replace github.com/elazarl/goproxy/ext => ./ext
-
-require github.com/elazarl/goproxy/ext v0.0.0-00010101000000-000000000000
+require (
+	github.com/inconshreveable/go-vhost v0.0.0-20160627193104-06d84117953b
+	github.com/rogpeppe/go-charset v0.0.0-20190617161244-0dc95cdf6f31
+)
