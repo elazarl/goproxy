@@ -1,6 +1,6 @@
 module github.com/elazarl/goproxy
 
-go 1.13
+go 1.12
 
 replace github.com/elazarl/goproxy/ext => ./ext
 
