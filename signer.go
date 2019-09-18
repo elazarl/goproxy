@@ -95,5 +95,5 @@ func signHost(ca *tls.Certificate, hosts []string) (cert *tls.Certificate, err e
 }
 
 func init() {
-	rand.Seed(time.Now().UnixNanno())
+	rand.Seed(time.Now().UnixNano())
 }
