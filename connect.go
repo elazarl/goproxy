@@ -206,7 +206,7 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 
 		rawClientTls := tls.Server(proxyClient, tlsConfig)
 		if err := rawClientTls.Handshake(); err != nil {
-			ctx.Warnf("Cannot handshake client %v %v", r.Host, err)
+			ctx.Warnf("Cannot handshake client %v %v", proxyClient.RemoteAddr(), err)
 			return
 		}
 
