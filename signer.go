@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"math/big"
+	"math/rand"
 	"net"
 	"runtime"
 	"sort"
@@ -39,17 +40,15 @@ func signHost(ca *tls.Certificate, hosts []string) (cert *tls.Certificate, err e
 	if x509ca, err = x509.ParseCertificate(ca.Certificate[0]); err != nil {
 		return
 	}
+
 	start := time.Unix(0, 0)
 	end, err := time.Parse("2006-01-02", "2049-12-31")
 	if err != nil {
 		panic(err)
 	}
-	hash := hashSorted(append(hosts, goproxySignerVersion, ":"+runtime.Version()))
-	serial := new(big.Int)
-	serial.SetBytes(hash)
+
 	template := x509.Certificate{
-		// TODO(elazar): instead of this ugly hack, just encode the certificate and hash the binary form.
-		SerialNumber: serial,
+		SerialNumber: big.NewInt(rand.Int63()),
 		Issuer:       x509ca.Subject,
 		Subject: pkix.Name{
 			Organization: []string{"GoProxy untrusted MITM proxy Inc"},
@@ -57,10 +56,12 @@ func signHost(ca *tls.Certificate, hosts []string) (cert *tls.Certificate, err e
 		NotBefore: start,
 		NotAfter:  end,
 
-		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		KeyUsage:    x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+
 		BasicConstraintsValid: true,
 	}
+
 	for _, h := range hosts {
 		if ip := net.ParseIP(h); ip != nil {
 			template.IPAddresses = append(template.IPAddresses, ip)
@@ -69,20 +70,30 @@ func signHost(ca *tls.Certificate, hosts []string) (cert *tls.Certificate, err e
 			template.Subject.CommonName = h
 		}
 	}
+
+	hash := hashSorted(append(hosts, goproxySignerVersion, ":"+runtime.Version()))
 	var csprng CounterEncryptorRand
+
 	if csprng, err = NewCounterEncryptorRandFromKey(ca.PrivateKey, hash); err != nil {
 		return
 	}
+
 	var certpriv *rsa.PrivateKey
 	if certpriv, err = rsa.GenerateKey(&csprng, 2048); err != nil {
 		return
 	}
+
 	var derBytes []byte
 	if derBytes, err = x509.CreateCertificate(&csprng, &template, x509ca, &certpriv.PublicKey, ca.PrivateKey); err != nil {
 		return
 	}
+
 	return &tls.Certificate{
 		Certificate: [][]byte{derBytes, ca.Certificate[0]},
 		PrivateKey:  certpriv,
 	}, nil
+}
+
+func init() {
+	rand.Seed(time.Now().UnixNanno())
 }
