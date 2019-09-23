@@ -3,6 +3,7 @@ package goproxy
 import (
 	"bufio"
 	"crypto/tls"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -29,12 +30,13 @@ type ProxyCtx struct {
 	certStore CertStorage
 	Proxy     *ProxyHttpServer
 
-	ForwardProxy  string
-	ProxyUser     string
-	Accounting    string
-	BytesSent     int64
-	BytesReceived int64
-	Tail          func(*ProxyCtx) error
+	ForwardProxy     string
+	ForwardProxyAuth string
+	ProxyUser        string
+	Accounting       string
+	BytesSent        int64
+	BytesReceived    int64
+	Tail             func(*ProxyCtx) error
 }
 
 type RoundTripper interface {
@@ -73,14 +75,22 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 
 		if ctx.ForwardProxy != "" {
-			if ctx.ForwardProxy != "" {
-				tr = &http.Transport{
-					Proxy: func(req *http.Request) (*url.URL, error) {
-						return url.Parse("http://" + ctx.ForwardProxy)
-					},
-					Dial: dialer,
-				}
+
+			proxyHeaders := http.Header{}
+
+			if ctx.ForwardProxyAuth != "" {
+
+				proxyHeaders.Add("Authorization", fmt.Sprintf("Basic: %s", ctx.ForwardProxyAuth))
+
 			}
+			tr = &http.Transport{
+				Proxy: func(req *http.Request) (*url.URL, error) {
+					return url.Parse("http://" + ctx.ForwardProxy)
+				},
+				ProxyConnectHeader: proxyHeaders,
+				Dial:               dialer,
+			}
+
 		}
 
 		rawConn, err = tr.Dial("tcp4", host)

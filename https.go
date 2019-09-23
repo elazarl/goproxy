@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
@@ -97,11 +98,20 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		var targetSiteCon net.Conn
 		var err error
 		if ctx.ForwardProxy != "" {
+			proxyHeaders := http.Header{}
+
+			if ctx.ForwardProxyAuth != "" {
+
+				proxyHeaders.Add("Authorization", fmt.Sprintf("Basic: %s", ctx.ForwardProxyAuth))
+
+			}
+
 			tr := &http.Transport{
 				Proxy: func(req *http.Request) (*url.URL, error) {
 					return url.Parse("http://" + ctx.ForwardProxy)
 				},
-				Dial: ctx.Proxy.NewConnectDialToProxy("http://" + ctx.ForwardProxy),
+				ProxyConnectHeader: proxyHeaders,
+				Dial:               ctx.Proxy.NewConnectDialToProxy("http://" + ctx.ForwardProxy),
 			}
 			targetSiteCon, err = tr.Dial("tcp", host)
 		} else {
