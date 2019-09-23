@@ -108,7 +108,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 
 			tr := &http.Transport{
 				Proxy: func(req *http.Request) (*url.URL, error) {
-					return url.Parse("http://" + ctx.ForwardProxy)
+					return url.Parse(ctx.ForwardProxyProto + "://" + ctx.ForwardProxy)
 				},
 				ProxyConnectHeader: proxyHeaders,
 				Dial:               ctx.Proxy.NewConnectDialToProxy("http://" + ctx.ForwardProxy),
