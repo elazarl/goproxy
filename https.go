@@ -101,9 +101,10 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			proxyHeaders := http.Header{}
 
 			if ctx.ForwardProxyAuth != "" {
-
 				proxyHeaders.Add("Proxy-Authorization", fmt.Sprintf("Basic: %s", ctx.ForwardProxyAuth))
-
+			}
+			if ctx.ForwardProxyProto == "" {
+				ctx.ForwardProxyProto = "http"
 			}
 
 			tr := &http.Transport{
