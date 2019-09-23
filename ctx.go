@@ -1,10 +1,14 @@
 package goproxy
 
 import (
+	"bufio"
 	"crypto/tls"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
+	"strings"
+	"time"
 )
 
 // ProxyCtx is the Proxy context, contains useful information about every request. It is passed to
@@ -24,13 +28,13 @@ type ProxyCtx struct {
 	Session   int64
 	certStore CertStorage
 	Proxy     *ProxyHttpServer
-	
+
 	ForwardProxy  string
 	ProxyUser     string
 	Accounting    string
 	BytesSent     int64
 	BytesReceived int64
-	Tail  func(*ProxyCtx) error
+	Tail          func(*ProxyCtx) error
 }
 
 type RoundTripper interface {
@@ -51,16 +55,107 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 	if ctx.RoundTripper != nil {
 		return ctx.RoundTripper.RoundTrip(req, ctx)
 	}
+	var tr *http.Transport
+	d := net.Dialer{}
+
+	host := req.URL.Host
+	if !strings.Contains(req.URL.Host, ":") {
+		host = req.URL.Host + ":80"
+	}
+
+	// Create our transport depending on behaviour (normal/proxied)
+	var rawConn net.Conn
+	var err error
 	if ctx.ForwardProxy != "" {
-		tr := &http.Transport{
-			Proxy: func(req *http.Request) (*url.URL, error) {
-				return url.Parse("http://" + ctx.ForwardProxy)
-			},
+		// Use forward proxy if defined
+		dialer := func(network, addr string) (net.Conn, error) {
+			return d.Dial("tcp4", ctx.ForwardProxy)
 		}
 
-		return tr.RoundTrip(req)
+		if ctx.ForwardProxy != "" {
+			if ctx.ForwardProxy != "" {
+				tr = &http.Transport{
+					Proxy: func(req *http.Request) (*url.URL, error) {
+						return url.Parse("http://" + ctx.ForwardProxy)
+					},
+					Dial: dialer,
+				}
+			}
+		}
+
+		rawConn, err = tr.Dial("tcp4", host)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// Dial with regular transport
+		tr = &http.Transport{
+			Proxy:                 http.ProxyFromEnvironment,
+			Dial:                  d.Dial,
+			MaxIdleConns:          100,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+		}
+
+		rawConn, err = tr.Dial("tcp4", host)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return ctx.Proxy.Tr.RoundTrip(req)
+
+	req.RequestURI = req.URL.String()
+
+	conn := newProxyConn(rawConn)
+
+	reader := bufio.NewReaderSize(conn, 32*1024)
+	writer := bufio.NewWriterSize(conn, 32*1024)
+	readDone := make(chan responseAndError, 1)
+	writeDone := make(chan error, 1)
+
+	// Write the request.
+	go func() {
+		var err error
+		// Use writeproxy so as to not strip RequestURI if we
+		// are forwarding to another proxy
+		if ctx.ForwardProxy != "" {
+			err = req.WriteProxy(writer)
+		} else {
+			err = req.Write(writer)
+		}
+
+		if err == nil {
+			writer.Flush()
+		}
+
+		writeDone <- err
+	}()
+
+	// And read the response.
+	go func() {
+		resp, err := http.ReadResponse(reader, req)
+		if err != nil {
+			readDone <- responseAndError{nil, err}
+			return
+		}
+
+		resp.Body = &connCloser{resp.Body, conn}
+
+		readDone <- responseAndError{resp, nil}
+	}()
+
+	if err := <-writeDone; err != nil {
+		return nil, err
+	}
+
+	ctx.BytesSent = conn.BytesWrote
+
+	r := <-readDone
+	if r.err != nil {
+		return nil, r.err
+	}
+
+	return r.resp, nil
 }
 
 func (ctx *ProxyCtx) printf(msg string, argv ...interface{}) {
