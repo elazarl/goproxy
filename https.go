@@ -111,7 +111,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					return url.Parse(ctx.ForwardProxyProto + "://" + ctx.ForwardProxy)
 				},
 				ProxyConnectHeader: proxyHeaders,
-				Dial:               ctx.Proxy.NewConnectDialToProxy("http://" + ctx.ForwardProxy),
+				Dial:               ctx.Proxy.NewConnectDialToProxy(ctx.ForwardProxyProto + "://" + ctx.ForwardProxy),
 			}
 			targetSiteCon, err = tr.Dial("tcp", host)
 		} else {
