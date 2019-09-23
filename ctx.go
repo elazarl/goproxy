@@ -70,28 +70,20 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 	var rawConn net.Conn
 	var err error
 	if ctx.ForwardProxy != "" {
-		// Use forward proxy if defined
-		// dialer := func(network, addr string) (net.Conn, error) {
-		// 	return d.Dial("tcp4", ctx.ForwardProxy)
-		// }
 
-		if ctx.ForwardProxy != "" {
+		proxyHeaders := http.Header{}
 
-			proxyHeaders := http.Header{}
+		if ctx.ForwardProxyAuth != "" {
 
-			if ctx.ForwardProxyAuth != "" {
+			proxyHeaders.Add("Proxy-Authorization", fmt.Sprintf("Basic: %s", ctx.ForwardProxyAuth))
 
-				proxyHeaders.Add("Proxy-Authorization", fmt.Sprintf("Basic: %s", ctx.ForwardProxyAuth))
-
-			}
-			tr = &http.Transport{
-				Proxy: func(req *http.Request) (*url.URL, error) {
-					return url.Parse(ctx.ForwardProxyProto + "://" + ctx.ForwardProxy)
-				},
-				ProxyConnectHeader: proxyHeaders,
-				Dial:               ctx.Proxy.NewConnectDialToProxy(ctx.ForwardProxyProto + "://" + ctx.ForwardProxy),
-			}
-
+		}
+		tr = &http.Transport{
+			Proxy: func(req *http.Request) (*url.URL, error) {
+				return url.Parse(ctx.ForwardProxyProto + "://" + ctx.ForwardProxy)
+			},
+			ProxyConnectHeader: proxyHeaders,
+			Dial:               ctx.Proxy.NewConnectDialToProxy(ctx.ForwardProxyProto + "://" + ctx.ForwardProxy),
 		}
 
 		rawConn, err = tr.Dial("tcp4", host)
