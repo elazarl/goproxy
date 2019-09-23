@@ -102,7 +102,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 
 			if ctx.ForwardProxyAuth != "" {
 
-				proxyHeaders.Add("Authorization", fmt.Sprintf("Basic: %s", ctx.ForwardProxyAuth))
+				proxyHeaders.Add("Proxy-Authorization", fmt.Sprintf("Basic: %s", ctx.ForwardProxyAuth))
 
 			}
 
