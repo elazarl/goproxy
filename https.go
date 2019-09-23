@@ -92,9 +92,9 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 	}
 	switch todo.Action {
 	case ConnectAccept:
-		// if !hasPort.MatchString(host) {
-		// 	host += ":80"
-		// }
+		if !hasPort.MatchString(host) {
+			host += ":80"
+		}
 		var targetSiteCon net.Conn
 		var err error
 		if ctx.ForwardProxy != "" {
