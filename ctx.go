@@ -71,9 +71,9 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 	var err error
 	if ctx.ForwardProxy != "" {
 		// Use forward proxy if defined
-		dialer := func(network, addr string) (net.Conn, error) {
-			return d.Dial("tcp4", ctx.ForwardProxy)
-		}
+		// dialer := func(network, addr string) (net.Conn, error) {
+		// 	return d.Dial("tcp4", ctx.ForwardProxy)
+		// }
 
 		if ctx.ForwardProxy != "" {
 
@@ -89,7 +89,7 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 					return url.Parse(ctx.ForwardProxyProto + "://" + ctx.ForwardProxy)
 				},
 				ProxyConnectHeader: proxyHeaders,
-				Dial:               dialer,
+				Dial:               ctx.Proxy.NewConnectDialToProxy(ctx.ForwardProxyProto + "://" + ctx.ForwardProxy),
 			}
 
 		}
