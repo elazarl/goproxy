@@ -233,11 +233,6 @@ func (proxy *ProxyHttpServer) handleHttpRequest(ctx *ProxyCtx, writer http.Respo
 		return true, err
 	}
 
-	// Clean-up response
-	for _, h := range hopHeaders {
-		resp.Header.Del(h)
-	}
-
 	body := resp.Body
 	defer body.Close()
 
