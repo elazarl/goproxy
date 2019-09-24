@@ -98,11 +98,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		var targetSiteCon net.Conn
 		var err error
 		if ctx.ForwardProxy != "" {
-			proxyHeaders := http.Header{}
+			// proxyHeaders := http.Header{}
 
-			if ctx.ForwardProxyAuth != "" {
-				proxyHeaders.Set("Proxy-Authorization", fmt.Sprintf("Basic %s", ctx.ForwardProxyAuth))
-			}
+			// if ctx.ForwardProxyAuth != "" {
+			// 	proxyHeaders.Set("Proxy-Authorization", fmt.Sprintf("Basic %s", ctx.ForwardProxyAuth))
+			// }
 			if ctx.ForwardProxyProto == "" {
 				ctx.ForwardProxyProto = "http"
 			}
@@ -111,8 +111,10 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				Proxy: func(req *http.Request) (*url.URL, error) {
 					return url.Parse(ctx.ForwardProxyProto + "://" + ctx.ForwardProxy)
 				},
-				ProxyConnectHeader: proxyHeaders,
-				Dial:               ctx.Proxy.NewConnectDialToProxy(ctx.ForwardProxyProto + "://" + ctx.ForwardProxy),
+				//ProxyConnectHeader: proxyHeaders,
+				Dial: ctx.Proxy.NewConnectDialToProxyWithHandler(ctx.ForwardProxyProto+"://"+ctx.ForwardProxy, func(req *http.Request) {
+					req.Header.Set("Proxy-Authorization", fmt.Sprintf("Basic %s", ctx.ForwardProxyAuth))
+				}),
 			}
 			targetSiteCon, err = tr.Dial("tcp", host)
 		} else {
