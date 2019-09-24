@@ -85,7 +85,9 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 				return url.Parse(ctx.ForwardProxyProto + "://" + ctx.ForwardProxy)
 			},
 			ProxyConnectHeader: proxyHeaders,
-			Dial:               ctx.Proxy.NewConnectDialToProxy(ctx.ForwardProxyProto + "://" + ctx.ForwardProxy),
+			Dial: ctx.Proxy.NewConnectDialToProxyWithHandler(ctx.ForwardProxyProto+"://"+ctx.ForwardProxy, func(req *http.Request) {
+				req.Header.Set("Proxy-Authorization", fmt.Sprintf("Basic: %s", ctx.ForwardProxyAuth))
+			}),
 		}
 
 		rawConn, err = tr.Dial("tcp4", host)
