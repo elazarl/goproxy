@@ -76,6 +76,7 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 		if ctx.ForwardProxyAuth != "" {
 			proxyHeaders.Add("Proxy-Authorization", fmt.Sprintf("Basic: %s", ctx.ForwardProxyAuth))
 		}
+		fmt.Printf("proxyHeaders: %+v", proxyHeaders)
 		if ctx.ForwardProxyProto == "" {
 			ctx.ForwardProxyProto = "http"
 		}
