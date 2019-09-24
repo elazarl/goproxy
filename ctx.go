@@ -74,7 +74,7 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 		proxyHeaders := http.Header{}
 
 		if ctx.ForwardProxyAuth != "" {
-			proxyHeaders.Set("Proxy-Authorization", fmt.Sprintf("Basic: %s", ctx.ForwardProxyAuth))
+			proxyHeaders.Set("Proxy-Authorization", fmt.Sprintf("Basic %s", ctx.ForwardProxyAuth))
 		}
 		fmt.Printf("proxyHeaders: %+v", proxyHeaders)
 		if ctx.ForwardProxyProto == "" {
@@ -86,7 +86,7 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 			},
 			ProxyConnectHeader: proxyHeaders,
 			Dial: ctx.Proxy.NewConnectDialToProxyWithHandler(ctx.ForwardProxyProto+"://"+ctx.ForwardProxy, func(req *http.Request) {
-				req.Header.Set("Proxy-Authorization", fmt.Sprintf("Basic: %s", ctx.ForwardProxyAuth))
+				req.Header.Set("Proxy-Authorization", fmt.Sprintf("Basic %s", ctx.ForwardProxyAuth))
 			}),
 		}
 
