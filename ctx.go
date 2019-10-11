@@ -30,14 +30,15 @@ type ProxyCtx struct {
 	certStore CertStorage
 	Proxy     *ProxyHttpServer
 
-	ForwardProxy      string
-	ForwardProxyAuth  string
-	ForwardProxyProto string
-	ProxyUser         string
-	Accounting        string
-	BytesSent         int64
-	BytesReceived     int64
-	Tail              func(*ProxyCtx) error
+	ForwardProxy        string
+	ForwardProxyAuth    string
+	ForwardProxyProto   string
+	ForwardProxyHeaders []string
+	ProxyUser           string
+	Accounting          string
+	BytesSent           int64
+	BytesReceived       int64
+	Tail                func(*ProxyCtx) error
 }
 
 type RoundTripper interface {
@@ -81,6 +82,14 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 			Dial: ctx.Proxy.NewConnectDialToProxyWithHandler(ctx.ForwardProxyProto+"://"+ctx.ForwardProxy, func(req *http.Request) {
 				if ctx.ForwardProxyAuth != "" {
 					req.Header.Set("Proxy-Authorization", fmt.Sprintf("Basic %s", ctx.ForwardProxyAuth))
+				}
+				if len(ctx.ForwardProxyHeaders) > 0 {
+					for _, pxyHeader := range ctx.ForwardProxyHeaders {
+						pxyHeaderParts := strings.Split(pxyHeader, ":")
+						if len(pxyHeaderParts) == 2 {
+							req.Header.Set(pxyHeaderParts[0], pxyHeaderParts[1])
+						}
+					}
 				}
 			}),
 		}

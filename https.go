@@ -111,6 +111,14 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					if ctx.ForwardProxyAuth != "" {
 						req.Header.Set("Proxy-Authorization", fmt.Sprintf("Basic %s", ctx.ForwardProxyAuth))
 					}
+					if len(ctx.ForwardProxyHeaders) > 0 {
+						for _, pxyHeader := range ctx.ForwardProxyHeaders {
+							pxyHeaderParts := strings.Split(pxyHeader, ":")
+							if len(pxyHeaderParts) == 2 {
+								req.Header.Set(pxyHeaderParts[0], pxyHeaderParts[1])
+							}
+						}
+					}
 				}),
 			}
 			targetSiteCon, err = tr.Dial("tcp", host)
