@@ -89,6 +89,8 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 						if len(pxyHeaderParts) == 2 {
 							ctx.Logf("setting proxy header %s", pxyHeader)
 							req.Header.Set(pxyHeaderParts[0], pxyHeaderParts[1])
+						} else {
+							ctx.Logf("proxy header parts: %+v", pxyHeaderParts)
 						}
 					}
 				}

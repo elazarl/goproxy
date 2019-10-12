@@ -117,6 +117,8 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 							if len(pxyHeaderParts) == 2 {
 								ctx.Logf("setting proxy header %s", pxyHeader)
 								req.Header.Set(pxyHeaderParts[0], pxyHeaderParts[1])
+							} else {
+								ctx.Logf("proxy header parts: %+v", pxyHeaderParts)
 							}
 						}
 					}
