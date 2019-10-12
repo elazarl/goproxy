@@ -33,12 +33,17 @@ type ProxyCtx struct {
 	ForwardProxy        string
 	ForwardProxyAuth    string
 	ForwardProxyProto   string
-	ForwardProxyHeaders []string
+	ForwardProxyHeaders []ForwardProxyHeader
 	ProxyUser           string
 	Accounting          string
 	BytesSent           int64
 	BytesReceived       int64
 	Tail                func(*ProxyCtx) error
+}
+
+type ForwardProxyHeader struct {
+	Header string
+	Value  string
 }
 
 type RoundTripper interface {
@@ -85,13 +90,8 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 				}
 				if len(ctx.ForwardProxyHeaders) > 0 {
 					for _, pxyHeader := range ctx.ForwardProxyHeaders {
-						pxyHeaderParts := strings.Split(pxyHeader, ":")
-						if len(pxyHeaderParts) == 2 {
-							ctx.Logf("setting proxy header %s", pxyHeader)
-							req.Header.Set(pxyHeaderParts[0], pxyHeaderParts[1])
-						} else {
-							ctx.Logf("proxy header parts: %+v", pxyHeaderParts)
-						}
+						ctx.Logf("setting proxy header %+v", pxyHeader)
+						req.Header.Set(pxyHeader.Header, pxyHeader.Value)
 					}
 				}
 			}),
