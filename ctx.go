@@ -85,9 +85,9 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 				}
 				if len(ctx.ForwardProxyHeaders) > 0 {
 					for _, pxyHeader := range ctx.ForwardProxyHeaders {
-						ctx.Logf("setting proxy header %s", pxyHeader)
 						pxyHeaderParts := strings.Split(pxyHeader, ":")
 						if len(pxyHeaderParts) == 2 {
+							ctx.Logf("setting proxy header %s", pxyHeader)
 							req.Header.Set(pxyHeaderParts[0], pxyHeaderParts[1])
 						}
 					}
