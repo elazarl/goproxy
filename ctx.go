@@ -36,17 +36,19 @@ type ProxyCtx struct {
 	ForwardProxyAuth       string
 	ForwardProxyProto      string
 	ForwardProxyHeaders    []ForwardProxyHeader
-	ForwardMetricsCounters struct {
-		numIntSuccess prometheus.Counter
-		numIntError   prometheus.Counter
-		numExtSuccess prometheus.Counter
-		numExtError   prometheus.Counter
-	}
-	ProxyUser     string
-	Accounting    string
-	BytesSent     int64
-	BytesReceived int64
-	Tail          func(*ProxyCtx) error
+	ForwardMetricsCounters MetricsCounters
+	ProxyUser              string
+	Accounting             string
+	BytesSent              int64
+	BytesReceived          int64
+	Tail                   func(*ProxyCtx) error
+}
+
+type MetricsCounters struct {
+	numIntSuccess prometheus.Counter
+	numIntError   prometheus.Counter
+	numExtSuccess prometheus.Counter
+	numExtError   prometheus.Counter
 }
 
 type ForwardProxyHeader struct {
