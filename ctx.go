@@ -72,7 +72,7 @@ func (f RoundTripperFunc) RoundTrip(req *http.Request, ctx *ProxyCtx) (*http.Res
 
 func (ctx *ProxyCtx) SetErrorMetric() {
 	if ctx.ForwardProxy != "" {
-		if ctx.ForwardProxy == "127.0.0.1" {
+		if strings.HasPrefix(ctx.ForwardProxy, "127.0.0.1") {
 			if ctx.ForwardMetricsCounters.NumIntError != nil {
 				ctx.ForwardMetricsCounters.NumIntError.Inc()
 			}
@@ -86,7 +86,7 @@ func (ctx *ProxyCtx) SetErrorMetric() {
 
 func (ctx *ProxyCtx) SetSuccessMetric() {
 	if ctx.ForwardProxy != "" {
-		if ctx.ForwardProxy == "127.0.0.1" {
+		if strings.HasPrefix(ctx.ForwardProxy, "127.0.0.1") {
 			if ctx.ForwardMetricsCounters.NumIntSuccess != nil {
 				ctx.ForwardMetricsCounters.NumIntSuccess.Inc()
 			}
