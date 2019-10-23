@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // ProxyCtx is the Proxy context, contains useful information about every request. It is passed to
@@ -30,15 +32,21 @@ type ProxyCtx struct {
 	certStore CertStorage
 	Proxy     *ProxyHttpServer
 
-	ForwardProxy        string
-	ForwardProxyAuth    string
-	ForwardProxyProto   string
-	ForwardProxyHeaders []ForwardProxyHeader
-	ProxyUser           string
-	Accounting          string
-	BytesSent           int64
-	BytesReceived       int64
-	Tail                func(*ProxyCtx) error
+	ForwardProxy           string
+	ForwardProxyAuth       string
+	ForwardProxyProto      string
+	ForwardProxyHeaders    []ForwardProxyHeader
+	ForwardMetricsCounters struct {
+		numIntSuccess prometheus.Counter
+		numIntError   prometheus.Counter
+		numExtSuccess prometheus.Counter
+		numExtError   prometheus.Counter
+	}
+	ProxyUser     string
+	Accounting    string
+	BytesSent     int64
+	BytesReceived int64
+	Tail          func(*ProxyCtx) error
 }
 
 type ForwardProxyHeader struct {
@@ -58,6 +66,34 @@ type RoundTripperFunc func(req *http.Request, ctx *ProxyCtx) (*http.Response, er
 
 func (f RoundTripperFunc) RoundTrip(req *http.Request, ctx *ProxyCtx) (*http.Response, error) {
 	return f(req, ctx)
+}
+
+func (ctx *ProxyCtx) SetErrorMetric() {
+	if ctx.ForwardProxy != "" {
+		if ctx.ForwardProxy == "127.0.0.1" {
+			if ctx.ForwardMetricsCounters.numIntError != nil {
+				ctx.ForwardMetricsCounters.numIntError.Inc()
+			}
+		} else {
+			if ctx.ForwardMetricsCounters.numExtError != nil {
+				ctx.ForwardMetricsCounters.numExtError.Inc()
+			}
+		}
+	}
+}
+
+func (ctx *ProxyCtx) SetSuccessMetric() {
+	if ctx.ForwardProxy != "" {
+		if ctx.ForwardProxy == "127.0.0.1" {
+			if ctx.ForwardMetricsCounters.numIntSuccess != nil {
+				ctx.ForwardMetricsCounters.numIntSuccess.Inc()
+			}
+		} else {
+			if ctx.ForwardMetricsCounters.numExtSuccess != nil {
+				ctx.ForwardMetricsCounters.numExtSuccess.Inc()
+			}
+		}
+	}
 }
 
 func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -99,6 +135,7 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 
 		rawConn, err = tr.Dial("tcp4", host)
 		if err != nil {
+			ctx.SetErrorMetric()
 			return nil, err
 		}
 	} else {
@@ -159,6 +196,7 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 	}()
 
 	if err := <-writeDone; err != nil {
+		ctx.SetErrorMetric()
 		return nil, err
 	}
 
@@ -166,9 +204,11 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	r := <-readDone
 	if r.err != nil {
+		ctx.SetErrorMetric()
 		return nil, r.err
 	}
 
+	ctx.SetSuccessMetric()
 	return r.resp, nil
 }
 

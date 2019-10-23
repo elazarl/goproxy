@@ -124,9 +124,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			targetSiteCon, err = proxy.connectDial("tcp", host)
 		}
 		if err != nil {
+			ctx.SetErrorMetric()
 			httpError(proxyClient, ctx, err)
 			return
 		}
+		ctx.SetSuccessMetric()
 		ctx.Logf("Accepting CONNECT to %s", host)
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 
