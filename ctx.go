@@ -45,10 +45,10 @@ type ProxyCtx struct {
 }
 
 type MetricsCounters struct {
-	numIntSuccess prometheus.Counter
-	numIntError   prometheus.Counter
-	numExtSuccess prometheus.Counter
-	numExtError   prometheus.Counter
+	NumIntSuccess prometheus.Counter
+	NumIntError   prometheus.Counter
+	NumExtSuccess prometheus.Counter
+	NumExtError   prometheus.Counter
 }
 
 type ForwardProxyHeader struct {
@@ -73,12 +73,12 @@ func (f RoundTripperFunc) RoundTrip(req *http.Request, ctx *ProxyCtx) (*http.Res
 func (ctx *ProxyCtx) SetErrorMetric() {
 	if ctx.ForwardProxy != "" {
 		if ctx.ForwardProxy == "127.0.0.1" {
-			if ctx.ForwardMetricsCounters.numIntError != nil {
-				ctx.ForwardMetricsCounters.numIntError.Inc()
+			if ctx.ForwardMetricsCounters.NumIntError != nil {
+				ctx.ForwardMetricsCounters.NumIntError.Inc()
 			}
 		} else {
-			if ctx.ForwardMetricsCounters.numExtError != nil {
-				ctx.ForwardMetricsCounters.numExtError.Inc()
+			if ctx.ForwardMetricsCounters.NumExtError != nil {
+				ctx.ForwardMetricsCounters.NumExtError.Inc()
 			}
 		}
 	}
@@ -87,12 +87,12 @@ func (ctx *ProxyCtx) SetErrorMetric() {
 func (ctx *ProxyCtx) SetSuccessMetric() {
 	if ctx.ForwardProxy != "" {
 		if ctx.ForwardProxy == "127.0.0.1" {
-			if ctx.ForwardMetricsCounters.numIntSuccess != nil {
-				ctx.ForwardMetricsCounters.numIntSuccess.Inc()
+			if ctx.ForwardMetricsCounters.NumIntSuccess != nil {
+				ctx.ForwardMetricsCounters.NumIntSuccess.Inc()
 			}
 		} else {
-			if ctx.ForwardMetricsCounters.numExtSuccess != nil {
-				ctx.ForwardMetricsCounters.numExtSuccess.Inc()
+			if ctx.ForwardMetricsCounters.NumExtSuccess != nil {
+				ctx.ForwardMetricsCounters.NumExtSuccess.Inc()
 			}
 		}
 	}
