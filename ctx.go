@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/function61/gokit/logex"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -32,6 +33,7 @@ type ProxyCtx struct {
 	certStore CertStorage
 	Proxy     *ProxyHttpServer
 
+	ProxyLogger            *logex.Leveled
 	ForwardProxy           string
 	ForwardProxyAuth       string
 	ForwardProxyProto      string
@@ -229,9 +231,11 @@ func (ctx *ProxyCtx) printf(msg string, argv ...interface{}) {
 //		return r, nil
 //	})
 func (ctx *ProxyCtx) Logf(msg string, argv ...interface{}) {
-	if ctx.Proxy.Verbose {
-		ctx.printf("INFO: "+msg, argv...)
+	if ctx.ProxyLogger != nil {
+		ctx.ProxyLogger.Info.Printf(msg, argv...)
+		return
 	}
+	ctx.printf("INFO: "+msg, argv...)
 }
 
 // Warnf prints a message to the proxy's log. Should be used in a ProxyHttpServer's filter
@@ -246,6 +250,10 @@ func (ctx *ProxyCtx) Logf(msg string, argv ...interface{}) {
 //		return r, nil
 //	})
 func (ctx *ProxyCtx) Warnf(msg string, argv ...interface{}) {
+	if ctx.ProxyLogger != nil {
+		ctx.ProxyLogger.Debug.Printf(msg, argv...)
+		return
+	}
 	ctx.printf("WARN: "+msg, argv...)
 }
 
