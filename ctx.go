@@ -232,7 +232,7 @@ func (ctx *ProxyCtx) printf(msg string, argv ...interface{}) {
 //	})
 func (ctx *ProxyCtx) Logf(msg string, argv ...interface{}) {
 	if ctx.ProxyLogger != nil {
-		ctx.ProxyLogger.Info.Printf(msg, argv...)
+		ctx.ProxyLogger.Info.Printf("[%03d] "+msg+"\n", append([]interface{}{ctx.Session & 0xFF}, argv...)...)
 		return
 	}
 	ctx.printf("INFO: "+msg, argv...)
@@ -251,7 +251,7 @@ func (ctx *ProxyCtx) Logf(msg string, argv ...interface{}) {
 //	})
 func (ctx *ProxyCtx) Warnf(msg string, argv ...interface{}) {
 	if ctx.ProxyLogger != nil {
-		ctx.ProxyLogger.Debug.Printf(msg, argv...)
+		ctx.ProxyLogger.Debug.Printf("[%03d] "+msg+"\n", append([]interface{}{ctx.Session & 0xFF}, argv...)...)
 		return
 	}
 	ctx.printf("WARN: "+msg, argv...)
