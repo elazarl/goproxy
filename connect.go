@@ -2,6 +2,7 @@ package goproxy
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/tls"
 	"errors"
 	"io"
@@ -212,15 +213,52 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 
 		clientTls := bufio.NewReader(rawClientTls)
 
+		// [oec, 2019-11-02] debugging helper
+		//
+		// The following has helped me to track a nasty problem, it
+		// might help you too. Use them instead of the clientTls in the
+		// line above along with the routines commented out in the
+		// for-loop.
+		/*
+			var previous, current string
+			buf := &bytes.Buffer{}
+			clientTls := bufio.NewReader(io.TeeReader(rawClientTls, buf))
+		*/
+
 		for {
 			// Read a request from the client.
 			req, err := http.ReadRequest(clientTls)
+
+			// [oec, 2019-11-02] debugging helper
+			/*
+				previous = current
+				current = buf.String()
+				buf.Reset()
+			*/
+
 			if err != nil {
 				if err != io.EOF {
 					ctx.Warnf("Cannot read TLS request from mitm'd client for %v: %v", r.Host, err)
+					// [oec, 2019-11-02] debugging helper
+					/*
+						ctx.Warnf("\n[31mprevious request:\n%s«\n[33mcurrent request:\n%s«[0m\n",
+							strings.ReplaceAll(previous, "\r\n", "\\r\\n\r\n"),
+							strings.ReplaceAll(current, "\r\n", "\\r\\n\r\n"))
+					*/
 				}
 				break
 			}
+
+			// We need to read the whole body and reset the buffer.
+			// Otherwise, traces of previous requests can be left
+			// in the buffer, if the previous request's
+			// Content-Length was incorrect or the Body wasn't
+			// read.
+			body := &bytes.Buffer{}
+			io.Copy(body, req.Body)
+			req.Body.Close()
+			req.Body = ioutil.NopCloser(body)
+			clientTls.Reset(rawClientTls)
 
 			if !httpsRegexp.MatchString(req.URL.String()) {
 				req.URL, err = url.Parse("https://" + r.Host + req.URL.String())
