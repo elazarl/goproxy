@@ -124,6 +124,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			targetSiteCon, err = proxy.connectDial("tcp", host)
 		}
 		if err != nil {
+			ctx.Logf("error-metric: https to host: %s failed: %v", host, err)
 			ctx.SetErrorMetric()
 			httpError(proxyClient, ctx, err)
 			return

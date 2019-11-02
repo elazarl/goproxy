@@ -143,6 +143,7 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 
 		rawConn, err = tr.Dial("tcp4", host)
 		if err != nil {
+			ctx.Logf("error-metric: http dial failed: %v", err)
 			ctx.SetErrorMetric()
 			return nil, err
 		}
@@ -204,6 +205,7 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 	}()
 
 	if err := <-writeDone; err != nil {
+		ctx.Logf("error-metric: writeDone failed: %v", err)
 		ctx.SetErrorMetric()
 		return nil, err
 	}
@@ -212,6 +214,7 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	r := <-readDone
 	if r.err != nil {
+		ctx.Logf("error-metric: readDone failed: %v", err)
 		ctx.SetErrorMetric()
 		return nil, r.err
 	}
