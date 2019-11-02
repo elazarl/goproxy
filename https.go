@@ -97,6 +97,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		}
 		var targetSiteCon net.Conn
 		var err error
+		var logHeaders http.Header
 		if ctx.ForwardProxy != "" {
 
 			if ctx.ForwardProxyProto == "" {
@@ -117,6 +118,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 							req.Header.Set(pxyHeader.Header, pxyHeader.Value)
 						}
 					}
+					logHeaders = req.Header
 				}),
 			}
 			targetSiteCon, err = tr.Dial("tcp", host)
@@ -124,7 +126,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			targetSiteCon, err = proxy.connectDial("tcp", host)
 		}
 		if err != nil {
-			ctx.Logf("error-metric: https to host: %s failed: %v", host, err)
+			ctx.Logf("error-metric: https to host: %s failed: %v - headers %+v", host, err, logHeaders)
 			ctx.SetErrorMetric()
 			httpError(proxyClient, ctx, err)
 			return
