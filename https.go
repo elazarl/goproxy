@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 type ConnectActionLiteral int
@@ -105,6 +106,10 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			}
 
 			tr := &http.Transport{
+				MaxIdleConns:          ctx.MaxIdleConns,
+				MaxIdleConnsPerHost:   ctx.MaxIdleConnsPerHost,
+				TLSHandshakeTimeout:   10 * time.Second,
+				ExpectContinueTimeout: 1 * time.Second,
 				Proxy: func(req *http.Request) (*url.URL, error) {
 					return url.Parse(ctx.ForwardProxyProto + "://" + ctx.ForwardProxy)
 				},
