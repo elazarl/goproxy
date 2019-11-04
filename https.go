@@ -147,6 +147,15 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			go copyAndClose(ctx, targetTCP, proxyClientTCP, "sent")
 			go copyAndClose(ctx, proxyClientTCP, targetTCP, "recv")
 		} else {
+			if !targetOK {
+				ctx.Logf("error-conv: https targetTCP to host: %s failed TCPConn", host)
+			} else {
+				ctx.Logf("error-conv: https proxyClientTCP to host: %s failed TCPConn", host)
+			}
+			proxyClient.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
+			proxyClient.Close()
+			return
+			//This does not seem to work in many cases, and this causes memory usage while the goroutines wait
 			go func() {
 				var wg sync.WaitGroup
 				wg.Add(2)
@@ -155,7 +164,6 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				wg.Wait()
 				proxyClient.Close()
 				targetSiteCon.Close()
-
 			}()
 		}
 
