@@ -206,6 +206,10 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 	readDone := make(chan responseAndError, 1)
 	writeDone := make(chan error, 1)
 
+	//cleanup context
+	ctx.ForwardProxyAuth = ""
+	ctx.ForwardProxyHeaders = nil
+
 	// Write the request.
 	go func() {
 		var err error

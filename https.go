@@ -105,12 +105,20 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				ctx.ForwardProxyProto = "http"
 			}
 
+			//check for idle override
+			var idleTimeout time.Duration
+			if ctx.IdleConnTimeout != 0 {
+				idleTimeout = ctx.IdleConnTimeout
+			} else {
+				idleTimeout = 90 * time.Second
+			}
+
 			tr := &http.Transport{
 				MaxIdleConns:          ctx.MaxIdleConns,
 				MaxIdleConnsPerHost:   ctx.MaxIdleConnsPerHost,
 				TLSHandshakeTimeout:   10 * time.Second,
 				ExpectContinueTimeout: 1 * time.Second,
-				IdleConnTimeout:       90 * time.Second,
+				IdleConnTimeout:       idleTimeout,
 				Proxy: func(req *http.Request) (*url.URL, error) {
 					return url.Parse(ctx.ForwardProxyProto + "://" + ctx.ForwardProxy)
 				},
