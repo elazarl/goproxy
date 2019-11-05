@@ -150,7 +150,7 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 
 		rawConn, err = tr.Dial("tcp4", host)
 		if err != nil {
-			ctx.Logf("error-metric: http dial failed: %v", err)
+			ctx.Logf("error-metric: http dial to %s failed: %v", host, err)
 			ctx.SetErrorMetric()
 			return nil, err
 		}
