@@ -42,6 +42,7 @@ type ProxyCtx struct {
 	ProxyUser              string
 	MaxIdleConns           int
 	MaxIdleConnsPerHost    int
+	IdleConnTimeout        time.Duration
 	Accounting             string
 	BytesSent              int64
 	BytesReceived          int64
@@ -118,6 +119,30 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 		host = req.URL.Host + ":80"
 	}
 
+	//check for idle override
+	var idleTimeout time.Duration
+	if ctx.IdleConnTimeout != 0 {
+		idleTimeout = ctx.IdleConnTimeout
+	} else {
+		idleTimeout = 90 * time.Second
+	}
+
+	//max conns
+	var maxConns int
+	if ctx.MaxIdleConns != 0 {
+		maxConns = ctx.MaxIdleConns
+	} else {
+		maxConns = 100
+	}
+
+	//max per host
+	var maxPerHostConns int
+	if ctx.MaxIdleConnsPerHost != 0 {
+		maxPerHostConns = ctx.MaxIdleConnsPerHost
+	} else {
+		maxPerHostConns = 2
+	}
+
 	// Create our transport depending on behaviour (normal/proxied)
 	var rawConn net.Conn
 	var err error
@@ -127,11 +152,11 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 			ctx.ForwardProxyProto = "http"
 		}
 		tr = &http.Transport{
-			MaxIdleConns:          ctx.MaxIdleConns,
-			MaxIdleConnsPerHost:   ctx.MaxIdleConnsPerHost,
+			MaxIdleConns:          maxConns,
+			MaxIdleConnsPerHost:   maxPerHostConns,
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
-			IdleConnTimeout:       90 * time.Second,
+			IdleConnTimeout:       idleTimeout,
 			Proxy: func(req *http.Request) (*url.URL, error) {
 				return url.Parse(ctx.ForwardProxyProto + "://" + ctx.ForwardProxy)
 			},
@@ -159,8 +184,9 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 		tr = &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
 			Dial:                  d.Dial,
-			MaxIdleConns:          100,
-			IdleConnTimeout:       90 * time.Second,
+			MaxIdleConns:          maxConns,
+			MaxIdleConnsPerHost:   maxPerHostConns,
+			IdleConnTimeout:       idleTimeout,
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 		}
