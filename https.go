@@ -144,32 +144,6 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		go copyAndClose(ctx, targetSiteCon, proxyClient, "sent")
 		go copyAndClose(ctx, proxyClient, targetSiteCon, "recv")
 
-		// targetTCP, targetOK := targetSiteCon.(*net.TCPConn)
-		// proxyClientTCP, clientOK := proxyClient.(*net.TCPConn)
-		// if targetOK && clientOK {
-		// 	go copyAndClose(ctx, targetTCP, proxyClientTCP, "sent")
-		// 	go copyAndClose(ctx, proxyClientTCP, targetTCP, "recv")
-		// } else {
-		// 	if !targetOK {
-		// 		ctx.Logf("error-conv: https targetTCP to host: %s failed TCPConn", host)
-		// 	} else {
-		// 		ctx.Logf("error-conv: https proxyClientTCP to host: %s failed TCPConn", host)
-		// 	}
-		// 	proxyClient.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
-		// 	proxyClient.Close()
-		// 	return
-		// 	//This does not seem to work in many cases, and this causes memory usage while the goroutines wait
-		// 	go func() {
-		// 		var wg sync.WaitGroup
-		// 		wg.Add(2)
-		// 		go copyOrWarn(ctx, targetSiteCon, proxyClient, &wg)
-		// 		go copyOrWarn(ctx, proxyClient, targetSiteCon, &wg)
-		// 		wg.Wait()
-		// 		proxyClient.Close()
-		// 		targetSiteCon.Close()
-		// 	}()
-		// }
-
 	case ConnectHijack:
 		ctx.Logf("Hijacking CONNECT to %s", host)
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
@@ -365,29 +339,6 @@ func copyAndClose(ctx *ProxyCtx, dst io.WriteCloser, src io.ReadCloser, dir stri
 	}
 
 }
-
-// old octo method
-// func copyAndClose(ctx *ProxyCtx, dst, src *net.TCPConn, dir string) {
-// 	buf := make([]byte, 32*1024)
-// 	copied, err := io.CopyBuffer(dst, src, buf)
-// 	if err != nil {
-// 		ctx.Warnf("Error copying to client: %s", err)
-// 	}
-
-// 	switch dir {
-// 	case "sent":
-// 		ctx.BytesSent = copied
-// 	case "recv":
-// 		ctx.BytesReceived = copied
-// 	}
-
-// 	if ctx.Tail != nil {
-// 		ctx.Tail(ctx)
-// 	}
-
-// 	dst.CloseWrite()
-// 	src.CloseRead()
-// }
 
 func dialerFromEnv(proxy *ProxyHttpServer) func(network, addr string) (net.Conn, error) {
 	https_proxy := os.Getenv("HTTPS_PROXY")
