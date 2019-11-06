@@ -175,8 +175,11 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 
 		rawConn, err = tr.Dial("tcp4", host)
 		if err != nil {
-			ctx.Logf("error-metric: http dial to %s failed: %v", host, err)
-			ctx.SetErrorMetric()
+			dnsCheck, _ := net.LookupHost(strings.Split(host, ":")[0])
+			if len(dnsCheck) > 0 {
+				ctx.Logf("error-metric: http dial to %s failed: %v", host, err)
+				ctx.SetErrorMetric()
+			}
 			return nil, err
 		}
 	} else {

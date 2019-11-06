@@ -140,8 +140,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			targetSiteCon, err = proxy.connectDial("tcp", host)
 		}
 		if err != nil {
-			ctx.Logf("error-metric: https to host: %s failed: %v - headers %+v", host, err, logHeaders)
-			ctx.SetErrorMetric()
+			dnsCheck, _ := net.LookupHost(strings.Split(host, ":")[0])
+			if len(dnsCheck) > 0 {
+				ctx.Logf("error-metric: https to host: %s failed: %v - headers %+v", host, err, logHeaders)
+				ctx.SetErrorMetric()
+			}
 			httpError(proxyClient, ctx, err)
 			return
 		}
