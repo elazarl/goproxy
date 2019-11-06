@@ -361,10 +361,10 @@ func copyWithBuffer(dst io.Writer, src io.Reader, size int) (written int64, err 
 	if wt, ok := src.(io.WriterTo); ok {
 		return wt.WriteTo(dst)
 	}
-	// Similarly, if the writer has a ReadFrom method, use it to do the copy.
-	if rt, ok := dst.(io.ReaderFrom); ok {
-		return rt.ReadFrom(src)
-	}
+	// // Similarly, if the writer has a ReadFrom method, use it to do the copy.
+	// if rt, ok := dst.(io.ReaderFrom); ok {
+	// 	return rt.ReadFrom(src)
+	// }
 	buf := make([]byte, size)
 	for {
 		nr, er := src.Read(buf)
