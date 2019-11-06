@@ -43,6 +43,7 @@ type ProxyCtx struct {
 	MaxIdleConns           int
 	MaxIdleConnsPerHost    int
 	IdleConnTimeout        time.Duration
+	CopyBufferSize         int
 	Accounting             string
 	BytesSent              int64
 	BytesReceived          int64
