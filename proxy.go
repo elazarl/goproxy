@@ -217,7 +217,6 @@ func (proxy *ProxyHttpServer) handleHttpRequest(ctx *ProxyCtx, writer http.Respo
 
 	if err != nil {
 		ctx.Logf("Error reading response %v: %v", req.URL.Host, err.Error())
-		ctx.Warnf("error: %+#v", err)
 
 		if operr, ok := err.(*net.OpError); ok && operr.Timeout() {
 			Error(writer, fmt.Errorf("[proxy] timeout during request to remote server: %v", err), http.StatusGatewayTimeout)
