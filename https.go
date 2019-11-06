@@ -333,8 +333,7 @@ func copyAndClose(ctx *ProxyCtx, dst io.WriteCloser, src io.ReadCloser, dir stri
 	if ctx.CopyBufferSize > 0 {
 		size = ctx.CopyBufferSize * 1024
 	}
-	buf := make([]byte, size)
-	copied, err := io.CopyBuffer(dst, src, buf)
+	copied, err := copyWithBuffer(dst, src, size)
 	if err != nil {
 		ctx.Warnf("Error copying to client: %s", err)
 	}
@@ -354,6 +353,43 @@ func copyAndClose(ctx *ProxyCtx, dst io.WriteCloser, src io.ReadCloser, dir stri
 		ctx.Tail(ctx)
 	}
 
+}
+
+func copyWithBuffer(dst io.Writer, src io.Reader, size int) (written int64, err error) {
+	// If the reader has a WriteTo method, use it to do the copy.
+	// Avoids an allocation and a copy.
+	if wt, ok := src.(io.WriterTo); ok {
+		return wt.WriteTo(dst)
+	}
+	// Similarly, if the writer has a ReadFrom method, use it to do the copy.
+	if rt, ok := dst.(io.ReaderFrom); ok {
+		return rt.ReadFrom(src)
+	}
+	buf := make([]byte, size)
+	for {
+		nr, er := src.Read(buf)
+		if nr > 0 {
+			nw, ew := dst.Write(buf[0:nr])
+			if nw > 0 {
+				written += int64(nw)
+			}
+			if ew != nil {
+				err = ew
+				break
+			}
+			if nr != nw {
+				err = io.ErrShortWrite
+				break
+			}
+		}
+		if er != nil {
+			if er != io.EOF {
+				err = er
+			}
+			break
+		}
+	}
+	return written, err
 }
 
 func dialerFromEnv(proxy *ProxyHttpServer) func(network, addr string) (net.Conn, error) {
