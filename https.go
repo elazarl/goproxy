@@ -329,7 +329,10 @@ func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader, wg *sync.WaitGroup)
 }
 
 func copyAndClose(ctx *ProxyCtx, dst io.WriteCloser, src io.ReadCloser, dir string) {
-	size := ctx.CopyBufferSize * 1024
+	size := 32 * 1024
+	if ctx.CopyBufferSize > 0 {
+		size = ctx.CopyBufferSize * 1024
+	}
 	buf := make([]byte, size)
 	copied, err := io.CopyBuffer(dst, src, buf)
 	if err != nil {
