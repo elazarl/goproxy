@@ -107,7 +107,7 @@ func writeResponse(ctx *ProxyCtx, resp *http.Response, out http.ResponseWriter) 
 			body := bytes.NewReader(peek)
 
 			if err != nil {
-				ctx.Warnf("Error copying response: %s", err.Error())
+				ctx.Warnf("Error reading response body: %s", err.Error())
 			}
 
 			if len(peek) < 4*1024 {
@@ -123,7 +123,7 @@ func writeResponse(ctx *ProxyCtx, resp *http.Response, out http.ResponseWriter) 
 		}
 
 		if err := resp.Write(w); err != nil {
-			ctx.Warnf("Error copying response: %s", err.Error())
+			ctx.Warnf("Error writing response: %s", err.Error())
 		} else {
 			ctx.Logf("Copied response to client")
 		}
