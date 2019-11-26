@@ -39,6 +39,7 @@ type ProxyCtx struct {
 	ForwardProxyProto      string
 	ForwardProxyHeaders    []ForwardProxyHeader
 	ForwardMetricsCounters MetricsCounters
+	ForwardProxyRegWrite   bool
 	ProxyUser              string
 	MaxIdleConns           int
 	MaxIdleConnsPerHost    int
@@ -219,7 +220,7 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 		var err error
 		// Use writeproxy so as to not strip RequestURI if we
 		// are forwarding to another proxy
-		if ctx.ForwardProxy != "" {
+		if ctx.ForwardProxy != "" && ctx.ForwardProxyRegWrite == false {
 			err = req.WriteProxy(writer)
 		} else {
 			err = req.Write(writer)
