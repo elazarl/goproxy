@@ -16,7 +16,9 @@ import (
 	"net"
 	"sort"
 	"time"
+	"github.com/zond/gotomic"
 )
+
 
 func hashSorted(lst []string) []byte {
 	c := make([]string, len(lst))
@@ -38,8 +40,26 @@ func hashSortedBigInt(lst []string) *big.Int {
 var goproxySignerVersion = ":goroxy1"
 var certprivRSA crypto.Signer
 var certprivECDSA crypto.Signer
+var crtCache = gotomic.NewHash()
 
 func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err error) {
+	
+	value, exist := crtCache.Get(gotomic.StringKey(hosts[0]))
+	if exist {
+		cert = value.(*tls.Certificate)
+		return
+	}
+
+	cert, err = generateCertificate(ca, hosts)
+
+	for _, host := range hosts {
+		crtCache.Put(gotomic.StringKey(host), cert)
+	}
+
+	return
+}
+
+func generateCertificate(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err error) {
 	var x509ca *x509.Certificate
 
 	// Use the provided ca and not the global GoproxyCa for certificate generation.
@@ -77,6 +97,7 @@ func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err er
 	}
 
 	var certpriv crypto.Signer
+
 	switch ca.PrivateKey.(type) {
 	case *rsa.PrivateKey:
 		certpriv = certprivRSA
@@ -90,6 +111,7 @@ func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err er
 	if derBytes, err = x509.CreateCertificate(rand.Reader, &template, x509ca, certpriv.Public(), ca.PrivateKey); err != nil {
 		return
 	}
+
 	return &tls.Certificate{
 		Certificate: [][]byte{derBytes, ca.Certificate[0]},
 		PrivateKey:  certpriv,
