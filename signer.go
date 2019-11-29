@@ -16,9 +16,8 @@ import (
 	"net"
 	"sort"
 	"time"
-	"github.com/zond/gotomic"
+	"github.com/patrickmn/go-cache"
 )
-
 
 func hashSorted(lst []string) []byte {
 	c := make([]string, len(lst))
@@ -40,11 +39,11 @@ func hashSortedBigInt(lst []string) *big.Int {
 var goproxySignerVersion = ":goroxy1"
 var certprivRSA crypto.Signer
 var certprivECDSA crypto.Signer
-var crtCache = gotomic.NewHash()
+var crtCache = cache.New(20*time.Minute, 10*time.Minute)
 
 func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err error) {
-	
-	value, exist := crtCache.Get(gotomic.StringKey(hosts[0]))
+
+	value, exist := crtCache.Get(hosts[0])
 	if exist {
 		cert = value.(*tls.Certificate)
 		return
@@ -53,7 +52,7 @@ func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err er
 	cert, err = generateCertificate(ca, hosts)
 
 	for _, host := range hosts {
-		crtCache.Put(gotomic.StringKey(host), cert)
+		crtCache.Add(host, cert, cache.DefaultExpiration)
 	}
 
 	return
