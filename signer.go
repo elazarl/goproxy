@@ -4,6 +4,7 @@ import (
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha1"
 	"crypto/tls"
@@ -11,9 +12,8 @@ import (
 	"crypto/x509/pkix"
 	"fmt"
 	"math/big"
-	"math/rand"
+	mathrand "math/rand"
 	"net"
-	"runtime"
 	"sort"
 	"time"
 )
@@ -36,6 +36,8 @@ func hashSortedBigInt(lst []string) *big.Int {
 }
 
 var goproxySignerVersion = ":goroxy1"
+var certprivRSA crypto.Signer
+var certprivECDSA crypto.Signer
 
 func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err error) {
 	var x509ca *x509.Certificate
@@ -50,7 +52,7 @@ func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err er
 		panic(err)
 	}
 
-	serial := big.NewInt(rand.Int63())
+	serial := big.NewInt(mathrand.Int63())
 	template := x509.Certificate{
 		// TODO(elazar): instead of this ugly hack, just encode the certificate and hash the binary form.
 		SerialNumber: serial,
@@ -74,28 +76,18 @@ func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err er
 		}
 	}
 
-	hash := hashSorted(append(hosts, goproxySignerVersion, ":"+runtime.Version()))
-	var csprng CounterEncryptorRand
-	if csprng, err = NewCounterEncryptorRandFromKey(ca.PrivateKey, hash); err != nil {
-		return
-	}
-
 	var certpriv crypto.Signer
 	switch ca.PrivateKey.(type) {
 	case *rsa.PrivateKey:
-		if certpriv, err = rsa.GenerateKey(&csprng, 2048); err != nil {
-			return
-		}
+		certpriv = certprivRSA
 	case *ecdsa.PrivateKey:
-		if certpriv, err = ecdsa.GenerateKey(elliptic.P256(), &csprng); err != nil {
-			return
-		}
+		certpriv = certprivECDSA
 	default:
 		err = fmt.Errorf("unsupported key type %T", ca.PrivateKey)
 	}
 
 	var derBytes []byte
-	if derBytes, err = x509.CreateCertificate(&csprng, &template, x509ca, certpriv.Public(), ca.PrivateKey); err != nil {
+	if derBytes, err = x509.CreateCertificate(rand.Reader, &template, x509ca, certpriv.Public(), ca.PrivateKey); err != nil {
 		return
 	}
 	return &tls.Certificate{
@@ -105,6 +97,6 @@ func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err er
 }
 
 func init() {
-	// Avoid deterministic random numbers
-	rand.Seed(time.Now().UnixNano())
+	certprivRSA, _ = rsa.GenerateKey(rand.Reader, 2048);
+	certprivECDSA, _ = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 }
