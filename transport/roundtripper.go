@@ -1,7 +1,5 @@
 package transport
-
 import "net/http"
-
 type RoundTripper interface {
 	// RoundTrip executes a single HTTP transaction, returning
 	// the Response for the request req.  RoundTrip should not
