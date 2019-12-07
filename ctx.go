@@ -1,7 +1,7 @@
 package goproxy
 
 import (
-	"github.com/elazarl/goproxy/transport/details"
+	"github.com/elazarl/goproxy/transport"
 	"net/http"
 	"regexp"
 )
@@ -13,7 +13,7 @@ type ProxyCtx struct {
 	Req *http.Request
 	// Will contain the remote server's response (if available. nil if the request wasn't send yet)
 	Resp      *http.Response
-	RoundTrip *details.RoundTripDetails
+	RoundTrip *transport.RoundTripDetails
 	// will contain the recent error that occured while trying to send receive or parse traffic
 	Error error
 	// A handle for the user to keep data in the context, from the call of ReqHandler to the

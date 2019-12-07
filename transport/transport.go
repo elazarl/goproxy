@@ -25,8 +25,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-
-	"github.com/elazarl/goproxy/transport/details"
 )
 
 // DefaultTransport is the default implementation of Transport and is
@@ -61,7 +59,7 @@ type Transport struct {
 	// Dial specifies the dial function for creating TCP
 	// connections.
 	// If Dial is nil, net.Dial is used.
-	Dial func(net, addr string, userdata interface{}) (c net.Conn, err error)
+	Dial func(net, addr string) (c net.Conn, err error)
 
 	// TLSClientConfig specifies the TLS configuration to use with
 	// tls.Client. If nil, the default configuration is used.
@@ -125,8 +123,14 @@ func (tr *transportRequest) extraHeaders() http.Header {
 	return tr.extra
 }
 
+type RoundTripDetails struct {
+	Host    string
+	TCPAddr *net.TCPAddr
+	IsProxy bool
+	Error   error
+}
 
-func (t *Transport) DetailedRoundTrip(req *http.Request, userdata interface{}) (*details.RoundTripDetails, *http.Response, error) {
+func (t *Transport) DetailedRoundTrip(req *http.Request) (details *RoundTripDetails, resp *http.Response, err error) {
 	if req.URL == nil {
 		return nil, nil, errors.New("http: nil Request.URL")
 	}
@@ -143,7 +147,7 @@ func (t *Transport) DetailedRoundTrip(req *http.Request, userdata interface{}) (
 		if rt == nil {
 			return nil, nil, &badStringError{"unsupported protocol scheme", req.URL.Scheme}
 		}
-		return rt.DetailedRoundTrip(req, userdata)
+		return rt.DetailedRoundTrip(req)
 	}
 	treq := &transportRequest{Request: req}
 	cm, err := t.connectMethodForRequest(treq)
@@ -155,18 +159,18 @@ func (t *Transport) DetailedRoundTrip(req *http.Request, userdata interface{}) (
 	// host (for http or https), the http proxy, or the http proxy
 	// pre-CONNECTed to https server.  In any case, we'll be ready
 	// to send it requests.
-	pconn, err := t.getConn(cm, userdata)
+	pconn, err := t.getConn(cm)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	resp, err := pconn.roundTrip(treq)
-	return &details.RoundTripDetails{pconn.host, pconn.ip, pconn.isProxy, err}, resp, err
+	resp, err = pconn.roundTrip(treq)
+	return &RoundTripDetails{pconn.host, pconn.ip, pconn.isProxy, err}, resp, err
 }
 
 // RoundTrip implements the RoundTripper interface.
-func (t *Transport) RoundTrip(req *http.Request, userdata interface{}) (resp *http.Response, err error) {
-	_, resp, err = t.DetailedRoundTrip(req, userdata)
+func (t *Transport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
+	_, resp, err = t.DetailedRoundTrip(req)
 	return
 }
 
@@ -302,13 +306,13 @@ func (t *Transport) getIdleConn(cm *connectMethod) (pconn *persistConn) {
 	return
 }
 
-func (t *Transport) dial(network, addr string, userdata interface{}) (c net.Conn, raddr string, ip *net.TCPAddr, err error) {
+func (t *Transport) dial(network, addr string) (c net.Conn, raddr string, ip *net.TCPAddr, err error) {
 	if t.Dial != nil {
 		ip, err = net.ResolveTCPAddr("tcp", addr)
 		if err != nil {
 			return
 		}
-		c, err = t.Dial(network, addr, userdata)
+		c, err = t.Dial(network, addr)
 		raddr = addr
 		return
 	}
@@ -326,12 +330,12 @@ func (t *Transport) dial(network, addr string, userdata interface{}) (c net.Conn
 // specified in the connectMethod.  This includes doing a proxy CONNECT
 // and/or setting up TLS.  If this doesn't return an error, the persistConn
 // is ready to write requests to.
-func (t *Transport) getConn(cm *connectMethod, userdata interface{}) (*persistConn, error) {
+func (t *Transport) getConn(cm *connectMethod) (*persistConn, error) {
 	if pc := t.getIdleConn(cm); pc != nil {
 		return pc, nil
 	}
 
-	conn, raddr, ip, err := t.dial("tcp", cm.addr(), userdata)
+	conn, raddr, ip, err := t.dial("tcp", cm.addr())
 	if err != nil {
 		if cm.proxyURL != nil {
 			err = fmt.Errorf("http: error connecting to proxy %s: %v", cm.proxyURL, err)

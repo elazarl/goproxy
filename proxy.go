@@ -120,7 +120,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 		if resp == nil {
 			removeProxyHeaders(ctx, r)
-			ctx.RoundTrip, resp, err = proxy.Tr.DetailedRoundTrip(r, ctx.UserData)
+			ctx.RoundTrip, resp, err = proxy.Tr.DetailedRoundTrip(r)
 			if err != nil {
 				ctx.Error = err
 				resp = proxy.filterResponse(nil, ctx)
