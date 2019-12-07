@@ -12,14 +12,15 @@ var proxytests = map[string]struct {
 	url         string
 	expectProxy string
 }{
-	"do not proxy without a proxy configured":   {"", "", "https://foo.bar/baz", ""},
-	"proxy with a proxy configured":             {"", "daproxy", "https://foo.bar/baz", "daproxy:http"},
-	"proxy without a scheme":                    {"", "daproxy", "//foo.bar/baz", "daproxy:http"},
-	"proxy with a proxy configured with a port": {"", "http://daproxy:123", "https://foo.bar/baz", "daproxy:123"},
-	"proxy with an https proxy configured":      {"", "https://daproxy", "https://foo.bar/baz", "daproxy:https"},
-	"proxy with a non-matching no_proxy":        {"other.bar", "daproxy", "https://foo.bar/baz", "daproxy:http"},
-	"do not proxy with a full no_proxy match":   {"foo.bar", "daproxy", "https://foo.bar/baz", ""},
-	"do not proxy with a suffix no_proxy match": {".bar", "daproxy", "https://foo.bar/baz", ""},
+	"never proxy http": {"", "daproxy", "http://foo.bar/baz", ""},
+
+	"do not proxy https without a proxy configured":   {"", "", "https://foo.bar/baz", ""},
+	"proxy https with a proxy configured":             {"", "daproxy", "https://foo.bar/baz", "daproxy:http"},
+	"proxy https with a proxy configured with a port": {"", "http://daproxy:123", "https://foo.bar/baz", "daproxy:123"},
+	"proxy https with an https proxy configured":      {"", "https://daproxy", "https://foo.bar/baz", "daproxy:https"},
+	"proxy https with a non-matching no_proxy":        {"other.bar", "daproxy", "https://foo.bar/baz", "daproxy:http"},
+	"do not proxy https with a full no_proxy match":   {"foo.bar", "daproxy", "https://foo.bar/baz", ""},
+	"do not proxy https with a suffix no_proxy match": {".bar", "daproxy", "https://foo.bar/baz", ""},
 }
 
 var envKeys = []string{"no_proxy", "http_proxy", "https_proxy", "NO_PROXY", "HTTP_PROXY", "HTTPS_PROXY"}
