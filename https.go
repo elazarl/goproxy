@@ -7,11 +7,10 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync/atomic"
-
-	"golang.org/x/net/http/httpproxy"
 )
 
 type ConnectActionLiteral int
@@ -40,22 +39,6 @@ func stripPort(s string) string {
 		return s
 	}
 	return s[:ix]
-}
-
-func httpsProxyFromEnv(reqURL *url.URL) (string, error) {
-	cfg := httpproxy.FromEnvironment()
-	// We only use this codepath for HTTPS CONNECT proxies so we shouldn't
-	// return anything from HTTPProxy
-	cfg.HTTPProxy = ""
-
-	proxyURL, err := cfg.ProxyFunc()(reqURL)
-	if err != nil {
-		return "", err
-	}
-	if proxyURL != nil {
-		return proxyURL.String(), nil
-	}
-	return "", nil
 }
 
 func (proxy *ProxyHttpServer) dial(network, addr string, userdata interface{}) (c net.Conn, err error) {
@@ -93,9 +76,9 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		if !hasPort.MatchString(host) {
 			host += ":80"
 		}
-		https_proxy, err := httpsProxyFromEnv(r.URL)
-		if err != nil {
-			ctx.Warnf("Error configuring HTTPS proxy: %s", err)
+		https_proxy := os.Getenv("https_proxy")
+		if https_proxy == "" {
+			https_proxy = os.Getenv("HTTPS_PROXY")
 		}
 		var targetSiteCon net.Conn
 		var e error
