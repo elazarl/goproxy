@@ -3,8 +3,8 @@ package goproxy_html
 
 import (
 	"bytes"
-	"github.com/rogpeppe/go-charset/charset"
-	_ "github.com/rogpeppe/go-charset/data"
+	"code.google.com/p/go-charset/charset"
+	_ "code.google.com/p/go-charset/data"
 	"errors"
 	"github.com/elazarl/goproxy"
 	"io"
