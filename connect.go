@@ -163,7 +163,6 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 
 			req.URL.Scheme = "http"
 			req.URL.Host = r.Host
-			req.Host = r.Host
 			req.RemoteAddr = r.RemoteAddr
 
 			// We create a new context but populate it with the
@@ -262,8 +261,8 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 			clientTls.Reset(rawClientTls)
 
 			req.URL.Scheme = "https"
-			req.URL.Host = r.Host
-			req.Host = r.Host
+			req.URL.Host = r.URL.Host
+			req.RemoteAddr = r.RemoteAddr
 
 			// We create a new context but populate it with the
 			// previous UserData in order to be able to correlate
@@ -276,7 +275,6 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 				UserData: ctx.UserData,
 			}
 
-			req.RemoteAddr = r.RemoteAddr
 			if end, err := proxy.handleRequest(NewConnResponseWriter(rawClientTls), req, nctx); end {
 				if err != nil {
 					ctx.Warnf("Error during serving MITM HTTPS request: %v", err)
