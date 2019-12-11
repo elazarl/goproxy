@@ -161,8 +161,9 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 				break
 			}
 
-			req.URL, err = url.Parse("http://" + req.Host + req.URL.String())
-
+			req.URL.Scheme = "http"
+			req.URL.Host = r.Host
+			req.Host = r.Host
 			req.RemoteAddr = r.RemoteAddr
 
 			// We create a new context but populate it with the
@@ -260,13 +261,9 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 			req.Body = ioutil.NopCloser(body)
 			clientTls.Reset(rawClientTls)
 
-			if !httpsRegexp.MatchString(req.URL.String()) {
-				req.URL, err = url.Parse("https://" + r.Host + req.URL.String())
-				if err != nil {
-					ctx.Warnf("Couldn't create https-URL for host %q and URL %q: %+#v", r.Host, req.URL.String(), err)
-					break
-				}
-			}
+			req.URL.Scheme = "https"
+			req.URL.Host = r.Host
+			req.Host = r.Host
 
 			// We create a new context but populate it with the
 			// previous UserData in order to be able to correlate
