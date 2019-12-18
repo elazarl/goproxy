@@ -2,6 +2,7 @@ package goproxy
 
 import (
 	"bufio"
+	"context"
 	"crypto/tls"
 	"errors"
 	"io"
@@ -64,6 +65,21 @@ func (proxy *ProxyHttpServer) connectDial(network, addr string) (c net.Conn, err
 	return proxy.ConnectDial(network, addr)
 }
 
+func (proxy *ProxyHttpServer) dialContext(ctx *ProxyCtx, network, addr string) (c net.Conn, err error) {
+	if proxy.Tr.DialContext != nil {
+		pctx := context.WithValue(context.Background(), ProxyContextKey, ctx)
+		return proxy.Tr.DialContext(pctx, network, addr)
+	}
+	return proxy.ConnectDial(network, addr)
+}
+
+func (proxy *ProxyHttpServer) connectDialContext(ctx *ProxyCtx, network, addr string) (c net.Conn, err error) {
+	if proxy.ConnectDialContext == nil {
+		return proxy.dialContext(ctx, network, addr)
+	}
+	return proxy.ConnectDialContext(ctx, network, addr)
+}
+
 func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request) {
 	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy}
 
@@ -94,7 +110,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		if !hasPort.MatchString(host) {
 			host += ":80"
 		}
-		targetSiteCon, err := proxy.connectDial("tcp", host)
+		targetSiteCon, err := proxy.connectDialContext(ctx, "tcp", host)
 		if err != nil {
 			httpError(proxyClient, ctx, err)
 			return
@@ -312,6 +328,8 @@ func dialerFromEnv(proxy *ProxyHttpServer) func(network, addr string) (net.Conn,
 	}
 	return proxy.NewConnectDialToProxy(https_proxy)
 }
+
+func dialerFromRequest()
 
 func (proxy *ProxyHttpServer) NewConnectDialToProxy(https_proxy string) func(network, addr string) (net.Conn, error) {
 	return proxy.NewConnectDialToProxyWithHandler(https_proxy, nil)

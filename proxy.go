@@ -29,9 +29,17 @@ type ProxyHttpServer struct {
 	// ConnectDial will be used to create TCP connections for CONNECT requests
 	// if nil Tr.Dial will be used
 	ConnectDial func(network string, addr string) (net.Conn, error)
+
+	// ConnectDialContext will be used to create TCP connections for CONNECT requests
+	// if nil Tr.Dial will be used
+	ConnectDialContext func(ctx *ProxyCtx, network string, addr string) (net.Conn, error)
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
+
+type ContextKey string
+
+const ProxyContextKey ContextKey = "proxyContext"
 
 func copyHeaders(dst, src http.Header, keepDestHeaders bool) {
 	if !keepDestHeaders {
