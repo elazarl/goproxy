@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
@@ -16,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	"golang.org/x/net/http/httpproxy"
 )
 
 type ConnectActionLiteral int
@@ -110,11 +113,23 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		if !hasPort.MatchString(host) {
 			host += ":80"
 		}
-		targetSiteCon, err := proxy.connectDialContext(ctx, "tcp", host)
+
+		httpsProxy, err := httpsProxyFromEnv(r.URL)
+		if err != nil {
+			ctx.Warnf("Error configuring HTTPS proxy err=%q url=%q", err, r.URL.String())
+		}
+
+		var targetSiteCon net.Conn
+		if httpsProxy == "" {
+			targetSiteCon, err = proxy.connectDialContext(ctx, "tcp", host)
+		} else {
+			targetSiteCon, err = proxy.connectDialProxyWithContext(ctx, httpsProxy, host)
+		}
 		if err != nil {
 			httpError(proxyClient, ctx, err)
 			return
 		}
+
 		ctx.Logf("Accepting CONNECT to %s", host)
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 
@@ -329,8 +344,6 @@ func dialerFromEnv(proxy *ProxyHttpServer) func(network, addr string) (net.Conn,
 	return proxy.NewConnectDialToProxy(https_proxy)
 }
 
-func dialerFromRequest()
-
 func (proxy *ProxyHttpServer) NewConnectDialToProxy(https_proxy string) func(network, addr string) (net.Conn, error) {
 	return proxy.NewConnectDialToProxyWithHandler(https_proxy, nil)
 }
@@ -436,4 +449,69 @@ func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls
 		config.Certificates = append(config.Certificates, cert)
 		return &config, nil
 	}
+}
+
+func (proxy *ProxyHttpServer) connectDialProxyWithContext(ctx *ProxyCtx, httpsProxy, host string) (net.Conn, error) {
+	c, err := proxy.dialContext(ctx, "tcp", httpsProxy)
+	if err != nil {
+		return nil, err
+	}
+
+	c = tls.Client(c, proxy.Tr.TLSClientConfig)
+	connectReq := &http.Request{
+		Method: "CONNECT",
+		URL:    &url.URL{Opaque: host},
+		Host:   host,
+		Header: make(http.Header),
+	}
+	connectReq.Write(c)
+	// Read response.
+	// Okay to use and discard buffered reader here, because
+	// TLS server will not speak until spoken to.
+	br := bufio.NewReader(c)
+	resp, err := http.ReadResponse(br, connectReq)
+	if err != nil {
+		c.Close()
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		body, err := ioutil.ReadAll(io.LimitReader(resp.Body, 500))
+		if err != nil {
+			return nil, err
+		}
+		c.Close()
+		return nil, errors.New("proxy refused connection" + string(body))
+	}
+	return c, nil
+}
+
+// httpsProxyFromEnv allows goproxy to respect no_proxy env vars
+// https://github.com/stripe/goproxy/pull/5
+func httpsProxyFromEnv(reqURL *url.URL) (string, error) {
+	cfg := httpproxy.FromEnvironment()
+	// We only use this codepath for HTTPS CONNECT proxies so we shouldn't
+	// return anything from HTTPProxy
+	cfg.HTTPProxy = ""
+
+	// The request URL provided to the proxy for a CONNECT request does
+	// not necessarily have an https scheme but ProxyFunc uses the scheme
+	// to determine which env var to introspect.
+	reqSchemeURL := reqURL
+	reqSchemeURL.Scheme = "https"
+
+	proxyURL, err := cfg.ProxyFunc()(reqSchemeURL)
+	if err != nil {
+		return "", err
+	}
+	if proxyURL == nil {
+		return "", nil
+	}
+
+	service := proxyURL.Port()
+	if service == "" {
+		service = proxyURL.Scheme
+	}
+
+	return fmt.Sprintf("%s:%s", proxyURL.Hostname(), service), nil
 }
