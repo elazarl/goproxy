@@ -11,28 +11,19 @@ import (
 )
 
 type connResponseWriter struct {
-	dst            io.Writer
-	header         http.Header
-	header_written bool
+	dst io.Writer
 }
 
 func (w *connResponseWriter) Header() http.Header {
-	return w.header
+	return nil
 }
 
-func (w *connResponseWriter) Write(data []byte) (n int, e error) {
-	w.WriteHeader(http.StatusOK)
-	n, e = w.dst.Write(data)
-	return
+func (w *connResponseWriter) Write(data []byte) (int, error) {
+	return w.dst.Write(data)
 }
 
 func (w *connResponseWriter) WriteHeader(code int) {
-	if w.header_written {
-		return
-	}
-
-	w.header_written = true
-	w.header.Write(w.dst)
+	return
 }
 
 func (w *connResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
@@ -51,10 +42,7 @@ func (w *connResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 }
 
 func NewConnResponseWriter(dst io.Writer) *connResponseWriter {
-	return &connResponseWriter{
-		dst:    dst,
-		header: map[string][]string{},
-	}
+	return &connResponseWriter{dst}
 }
 
 func Error(out http.ResponseWriter, err error, code int) {
