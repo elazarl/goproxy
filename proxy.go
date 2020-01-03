@@ -100,8 +100,10 @@ func writeResponse(ctx *ProxyCtx, resp *http.Response, out http.ResponseWriter) 
 		if resp.ContentLength == -1 {
 			defer resp.Body.Close()
 
+			const LIMIT_SIZE = 4 * 1024
+
 			peek, err := ioutil.ReadAll(
-				io.LimitReader(resp.Body, 4*1024),
+				io.LimitReader(resp.Body, LIMIT_SIZE),
 			)
 
 			body := bytes.NewReader(peek)
@@ -110,7 +112,7 @@ func writeResponse(ctx *ProxyCtx, resp *http.Response, out http.ResponseWriter) 
 				ctx.Warnf("Error reading response body: %s", err.Error())
 			}
 
-			if len(peek) < 4*1024 {
+			if len(peek) <= LIMIT_SIZE {
 				resp.ContentLength = int64(body.Len())
 				resp.Body = ioutil.NopCloser(body)
 			} else {
