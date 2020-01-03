@@ -97,6 +97,7 @@ func writeResponse(ctx *ProxyCtx, resp *http.Response, out http.ResponseWriter) 
 	if w, ok := out.(*connResponseWriter); ok {
 		// net/http: Response.Write produces invalid responses in this case,
 		// hacking to fix that
+
 		if resp.ContentLength == -1 {
 			defer resp.Body.Close()
 
@@ -112,11 +113,17 @@ func writeResponse(ctx *ProxyCtx, resp *http.Response, out http.ResponseWriter) 
 				ctx.Warnf("Error reading response body: %s", err.Error())
 			}
 
-			if len(peek) <= LIMIT_SIZE {
-				resp.ContentLength = int64(body.Len())
+			if len(peek) < LIMIT_SIZE {
+				resp.ContentLength = int64(len(peek))
 				resp.Body = ioutil.NopCloser(body)
 			} else {
-				resp.TransferEncoding = append(resp.TransferEncoding, "chunked")
+				// We prepare the response for chunk-encoding.
+				// This requires version 1.1 of the HTTP
+				// protocol.
+				resp.Proto = "HTTP/1.1"
+				resp.ProtoMajor, resp.ProtoMinor = 1, 1
+
+				resp.TransferEncoding = append([]string{"chunked"}, resp.TransferEncoding...)
 				resp.Body = ioutil.NopCloser(io.MultiReader(
 					body,
 					resp.Body,
