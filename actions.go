@@ -42,7 +42,7 @@ func (f FuncRespHandler) Handle(resp *http.Response, ctx *ProxyCtx) *http.Respon
 // connection with the destination the client wished to connect to, and would
 // send back and forth all messages from the server to the client and vice versa.
 // The request and responses sent in this Man In the Middle channel are filtered
-// through th eusual flow (request and response filtered through the ReqHanlders
+// through the usual flow (request and response filtered through the ReqHandlers
 // and RespHandlers)
 type HttpsHandler interface {
 	HandleConnect(req string, ctx *ProxyCtx) (*ConnectAction, string)

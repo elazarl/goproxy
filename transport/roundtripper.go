@@ -1,9 +1,6 @@
 package transport
 
-import (
-	"net/http"
-	"github.com/elazarl/goproxy/transport/details"
-)
+import "net/http"
 
 type RoundTripper interface {
 	// RoundTrip executes a single HTTP transaction, returning
@@ -19,6 +16,6 @@ type RoundTripper interface {
 	// RoundTrip should not modify the request, except for
 	// consuming the Body.  The request's URL and Header fields
 	// are guaranteed to be initialized.
-	RoundTrip(*http.Request, interface{}) (*http.Response, error)
-	DetailedRoundTrip(*http.Request, interface{}) (*details.RoundTripDetails, *http.Response, error)
+	RoundTrip(*http.Request) (*http.Response, error)
+	DetailedRoundTrip(*http.Request) (*RoundTripDetails, *http.Response, error)
 }

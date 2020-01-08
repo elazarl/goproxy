@@ -31,7 +31,8 @@ func HandleImage(f func(img image.Image, ctx *ProxyCtx) image.Image) RespHandler
 		}
 		contentType := resp.Header.Get("Content-Type")
 
-		regret := regretable.NewRegretableReaderCloser(resp.Body)
+		const kb = 1024
+		regret := regretable.NewRegretableReaderCloserSize(resp.Body, 16*kb)
 		resp.Body = regret
 		img, imgType, err := image.Decode(resp.Body)
 		if err != nil {

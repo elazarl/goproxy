@@ -3,6 +3,7 @@ package goproxy
 import (
 	"bytes"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -42,14 +43,14 @@ func (c RespConditionFunc) HandleResp(resp *http.Response, ctx *ProxyCtx) bool {
 	return c(resp, ctx)
 }
 
-// UrlHasPrefix returns a ReqCondtion checking wether the destination URL the proxy client has requested
+// UrlHasPrefix returns a ReqCondition checking wether the destination URL the proxy client has requested
 // has the given prefix, with or without the host.
 // For example UrlHasPrefix("host/x") will match requests of the form 'GET host/x', and will match
 // requests to url 'http://host/x'
 func UrlHasPrefix(prefix string) ReqConditionFunc {
 	return func(req *http.Request, ctx *ProxyCtx) bool {
 		return strings.HasPrefix(req.URL.Path, prefix) ||
-			strings.HasPrefix(req.URL.Host+"/"+req.URL.Path, prefix) ||
+			strings.HasPrefix(req.URL.Host+req.URL.Path, prefix) ||
 			strings.HasPrefix(req.URL.Scheme+req.URL.Host+req.URL.Path, prefix)
 	}
 }
@@ -116,21 +117,26 @@ func UrlMatches(re *regexp.Regexp) ReqConditionFunc {
 	}
 }
 
-// DstHostIs returns a ReqCondtion testing wether the host in the request url is the given string
+// DstHostIs returns a ReqCondition testing wether the host in the request url is the given string
 func DstHostIs(host string) ReqConditionFunc {
 	return func(req *http.Request, ctx *ProxyCtx) bool {
 		return req.URL.Host == host
 	}
 }
 
-// SrcIpIs returns a ReqCondtion testing wether the source IP of the request is the given string
-func SrcIpIs(ip string) ReqCondition {
+// SrcIpIs returns a ReqCondition testing whether the source IP of the request is one of the given strings
+func SrcIpIs(ips ...string) ReqCondition {
 	return ReqConditionFunc(func(req *http.Request, ctx *ProxyCtx) bool {
-		return strings.HasPrefix(req.RemoteAddr, ip+":")
+		for _, ip := range ips {
+			if strings.HasPrefix(req.RemoteAddr, ip+":") {
+				return true
+			}
+		}
+		return false
 	})
 }
 
-// Not returns a ReqCondtion negating the given ReqCondition
+// Not returns a ReqCondition negating the given ReqCondition
 func Not(r ReqCondition) ReqConditionFunc {
 	return func(req *http.Request, ctx *ProxyCtx) bool {
 		return !r.HandleReq(req, ctx)
@@ -232,6 +238,18 @@ func (pcond *ReqProxyConds) HandleConnect(h HttpsHandler) {
 //	})
 func (pcond *ReqProxyConds) HandleConnectFunc(f func(host string, ctx *ProxyCtx) (*ConnectAction, string)) {
 	pcond.HandleConnect(FuncHttpsHandler(f))
+}
+
+func (pcond *ReqProxyConds) HijackConnect(f func(req *http.Request, client net.Conn, ctx *ProxyCtx)) {
+	pcond.proxy.httpsHandlers = append(pcond.proxy.httpsHandlers,
+		FuncHttpsHandler(func(host string, ctx *ProxyCtx) (*ConnectAction, string) {
+			for _, cond := range pcond.reqConds {
+				if !cond.HandleReq(ctx.Req, ctx) {
+					return nil, ""
+				}
+			}
+			return &ConnectAction{Action: ConnectHijack, Hijack: f}, host
+		}))
 }
 
 // ProxyConds is used to aggregate RespConditions for a ProxyHttpServer.
