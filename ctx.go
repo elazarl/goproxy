@@ -33,22 +33,25 @@ type ProxyCtx struct {
 	certStore CertStorage
 	Proxy     *ProxyHttpServer
 
-	ProxyLogger            *logex.Leveled
-	ForwardProxy           string
-	ForwardProxyAuth       string
-	ForwardProxyProto      string
-	ForwardProxyHeaders    []ForwardProxyHeader
-	ForwardMetricsCounters MetricsCounters
-	ForwardProxyRegWrite   bool
-	ProxyUser              string
-	MaxIdleConns           int
-	MaxIdleConnsPerHost    int
-	IdleConnTimeout        time.Duration
-	CopyBufferSize         int
-	Accounting             string
-	BytesSent              int64
-	BytesReceived          int64
-	Tail                   func(*ProxyCtx) error
+	ProxyLogger                          *logex.Leveled
+	ForwardProxy                         string
+	ForwardProxyAuth                     string
+	ForwardProxyProto                    string
+	ForwardProxyHeaders                  []ForwardProxyHeader
+	ForwardMetricsCounters               MetricsCounters
+	ForwardProxyRegWrite                 bool
+	ForwardProxyErrorFallback            func() string
+	ForwardProxyFallbackTimeout          int
+	ForwardProxyFallbackSecondaryTimeout int
+	ProxyUser                            string
+	MaxIdleConns                         int
+	MaxIdleConnsPerHost                  int
+	IdleConnTimeout                      time.Duration
+	CopyBufferSize                       int
+	Accounting                           string
+	BytesSent                            int64
+	BytesReceived                        int64
+	Tail                                 func(*ProxyCtx) error
 }
 
 type MetricsCounters struct {
@@ -174,13 +177,32 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 				}
 			}),
 		}
-
+		if ctx.ForwardProxyFallbackTimeout > 0 {
+			tr.DialContext = (&net.Dialer{
+				Timeout:   time.Duration(int64(ctx.ForwardProxyFallbackTimeout)) * time.Second,
+				KeepAlive: 30 * time.Second,
+				DualStack: true,
+			}).DialContext
+			if ctx.ForwardProxyFallbackSecondaryTimeout > 0 {
+				ctx.ForwardProxyFallbackTimeout = ctx.ForwardProxyFallbackSecondaryTimeout
+			} else {
+				ctx.ForwardProxyFallbackTimeout = 10
+			}
+		}
 		rawConn, err = tr.Dial("tcp4", host)
 		if err != nil {
 			dnsCheck, _ := net.LookupHost(strings.Split(host, ":")[0])
 			if len(dnsCheck) > 0 {
 				ctx.Logf("error-metric: http dial to %s failed: %v", host, err)
 				ctx.SetErrorMetric()
+			}
+			// if a fallback func was provided, retry
+			if ctx.ForwardProxyErrorFallback != nil {
+				ctx.ForwardProxyErrorFallback = nil
+				if newForwardProxy := ctx.ForwardProxyErrorFallback(); newForwardProxy != "" {
+					ctx.ForwardProxy = newForwardProxy
+					return ctx.RoundTrip(req)
+				}
 			}
 			return nil, err
 		}

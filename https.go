@@ -135,6 +135,19 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					logHeaders = req.Header
 				}),
 			}
+			if ctx.ForwardProxyFallbackTimeout > 0 {
+				tr.DialContext = (&net.Dialer{
+					Timeout:   time.Duration(int64(ctx.ForwardProxyFallbackTimeout)) * time.Second,
+					KeepAlive: 30 * time.Second,
+					DualStack: true,
+				}).DialContext
+				if ctx.ForwardProxyFallbackSecondaryTimeout > 0 {
+					ctx.ForwardProxyFallbackTimeout = ctx.ForwardProxyFallbackSecondaryTimeout
+				} else {
+					ctx.ForwardProxyFallbackTimeout = 10
+				}
+			}
+
 			targetSiteCon, err = tr.Dial("tcp", host)
 		} else {
 			targetSiteCon, err = proxy.connectDial("tcp", host)
@@ -144,6 +157,14 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			if len(dnsCheck) > 0 {
 				ctx.Logf("error-metric: https to host: %s failed: %v - headers %+v", host, err, logHeaders)
 				ctx.SetErrorMetric()
+				// if a fallback func was provided, retry.
+				// Since the ctx is created in this method, we just rerun handleHttps,
+				// which will call any handlers again and setup the context with a new forward proxy
+				if ctx.ForwardProxyErrorFallback != nil {
+					ctx.ForwardProxyErrorFallback = nil
+					proxy.handleHttps(w, r)
+					return
+				}
 			}
 			httpError(proxyClient, ctx, err)
 			return
