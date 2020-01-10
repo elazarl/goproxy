@@ -66,6 +66,105 @@ func (proxy *ProxyHttpServer) connectDial(network, addr string) (c net.Conn, err
 	return proxy.ConnectDial(network, addr)
 }
 
+func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host string, proxyClient net.Conn) {
+
+	if !hasPort.MatchString(host) {
+		host += ":80"
+	}
+	var targetSiteCon net.Conn
+	var err error
+	var logHeaders http.Header
+	if ctx.ForwardProxy != "" {
+
+		if ctx.ForwardProxyProto == "" {
+			ctx.ForwardProxyProto = "http"
+		}
+
+		//check for idle override
+		var idleTimeout time.Duration
+		if ctx.IdleConnTimeout != 0 {
+			idleTimeout = ctx.IdleConnTimeout
+		} else {
+			idleTimeout = 90 * time.Second
+		}
+
+		tr := &http.Transport{
+			MaxIdleConns:          ctx.MaxIdleConns,
+			MaxIdleConnsPerHost:   ctx.MaxIdleConnsPerHost,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+			IdleConnTimeout:       idleTimeout,
+			Proxy: func(req *http.Request) (*url.URL, error) {
+				return url.Parse(ctx.ForwardProxyProto + "://" + ctx.ForwardProxy)
+			},
+			Dial: ctx.Proxy.NewConnectDialToProxyWithHandler(ctx.ForwardProxyProto+"://"+ctx.ForwardProxy, func(req *http.Request) {
+				if ctx.ForwardProxyAuth != "" {
+					req.Header.Set("Proxy-Authorization", fmt.Sprintf("Basic %s", ctx.ForwardProxyAuth))
+				}
+				if len(ctx.ForwardProxyHeaders) > 0 {
+					for _, pxyHeader := range ctx.ForwardProxyHeaders {
+						ctx.Logf("setting proxy header %+v", pxyHeader)
+						req.Header.Set(pxyHeader.Header, pxyHeader.Value)
+					}
+				}
+				logHeaders = req.Header
+			}),
+		}
+		if ctx.ForwardProxyFallbackTimeout > 0 {
+			tr.DialContext = (&net.Dialer{
+				Timeout:   time.Duration(int64(ctx.ForwardProxyFallbackTimeout)) * time.Second,
+				KeepAlive: 30 * time.Second,
+				DualStack: true,
+			}).DialContext
+			if ctx.ForwardProxyFallbackSecondaryTimeout > 0 {
+				ctx.ForwardProxyFallbackTimeout = ctx.ForwardProxyFallbackSecondaryTimeout
+			} else {
+				ctx.ForwardProxyFallbackTimeout = 10
+			}
+		}
+
+		targetSiteCon, err = tr.Dial("tcp", host)
+	} else {
+		targetSiteCon, err = proxy.connectDial("tcp", host)
+	}
+	if err != nil {
+		dnsCheck, _ := net.LookupHost(strings.Split(host, ":")[0])
+		if len(dnsCheck) > 0 {
+			ctx.Logf("error-metric: https to host: %s failed: %v - headers %+v", host, err, logHeaders)
+			ctx.SetErrorMetric()
+			// if a fallback func was provided, retry.
+			// Since the ctx is created in this method, we just rerun handleHttps,
+			// which will call any handlers again and setup the context with a new forward proxy
+			if ctx.ForwardProxyErrorFallback != nil {
+				todo := OkConnect
+				for i, h := range proxy.httpsHandlers {
+					newtodo, newhost := h.HandleConnect(host, ctx)
+					// If found a result, break the loop immediately
+					if newtodo != nil {
+						todo, host = newtodo, newhost
+						ctx.Logf("on %dth handler: %v %s", i, todo, host)
+						break
+					}
+				}
+				ctx.ForwardProxyErrorFallback = nil
+				if todo.Action == ConnectAccept {
+					proxy.handleHttpsConnectAccept(ctx, host, proxyClient)
+					return
+				}
+			}
+		}
+		httpError(proxyClient, ctx, err)
+		return
+	}
+	ctx.SetSuccessMetric()
+	ctx.Logf("Accepting CONNECT to %s", host)
+	proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+
+	go copyAndClose(ctx, targetSiteCon, proxyClient, "sent")
+	go copyAndClose(ctx, proxyClient, targetSiteCon, "recv")
+
+}
+
 func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request) {
 	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy, certStore: proxy.CertStore}
 
@@ -93,88 +192,8 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 	}
 	switch todo.Action {
 	case ConnectAccept:
-		if !hasPort.MatchString(host) {
-			host += ":80"
-		}
-		var targetSiteCon net.Conn
-		var err error
-		var logHeaders http.Header
-		if ctx.ForwardProxy != "" {
 
-			if ctx.ForwardProxyProto == "" {
-				ctx.ForwardProxyProto = "http"
-			}
-
-			//check for idle override
-			var idleTimeout time.Duration
-			if ctx.IdleConnTimeout != 0 {
-				idleTimeout = ctx.IdleConnTimeout
-			} else {
-				idleTimeout = 90 * time.Second
-			}
-
-			tr := &http.Transport{
-				MaxIdleConns:          ctx.MaxIdleConns,
-				MaxIdleConnsPerHost:   ctx.MaxIdleConnsPerHost,
-				TLSHandshakeTimeout:   10 * time.Second,
-				ExpectContinueTimeout: 1 * time.Second,
-				IdleConnTimeout:       idleTimeout,
-				Proxy: func(req *http.Request) (*url.URL, error) {
-					return url.Parse(ctx.ForwardProxyProto + "://" + ctx.ForwardProxy)
-				},
-				Dial: ctx.Proxy.NewConnectDialToProxyWithHandler(ctx.ForwardProxyProto+"://"+ctx.ForwardProxy, func(req *http.Request) {
-					if ctx.ForwardProxyAuth != "" {
-						req.Header.Set("Proxy-Authorization", fmt.Sprintf("Basic %s", ctx.ForwardProxyAuth))
-					}
-					if len(ctx.ForwardProxyHeaders) > 0 {
-						for _, pxyHeader := range ctx.ForwardProxyHeaders {
-							ctx.Logf("setting proxy header %+v", pxyHeader)
-							req.Header.Set(pxyHeader.Header, pxyHeader.Value)
-						}
-					}
-					logHeaders = req.Header
-				}),
-			}
-			if ctx.ForwardProxyFallbackTimeout > 0 {
-				tr.DialContext = (&net.Dialer{
-					Timeout:   time.Duration(int64(ctx.ForwardProxyFallbackTimeout)) * time.Second,
-					KeepAlive: 30 * time.Second,
-					DualStack: true,
-				}).DialContext
-				if ctx.ForwardProxyFallbackSecondaryTimeout > 0 {
-					ctx.ForwardProxyFallbackTimeout = ctx.ForwardProxyFallbackSecondaryTimeout
-				} else {
-					ctx.ForwardProxyFallbackTimeout = 10
-				}
-			}
-
-			targetSiteCon, err = tr.Dial("tcp", host)
-		} else {
-			targetSiteCon, err = proxy.connectDial("tcp", host)
-		}
-		if err != nil {
-			dnsCheck, _ := net.LookupHost(strings.Split(host, ":")[0])
-			if len(dnsCheck) > 0 {
-				ctx.Logf("error-metric: https to host: %s failed: %v - headers %+v", host, err, logHeaders)
-				ctx.SetErrorMetric()
-				// if a fallback func was provided, retry.
-				// Since the ctx is created in this method, we just rerun handleHttps,
-				// which will call any handlers again and setup the context with a new forward proxy
-				if ctx.ForwardProxyErrorFallback != nil {
-					ctx.ForwardProxyErrorFallback = nil
-					proxy.handleHttps(w, r)
-					return
-				}
-			}
-			httpError(proxyClient, ctx, err)
-			return
-		}
-		ctx.SetSuccessMetric()
-		ctx.Logf("Accepting CONNECT to %s", host)
-		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
-
-		go copyAndClose(ctx, targetSiteCon, proxyClient, "sent")
-		go copyAndClose(ctx, proxyClient, targetSiteCon, "recv")
+		proxy.handleHttpsConnectAccept(ctx, host, proxyClient)
 
 	case ConnectHijack:
 		ctx.Logf("Hijacking CONNECT to %s", host)
