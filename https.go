@@ -142,12 +142,13 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 					// If found a result, break the loop immediately
 					if newtodo != nil {
 						todo, host = newtodo, newhost
-						ctx.Logf("on %dth handler: %v %s", i, todo, host)
+						ctx.Logf("RETRY on %dth handler: %v %s", i, todo, host)
 						break
 					}
 				}
 				ctx.ForwardProxyErrorFallback = nil
 				if todo.Action == ConnectAccept {
+					ctx.Logf("RETRY forward proxy: ", ctx.ForwardProxy)
 					proxy.handleHttpsConnectAccept(ctx, host, proxyClient)
 					return
 				}
