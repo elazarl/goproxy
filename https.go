@@ -451,13 +451,21 @@ func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls
 	}
 }
 
-func (proxy *ProxyHttpServer) connectDialProxyWithContext(ctx *ProxyCtx, httpsProxy, host string) (net.Conn, error) {
-	c, err := proxy.dialContext(ctx, "tcp", httpsProxy)
+func (proxy *ProxyHttpServer) connectDialProxyWithContext(ctx *ProxyCtx, proxyHost, host string) (net.Conn, error) {
+	proxyURL, err := url.Parse(proxyHost)
 	if err != nil {
 		return nil, err
 	}
 
-	c = tls.Client(c, proxy.Tr.TLSClientConfig)
+	c, err := proxy.dialContext(ctx, "tcp", proxyHost)
+	if err != nil {
+		return nil, err
+	}
+
+	if proxyURL.Scheme == "https" {
+		c = tls.Client(c, proxy.Tr.TLSClientConfig)
+	}
+
 	connectReq := &http.Request{
 		Method: "CONNECT",
 		URL:    &url.URL{Opaque: host},
