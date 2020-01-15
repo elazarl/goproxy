@@ -55,10 +55,10 @@ func stripPort(s string) string {
 }
 
 func (proxy *ProxyHttpServer) dial(network, addr string) (c net.Conn, err error) {
-	if proxy.Tr.Dial != nil {
-		return proxy.Tr.Dial(network, addr)
+	if proxy.Tr.Dial == nil {
+		return net.Dial(network, addr)
 	}
-	return net.Dial(network, addr)
+	return proxy.Tr.Dial(network, addr)
 }
 
 func (proxy *ProxyHttpServer) connectDial(network, addr string) (c net.Conn, err error) {
@@ -69,11 +69,11 @@ func (proxy *ProxyHttpServer) connectDial(network, addr string) (c net.Conn, err
 }
 
 func (proxy *ProxyHttpServer) dialContext(ctx *ProxyCtx, network, addr string) (c net.Conn, err error) {
-	if proxy.Tr.DialContext != nil {
-		pctx := context.WithValue(context.Background(), ProxyContextKey, ctx)
-		return proxy.Tr.DialContext(pctx, network, addr)
+	if proxy.Tr.DialContext == nil {
+		return proxy.connectDial(network, addr)
 	}
-	return proxy.ConnectDial(network, addr)
+	pctx := context.WithValue(context.Background(), ProxyContextKey, ctx)
+	return proxy.Tr.DialContext(pctx, network, addr)
 }
 
 func (proxy *ProxyHttpServer) connectDialContext(ctx *ProxyCtx, network, addr string) (c net.Conn, err error) {
