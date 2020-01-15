@@ -457,7 +457,7 @@ func (proxy *ProxyHttpServer) connectDialProxyWithContext(ctx *ProxyCtx, proxyHo
 		return nil, err
 	}
 
-	c, err := proxy.dialContext(ctx, "tcp", proxyHost)
+	c, err := proxy.connectDialContext(ctx, "tcp", proxyHost)
 	if err != nil {
 		return nil, err
 	}
