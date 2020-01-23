@@ -33,6 +33,10 @@ type ProxyHttpServer struct {
 	// ConnectDialContext will be used to create TCP connections for CONNECT requests
 	// if nil Tr.Dial will be used
 	ConnectDialContext func(ctx *ProxyCtx, network string, addr string) (net.Conn, error)
+
+	// CopyHandler allows users to implement a custom copy routine when forwarding data
+	// between the proxy client and proxy target for CONNECT requests
+	CopyHandler func(ctx *ProxyCtx, client, target net.Conn)
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
