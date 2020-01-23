@@ -96,6 +96,10 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		panic("Cannot hijack connection " + e.Error())
 	}
 
+	if proxy.ConnectClientConnHandler != nil {
+		proxyClient = proxy.ConnectClientConnHandler(proxyClient)
+	}
+
 	ctx.Logf("Running %d CONNECT handlers", len(proxy.httpsHandlers))
 	todo, host := OkConnect, r.URL.Host
 	for i, h := range proxy.httpsHandlers {
@@ -132,6 +136,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 
 		ctx.Logf("Accepting CONNECT to %s", host)
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+
+		if proxy.ConnectCopyHandler != nil {
+			go proxy.ConnectCopyHandler(ctx, proxyClient, targetSiteCon)
+			return
+		}
 
 		targetTCP, targetOK := targetSiteCon.(*net.TCPConn)
 		proxyClientTCP, clientOK := proxyClient.(*net.TCPConn)
