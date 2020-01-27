@@ -138,7 +138,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 			r, resp := proxy.lateFilterRequest(r, ctx)
 
-			if resp == nil {
+			if resp != nil {
 				ctx.Logf("late request handlers should not drop requests")
 				return
 			}
