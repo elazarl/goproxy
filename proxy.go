@@ -23,6 +23,8 @@ type ProxyHttpServer struct {
 	Logger          Logger
 	NonproxyHandler http.Handler
 	reqHandlers     []ReqHandler
+	// lateRequestHandlers => those run privileged after hop headers have been removed
+	lateReqHandlers    []ReqHandler
 	respHandlers    []RespHandler
 	httpsHandlers   []HttpsHandler
 	Tr              *http.Transport
@@ -67,6 +69,20 @@ func (proxy *ProxyHttpServer) filterRequest(r *http.Request, ctx *ProxyCtx) (req
 	}
 	return
 }
+
+func (proxy *ProxyHttpServer) lateFilterRequest(r *http.Request, ctx *ProxyCtx) (req *http.Request, resp *http.Response) {
+	req = r
+	for _, h := range proxy.lateReqHandlers {
+		req, resp = h.Handle(r, ctx)
+		// non-nil resp means the handler decided to skip sending the request
+		// and return canned response instead.
+		if resp != nil {
+			break
+		}
+	}
+	return
+}
+
 func (proxy *ProxyHttpServer) filterResponse(respOrig *http.Response, ctx *ProxyCtx) (resp *http.Response) {
 	resp = respOrig
 	for _, h := range proxy.respHandlers {
@@ -119,6 +135,14 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			}
 
 			removeProxyHeaders(ctx, r)
+
+			r, resp := proxy.lateFilterRequest(r, ctx)
+
+			if resp == nil {
+				ctx.Logf("late request handlers should not drop requests")
+				return
+			}
+
 			resp, err = ctx.RoundTrip(r)
 			if err != nil {
 				ctx.Error = err
@@ -169,11 +193,12 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 // NewProxyHttpServer creates and returns a proxy server, logging to stderr by default
 func NewProxyHttpServer() *ProxyHttpServer {
 	proxy := ProxyHttpServer{
-		Logger:        log.New(os.Stderr, "", log.LstdFlags),
-		reqHandlers:   []ReqHandler{},
-		respHandlers:  []RespHandler{},
-		httpsHandlers: []HttpsHandler{},
-		NonproxyHandler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		Logger:           log.New(os.Stderr, "", log.LstdFlags),
+		reqHandlers:      []ReqHandler{},
+		lateReqHandlers:  []ReqHandler{},
+		respHandlers:     []RespHandler{},
+		httpsHandlers:    []HttpsHandler{},
+		NonproxyHandler:  http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, "This is a proxy server. Does not respond to non-proxy requests.", 500)
 		}),
 		Tr: &http.Transport{TLSClientConfig: tlsClientSkipVerify, Proxy: http.ProxyFromEnvironment},
