@@ -64,6 +64,14 @@ func (proxy *ProxyHttpServer) connectDial(network, addr string) (c net.Conn, err
 	return proxy.ConnectDial(network, addr)
 }
 
+type halfClosable interface {
+	net.Conn
+	CloseWrite() error
+	CloseRead() error
+}
+
+var _ halfClosable = (*net.TCPConn)(nil)
+
 func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request) {
 	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy, certStore: proxy.CertStore}
 
@@ -102,8 +110,8 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		ctx.Logf("Accepting CONNECT to %s", host)
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 
-		targetTCP, targetOK := targetSiteCon.(*net.TCPConn)
-		proxyClientTCP, clientOK := proxyClient.(*net.TCPConn)
+		targetTCP, targetOK := targetSiteCon.(halfClosable)
+		proxyClientTCP, clientOK := proxyClient.(halfClosable)
 		if targetOK && clientOK {
 			go copyAndClose(ctx, targetTCP, proxyClientTCP)
 			go copyAndClose(ctx, proxyClientTCP, targetTCP)
@@ -298,7 +306,7 @@ func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader, wg *sync.WaitGroup)
 	wg.Done()
 }
 
-func copyAndClose(ctx *ProxyCtx, dst, src *net.TCPConn) {
+func copyAndClose(ctx *ProxyCtx, dst, src halfClosable) {
 	if _, err := io.Copy(dst, src); err != nil {
 		ctx.Warnf("Error copying to client: %s", err)
 	}
