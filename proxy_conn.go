@@ -4,27 +4,43 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"time"
 )
 
 type proxyConn struct {
-	net.Conn
-	BytesWrote int64
+	*net.TCPConn
+	BytesWrote   int64
+	BytesRead    int64
+	ReadTimeout  time.Duration
+	WriteTimeout time.Duration
 }
 
 // newProxyConn is a wrapper around a net.Conn that allows us to log the number of bytes
 // written to the connection
-func newProxyConn(conn net.Conn) *proxyConn {
-	c := &proxyConn{Conn: conn}
+func newProxyConn(conn *net.TCPConn) *proxyConn {
+	c := &proxyConn{TCPConn: conn}
 	return c
 }
 
 func (conn *proxyConn) Write(b []byte) (n int, err error) {
-	n, err = conn.Conn.Write(b)
+	conn.TCPConn.SetWriteDeadline(time.Now().Add(conn.WriteTimeout))
+	n, err = conn.TCPConn.Write(b)
 	if err != nil {
 		return
 	}
 	conn.BytesWrote += int64(n)
+	conn.TCPConn.SetWriteDeadline(time.Time{})
+	return
+}
 
+func (conn *proxyConn) Read(b []byte) (n int, err error) {
+	conn.TCPConn.SetReadDeadline(time.Now().Add(conn.ReadTimeout))
+	n, err = conn.Read(b)
+	if err != nil {
+		return
+	}
+	conn.BytesRead += int64(n)
+	conn.TCPConn.SetReadDeadline(time.Time{})
 	return
 }
 

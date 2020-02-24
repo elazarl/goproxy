@@ -47,6 +47,8 @@ type ProxyCtx struct {
 	MaxIdleConns                         int
 	MaxIdleConnsPerHost                  int
 	IdleConnTimeout                      time.Duration
+	ProxyReadDeadline                    int
+	ProxyWriteDeadline                   int
 	CopyBufferSize                       int
 	Accounting                           string
 	BytesSent                            int64
@@ -228,7 +230,7 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	req.RequestURI = req.URL.String()
 
-	conn := newProxyConn(rawConn)
+	conn := newProxyConn(rawConn.(*net.TCPConn))
 
 	reader := bufio.NewReaderSize(conn, 32*1024)
 	writer := bufio.NewWriterSize(conn, 32*1024)

@@ -157,12 +157,40 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		httpError(proxyClient, ctx, err)
 		return
 	}
-	ctx.SetSuccessMetric()
-	ctx.Logf("Accepting CONNECT to %s", host)
+
 	proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 
-	go copyAndClose(ctx, targetSiteCon, proxyClient, "sent")
-	go copyAndClose(ctx, proxyClient, targetSiteCon, "recv")
+	targetTCP, targetOK := targetSiteCon.(*net.TCPConn)
+	proxyClientTCP, clientOK := proxyClient.(*net.TCPConn)
+
+	if targetOK && clientOK {
+
+		ctx.SetSuccessMetric()
+		ctx.Logf("Accepting CONNECT to %s", host)
+
+		clientConn := &proxyConn{
+			TCPConn:      proxyClientTCP,
+			ReadTimeout:  time.Second * time.Duration(ctx.ProxyReadDeadline),
+			WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
+		}
+
+		targetConn := &proxyConn{
+			TCPConn:      targetTCP,
+			ReadTimeout:  time.Second * time.Duration(ctx.ProxyReadDeadline),
+			WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
+		}
+
+		go copyAndClose(ctx, targetConn, clientConn, "sent")
+		go copyAndClose(ctx, clientConn, targetConn, "recv")
+
+	} else {
+
+		ctx.SetErrorMetric()
+		ctx.Warnf("Failed CONNECT to %s TCPConn: target = %v, client = %v", host, targetOK, clientOK)
+		proxyClient.Close()
+		targetSiteCon.Close()
+
+	}
 
 }
 
@@ -369,7 +397,7 @@ func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader, wg *sync.WaitGroup)
 	wg.Done()
 }
 
-func copyAndClose(ctx *ProxyCtx, dst io.WriteCloser, src io.ReadCloser, dir string) {
+func copyAndClose(ctx *ProxyCtx, dst, src *proxyConn, dir string) {
 	size := 32 * 1024
 	if ctx.CopyBufferSize > 0 {
 		size = ctx.CopyBufferSize * 1024
@@ -377,10 +405,6 @@ func copyAndClose(ctx *ProxyCtx, dst io.WriteCloser, src io.ReadCloser, dir stri
 	copied, err := copyWithBuffer(dst, src, size)
 	if err != nil {
 		ctx.Warnf("Error copying to client: %s", err)
-	}
-
-	if err := dst.Close(); err != nil {
-		ctx.Warnf("Error closing", err)
 	}
 
 	switch dir {
@@ -394,14 +418,17 @@ func copyAndClose(ctx *ProxyCtx, dst io.WriteCloser, src io.ReadCloser, dir stri
 		ctx.Tail(ctx)
 	}
 
+	dst.TCPConn.Close()
+	src.TCPConn.Close()
+
 }
 
 func copyWithBuffer(dst io.Writer, src io.Reader, size int) (written int64, err error) {
 	// If the reader has a WriteTo method, use it to do the copy.
 	// Avoids an allocation and a copy.
-	if wt, ok := src.(io.WriterTo); ok {
-		return wt.WriteTo(dst)
-	}
+	// if wt, ok := src.(io.WriterTo); ok {
+	// 	return wt.WriteTo(dst)
+	// }
 	// // Similarly, if the writer has a ReadFrom method, use it to do the copy.
 	// if rt, ok := dst.(io.ReaderFrom); ok {
 	// 	return rt.ReadFrom(src)
