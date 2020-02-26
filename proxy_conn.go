@@ -35,7 +35,7 @@ func (conn *proxyConn) Write(b []byte) (n int, err error) {
 
 func (conn *proxyConn) Read(b []byte) (n int, err error) {
 	conn.TCPConn.SetReadDeadline(time.Now().Add(conn.ReadTimeout))
-	n, err = conn.Read(b)
+	n, err = conn.TCPConn.Read(b)
 	if err != nil {
 		return
 	}
