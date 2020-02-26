@@ -230,7 +230,14 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	req.RequestURI = req.URL.String()
 
-	conn := newProxyConn(rawConn.(*net.TCPConn))
+	conn := newProxyConn(rawConn)
+
+	if ctx.ProxyReadDeadline > 0 {
+		conn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
+	}
+	if ctx.ProxyWriteDeadline > 0 {
+		conn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
+	}
 
 	reader := bufio.NewReaderSize(conn, 32*1024)
 	writer := bufio.NewWriterSize(conn, 32*1024)

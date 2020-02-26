@@ -23,7 +23,9 @@ func newProxyConn(conn net.Conn) *proxyConn {
 }
 
 func (conn *proxyConn) Write(b []byte) (n int, err error) {
-	conn.Conn.SetWriteDeadline(time.Now().Add(conn.WriteTimeout))
+	if conn.WriteTimeout > 0 {
+		conn.Conn.SetWriteDeadline(time.Now().Add(conn.WriteTimeout))
+	}
 	n, err = conn.Conn.Write(b)
 	if err != nil {
 		return
@@ -34,7 +36,9 @@ func (conn *proxyConn) Write(b []byte) (n int, err error) {
 }
 
 func (conn *proxyConn) Read(b []byte) (n int, err error) {
-	conn.Conn.SetReadDeadline(time.Now().Add(conn.ReadTimeout))
+	if conn.ReadTimeout > 0 {
+		conn.Conn.SetReadDeadline(time.Now().Add(conn.ReadTimeout))
+	}
 	n, err = conn.Conn.Read(b)
 	if err != nil {
 		return
