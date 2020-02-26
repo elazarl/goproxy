@@ -163,14 +163,14 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	ctx.SetSuccessMetric()
 	ctx.Logf("Accepting CONNECT to %s", host)
 
-	go func() {
+	go func(client, target net.Conn) {
 		clientConn := &proxyConn{
-			Conn:         proxyClient,
+			Conn:         client,
 			ReadTimeout:  time.Second * time.Duration(ctx.ProxyReadDeadline),
 			WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
 		}
 		targetConn := &proxyConn{
-			Conn:         targetSiteCon,
+			Conn:         target,
 			ReadTimeout:  time.Second * time.Duration(ctx.ProxyReadDeadline),
 			WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
 		}
@@ -181,7 +181,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		wg.Wait()
 		targetConn.Close()
 		clientConn.Close()
-	}()
+	}(proxyClient, targetSiteCon)
 
 }
 
