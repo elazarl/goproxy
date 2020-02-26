@@ -8,7 +8,7 @@ import (
 )
 
 type proxyConn struct {
-	*net.TCPConn
+	net.Conn
 	BytesWrote   int64
 	BytesRead    int64
 	ReadTimeout  time.Duration
@@ -17,30 +17,30 @@ type proxyConn struct {
 
 // newProxyConn is a wrapper around a net.Conn that allows us to log the number of bytes
 // written to the connection
-func newProxyConn(conn *net.TCPConn) *proxyConn {
-	c := &proxyConn{TCPConn: conn}
+func newProxyConn(conn net.Conn) *proxyConn {
+	c := &proxyConn{Conn: conn}
 	return c
 }
 
 func (conn *proxyConn) Write(b []byte) (n int, err error) {
-	conn.TCPConn.SetWriteDeadline(time.Now().Add(conn.WriteTimeout))
-	n, err = conn.TCPConn.Write(b)
+	conn.Conn.SetWriteDeadline(time.Now().Add(conn.WriteTimeout))
+	n, err = conn.Conn.Write(b)
 	if err != nil {
 		return
 	}
 	conn.BytesWrote += int64(n)
-	conn.TCPConn.SetWriteDeadline(time.Time{})
+	conn.Conn.SetWriteDeadline(time.Time{})
 	return
 }
 
 func (conn *proxyConn) Read(b []byte) (n int, err error) {
-	conn.TCPConn.SetReadDeadline(time.Now().Add(conn.ReadTimeout))
-	n, err = conn.TCPConn.Read(b)
+	conn.Conn.SetReadDeadline(time.Now().Add(conn.ReadTimeout))
+	n, err = conn.Conn.Read(b)
 	if err != nil {
 		return
 	}
 	conn.BytesRead += int64(n)
-	conn.TCPConn.SetReadDeadline(time.Time{})
+	conn.Conn.SetReadDeadline(time.Time{})
 	return
 }
 

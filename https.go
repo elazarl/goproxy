@@ -160,37 +160,28 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 
 	proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 
-	targetTCP, targetOK := targetSiteCon.(*net.TCPConn)
-	proxyClientTCP, clientOK := proxyClient.(*net.TCPConn)
+	ctx.SetSuccessMetric()
+	ctx.Logf("Accepting CONNECT to %s", host)
 
-	if targetOK && clientOK {
-
-		ctx.SetSuccessMetric()
-		ctx.Logf("Accepting CONNECT to %s", host)
-
+	go func() {
 		clientConn := &proxyConn{
-			TCPConn:      proxyClientTCP,
+			Conn:         proxyClient,
 			ReadTimeout:  time.Second * time.Duration(ctx.ProxyReadDeadline),
 			WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
 		}
-
 		targetConn := &proxyConn{
-			TCPConn:      targetTCP,
+			Conn:         targetSiteCon,
 			ReadTimeout:  time.Second * time.Duration(ctx.ProxyReadDeadline),
 			WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
 		}
-
-		go copyAndClose(ctx, targetConn, clientConn, "sent")
-		go copyAndClose(ctx, clientConn, targetConn, "recv")
-
-	} else {
-
-		ctx.SetErrorMetric()
-		ctx.Warnf("Failed CONNECT to %s TCPConn: target = %v, client = %v", host, targetOK, clientOK)
-		proxyClient.Close()
-		targetSiteCon.Close()
-
-	}
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go copyAndClose(ctx, targetConn, clientConn, "sent", &wg)
+		go copyAndClose(ctx, clientConn, targetConn, "recv", &wg)
+		wg.Wait()
+		targetConn.Close()
+		clientConn.Close()
+	}()
 
 }
 
@@ -397,7 +388,7 @@ func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader, wg *sync.WaitGroup)
 	wg.Done()
 }
 
-func copyAndClose(ctx *ProxyCtx, dst, src *proxyConn, dir string) {
+func copyAndClose(ctx *ProxyCtx, dst, src *proxyConn, dir string, wg *sync.WaitGroup) {
 	size := 32 * 1024
 	if ctx.CopyBufferSize > 0 {
 		size = ctx.CopyBufferSize * 1024
@@ -417,10 +408,7 @@ func copyAndClose(ctx *ProxyCtx, dst, src *proxyConn, dir string) {
 	if ctx.Tail != nil {
 		ctx.Tail(ctx)
 	}
-
-	dst.TCPConn.Close()
-	src.TCPConn.Close()
-
+	wg.Done()
 }
 
 func copyWithBuffer(dst io.Writer, src io.Reader, size int) (written int64, err error) {
