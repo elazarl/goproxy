@@ -181,12 +181,26 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		wg.Wait()
 		targetConn.Close()
 		clientConn.Close()
+		if proxy.ContextPool {
+			ctxPool.Put(ctx)
+		}
 	}(proxyClient, targetSiteCon)
 
 }
 
 func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request) {
-	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy, certStore: proxy.CertStore}
+
+	var ctx *ProxyCtx
+
+	if proxy.ContextPool {
+		ctx = ctxPool.Get().(*ProxyCtx)
+		ctx.Req = r
+		ctx.Session = atomic.AddInt64(&proxy.sess, 1)
+		ctx.Proxy = proxy
+		ctx.certStore = proxy.CertStore
+	} else {
+		ctx = &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy, certStore: proxy.CertStore}
+	}
 
 	hij, ok := w.(http.Hijacker)
 	if !ok {
