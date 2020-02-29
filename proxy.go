@@ -31,15 +31,9 @@ type ProxyHttpServer struct {
 	// if nil Tr.Dial will be used
 	ConnectDial func(network string, addr string) (net.Conn, error)
 	CertStore   CertStorage
-	//use sync.Pool for proxy contexts
-	ContextPool bool
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
-
-var ctxPool = sync.Pool{
-	New: func() interface{} { return new(ProxyCtx) },
-}
 
 var trPool = sync.Pool{
 	New: func() interface{} { return new(http.Transport) },
@@ -114,19 +108,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		proxy.handleHttps(w, r)
 	} else {
 
-		var ctx *ProxyCtx
-
-		if proxy.ContextPool {
-			ctx = ctxPool.Get().(*ProxyCtx)
-			ctx.Req = r
-			ctx.Session = atomic.AddInt64(&proxy.sess, 1)
-			ctx.Proxy = proxy
-			defer func(ctx *ProxyCtx) {
-				ctxPool.Put(ctx)
-			}(ctx)
-		} else {
-			ctx = &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy}
-		}
+		ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy}
 
 		var err error
 		ctx.Logf("Got request %v %v %v %v", r.URL.Path, r.Host, r.Method, r.URL.String())

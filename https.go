@@ -17,6 +17,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/valyala/bytebufferpool"
 )
 
 type ConnectActionLiteral int
@@ -187,24 +189,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 
 func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request) {
 
-	var ctx *ProxyCtx
-
-	if proxy.ContextPool {
-		ctx = ctxPool.Get().(*ProxyCtx)
-		ctx.Req = r
-		ctx.Session = atomic.AddInt64(&proxy.sess, 1)
-		ctx.Proxy = proxy
-		ctx.certStore = proxy.CertStore
-		defer func(ctx *ProxyCtx) {
-			ctxPool.Put(ctx)
-		}(ctx)
-	} else {
-		ctx = &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy, certStore: proxy.CertStore}
-	}
-
-	if proxy.ContextPool {
-
-	}
+	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy, certStore: proxy.CertStore}
 
 	hij, ok := w.(http.Hijacker)
 	if !ok {
@@ -439,11 +424,13 @@ func copyWithBuffer(dst io.Writer, src io.Reader, size int) (written int64, err 
 	// if rt, ok := dst.(io.ReaderFrom); ok {
 	// 	return rt.ReadFrom(src)
 	// }
-	buf := make([]byte, size)
+
+	//buf := make([]byte, size)
+	buf := bytebufferpool.Get()
 	for {
-		nr, er := src.Read(buf)
+		nr, er := src.Read(buf.B)
 		if nr > 0 {
-			nw, ew := dst.Write(buf[0:nr])
+			nw, ew := dst.Write(buf.B[0:nr])
 			if nw > 0 {
 				written += int64(nw)
 			}
@@ -463,6 +450,7 @@ func copyWithBuffer(dst io.Writer, src io.Reader, size int) (written int64, err 
 			break
 		}
 	}
+	bytebufferpool.Put(buf)
 	return written, err
 }
 
