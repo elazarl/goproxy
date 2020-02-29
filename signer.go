@@ -73,7 +73,7 @@ func signHost(ca tls.Certificate, hosts []string) (cert tls.Certificate, err err
 		return
 	}
 	var certpriv *rsa.PrivateKey
-	if certpriv, err = rsa.GenerateKey(&csprng, 1024); err != nil {
+	if certpriv, err = rsa.GenerateKey(&csprng, 2048); err != nil {
 		return
 	}
 	var derBytes []byte
