@@ -426,9 +426,11 @@ func copyWithBuffer(dst io.Writer, src io.Reader, size int) (written int64, err 
 	// }
 
 	//buf := make([]byte, size)
-	buf := bytebufferpool.Get()
+
 	for {
+		buf := bytebufferpool.Get()
 		nr, er := src.Read(buf.B)
+		bytebufferpool.Put(buf)
 		if nr > 0 {
 			nw, ew := dst.Write(buf.B[0:nr])
 			if nw > 0 {
@@ -450,7 +452,6 @@ func copyWithBuffer(dst io.Writer, src io.Reader, size int) (written int64, err 
 			break
 		}
 	}
-	bytebufferpool.Put(buf)
 	return written, err
 }
 
