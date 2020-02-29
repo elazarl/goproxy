@@ -41,6 +41,10 @@ var ctxPool = sync.Pool{
 	New: func() interface{} { return new(ProxyCtx) },
 }
 
+var trPool = sync.Pool{
+	New: func() interface{} { return new(http.Transport) },
+}
+
 func copyHeaders(dst, src http.Header, keepDestHeaders bool) {
 	if !keepDestHeaders {
 		for k := range dst {
@@ -120,6 +124,12 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		} else {
 			ctx = &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy}
 		}
+
+		defer func() {
+			if ctx.Proxy.ContextPool {
+				ctxPool.Put(ctx)
+			}
+		}()
 
 		var err error
 		ctx.Logf("Got request %v %v %v %v", r.URL.Path, r.Host, r.Method, r.URL.String())
