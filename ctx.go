@@ -320,8 +320,10 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	r := <-readDone
 	if r.err != nil {
-		ctx.Logf("error-metric: readDone failed: %v", err)
-		ctx.SetErrorMetric()
+		ctx.Logf("error-metric: readDone failed: %v", r.err)
+		if !strings.Contains(r.err.Error(), "timeout") {
+			ctx.SetErrorMetric()
+		}
 		return nil, r.err
 	}
 
