@@ -17,6 +17,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/oxtoacart/bpool"
 )
 
 type ConnectActionLiteral int
@@ -36,6 +38,7 @@ var (
 	HTTPMitmConnect = &ConnectAction{Action: ConnectHTTPMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
 	RejectConnect   = &ConnectAction{Action: ConnectReject, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
 	httpsRegexp     = regexp.MustCompile(`^https:\/\/`)
+	bufPool         *bpool.BytePool
 )
 
 type ConnectAction struct {
@@ -423,7 +426,14 @@ func copyWithBuffer(dst io.Writer, src io.Reader, size int) (written int64, err 
 	// if rt, ok := dst.(io.ReaderFrom); ok {
 	// 	return rt.ReadFrom(src)
 	// }
-	buf := make([]byte, size)
+	bufPool := bpool.NewBytePool(10000, size)
+	var buf []byte
+	if bufPool != nil {
+		buf = bufPool.Get()
+	} else {
+		buf = make([]byte, size)
+	}
+
 	for {
 		nr, er := src.Read(buf)
 		if nr > 0 {
@@ -446,6 +456,9 @@ func copyWithBuffer(dst io.Writer, src io.Reader, size int) (written int64, err 
 			}
 			break
 		}
+	}
+	if bufPool != nil {
+		bufPool.Put(buf)
 	}
 	return written, err
 }
