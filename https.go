@@ -424,6 +424,7 @@ func copyWithBuffer(dst io.Writer, src io.Reader, size int) (written int64, err 
 	// 	return rt.ReadFrom(src)
 	// }
 	buf := make([]byte, size)
+
 	for {
 		nr, er := src.Read(buf)
 		if nr > 0 {
