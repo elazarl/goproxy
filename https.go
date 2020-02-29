@@ -17,8 +17,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/valyala/bytebufferpool"
 )
 
 type ConnectActionLiteral int
@@ -396,6 +394,7 @@ func copyAndClose(ctx *ProxyCtx, dst, src *proxyConn, dir string, wg *sync.WaitG
 	if ctx.CopyBufferSize > 0 {
 		size = ctx.CopyBufferSize * 1024
 	}
+
 	copied, err := copyWithBuffer(dst, src, size)
 	if err != nil {
 		ctx.Warnf("Error copying to client: %s", err)
@@ -424,15 +423,11 @@ func copyWithBuffer(dst io.Writer, src io.Reader, size int) (written int64, err 
 	// if rt, ok := dst.(io.ReaderFrom); ok {
 	// 	return rt.ReadFrom(src)
 	// }
-
-	//buf := make([]byte, size)
-
+	buf := make([]byte, size)
 	for {
-		buf := bytebufferpool.Get()
-		nr, er := src.Read(buf.B)
-		bytebufferpool.Put(buf)
+		nr, er := src.Read(buf)
 		if nr > 0 {
-			nw, ew := dst.Write(buf.B[0:nr])
+			nw, ew := dst.Write(buf[0:nr])
 			if nw > 0 {
 				written += int64(nw)
 			}
