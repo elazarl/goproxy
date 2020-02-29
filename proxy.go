@@ -121,15 +121,12 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			ctx.Req = r
 			ctx.Session = atomic.AddInt64(&proxy.sess, 1)
 			ctx.Proxy = proxy
+			defer func(ctx *ProxyCtx) {
+				ctxPool.Put(ctx)
+			}(ctx)
 		} else {
 			ctx = &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy}
 		}
-
-		defer func() {
-			if ctx.Proxy.ContextPool {
-				ctxPool.Put(ctx)
-			}
-		}()
 
 		var err error
 		ctx.Logf("Got request %v %v %v %v", r.URL.Path, r.Host, r.Method, r.URL.String())

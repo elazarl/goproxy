@@ -154,28 +154,22 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 	var rawConn net.Conn
 	var err error
 
-	defer func() {
-		if ctx.Proxy.ContextPool {
-			trPool.Put(tr)
-		}
-	}()
-
 	if ctx.ForwardProxy != "" {
 
 		if ctx.ForwardProxyProto == "" {
 			ctx.ForwardProxyProto = "http"
 		}
-		if ctx.Proxy.ContextPool {
-			tr = trPool.Get().(*http.Transport)
-			tr.MaxIdleConns = ctx.MaxIdleConns
-			tr.MaxIdleConnsPerHost = ctx.MaxIdleConnsPerHost
-			tr.TLSHandshakeTimeout = 10 * time.Second
-			tr.ExpectContinueTimeout = 1 * time.Second
-			tr.IdleConnTimeout = idleTimeout
-			tr.Proxy = func(req *http.Request) (*url.URL, error) {
+
+		tr = &http.Transport{
+			MaxIdleConns:          maxConns,
+			MaxIdleConnsPerHost:   maxPerHostConns,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+			IdleConnTimeout:       idleTimeout,
+			Proxy: func(req *http.Request) (*url.URL, error) {
 				return url.Parse(ctx.ForwardProxyProto + "://" + ctx.ForwardProxy)
-			}
-			tr.Dial = ctx.Proxy.NewConnectDialToProxyWithHandler(ctx.ForwardProxyProto+"://"+ctx.ForwardProxy, func(req *http.Request) {
+			},
+			Dial: ctx.Proxy.NewConnectDialToProxyWithHandler(ctx.ForwardProxyProto+"://"+ctx.ForwardProxy, func(req *http.Request) {
 				if ctx.ForwardProxyAuth != "" {
 					req.Header.Set("Proxy-Authorization", fmt.Sprintf("Basic %s", ctx.ForwardProxyAuth))
 				}
@@ -185,29 +179,7 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 						req.Header.Set(pxyHeader.Header, pxyHeader.Value)
 					}
 				}
-			})
-		} else {
-			tr = &http.Transport{
-				MaxIdleConns:          maxConns,
-				MaxIdleConnsPerHost:   maxPerHostConns,
-				TLSHandshakeTimeout:   10 * time.Second,
-				ExpectContinueTimeout: 1 * time.Second,
-				IdleConnTimeout:       idleTimeout,
-				Proxy: func(req *http.Request) (*url.URL, error) {
-					return url.Parse(ctx.ForwardProxyProto + "://" + ctx.ForwardProxy)
-				},
-				Dial: ctx.Proxy.NewConnectDialToProxyWithHandler(ctx.ForwardProxyProto+"://"+ctx.ForwardProxy, func(req *http.Request) {
-					if ctx.ForwardProxyAuth != "" {
-						req.Header.Set("Proxy-Authorization", fmt.Sprintf("Basic %s", ctx.ForwardProxyAuth))
-					}
-					if len(ctx.ForwardProxyHeaders) > 0 {
-						for _, pxyHeader := range ctx.ForwardProxyHeaders {
-							ctx.Logf("setting proxy header %+v", pxyHeader)
-							req.Header.Set(pxyHeader.Header, pxyHeader.Value)
-						}
-					}
-				}),
-			}
+			}),
 		}
 
 		if ctx.ForwardProxyFallbackTimeout > 0 {

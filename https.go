@@ -74,7 +74,6 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	var targetSiteCon net.Conn
 	var err error
 	var logHeaders http.Header
-	var tr *http.Transport
 
 	if ctx.ForwardProxy != "" {
 
@@ -90,17 +89,16 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 			idleTimeout = 90 * time.Second
 		}
 
-		if proxy.ContextPool {
-			tr = trPool.Get().(*http.Transport)
-			tr.MaxIdleConns = ctx.MaxIdleConns
-			tr.MaxIdleConnsPerHost = ctx.MaxIdleConnsPerHost
-			tr.TLSHandshakeTimeout = 10 * time.Second
-			tr.ExpectContinueTimeout = 1 * time.Second
-			tr.IdleConnTimeout = idleTimeout
-			tr.Proxy = func(req *http.Request) (*url.URL, error) {
+		tr := &http.Transport{
+			MaxIdleConns:          ctx.MaxIdleConns,
+			MaxIdleConnsPerHost:   ctx.MaxIdleConnsPerHost,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+			IdleConnTimeout:       idleTimeout,
+			Proxy: func(req *http.Request) (*url.URL, error) {
 				return url.Parse(ctx.ForwardProxyProto + "://" + ctx.ForwardProxy)
-			}
-			tr.Dial = ctx.Proxy.NewConnectDialToProxyWithHandler(ctx.ForwardProxyProto+"://"+ctx.ForwardProxy, func(req *http.Request) {
+			},
+			Dial: ctx.Proxy.NewConnectDialToProxyWithHandler(ctx.ForwardProxyProto+"://"+ctx.ForwardProxy, func(req *http.Request) {
 				if ctx.ForwardProxyAuth != "" {
 					req.Header.Set("Proxy-Authorization", fmt.Sprintf("Basic %s", ctx.ForwardProxyAuth))
 				}
@@ -111,30 +109,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 					}
 				}
 				logHeaders = req.Header
-			})
-		} else {
-			tr = &http.Transport{
-				MaxIdleConns:          ctx.MaxIdleConns,
-				MaxIdleConnsPerHost:   ctx.MaxIdleConnsPerHost,
-				TLSHandshakeTimeout:   10 * time.Second,
-				ExpectContinueTimeout: 1 * time.Second,
-				IdleConnTimeout:       idleTimeout,
-				Proxy: func(req *http.Request) (*url.URL, error) {
-					return url.Parse(ctx.ForwardProxyProto + "://" + ctx.ForwardProxy)
-				},
-				Dial: ctx.Proxy.NewConnectDialToProxyWithHandler(ctx.ForwardProxyProto+"://"+ctx.ForwardProxy, func(req *http.Request) {
-					if ctx.ForwardProxyAuth != "" {
-						req.Header.Set("Proxy-Authorization", fmt.Sprintf("Basic %s", ctx.ForwardProxyAuth))
-					}
-					if len(ctx.ForwardProxyHeaders) > 0 {
-						for _, pxyHeader := range ctx.ForwardProxyHeaders {
-							ctx.Logf("setting proxy header %+v", pxyHeader)
-							req.Header.Set(pxyHeader.Header, pxyHeader.Value)
-						}
-					}
-					logHeaders = req.Header
-				}),
-			}
+			}),
 		}
 
 		if ctx.ForwardProxyFallbackTimeout > 0 {
@@ -177,18 +152,11 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 				if todo.Action == ConnectAccept {
 					ctx.Logf("RETRY forward proxy: ", ctx.ForwardProxy)
 					proxy.handleHttpsConnectAccept(ctx, host, proxyClient)
-					if proxy.ContextPool {
-						trPool.Put(tr)
-					}
 					return
 				}
 			}
 		}
 		httpError(proxyClient, ctx, err)
-		if proxy.ContextPool {
-			ctxPool.Put(ctx)
-			trPool.Put(tr)
-		}
 		return
 	}
 
@@ -197,29 +165,23 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	ctx.SetSuccessMetric()
 	ctx.Logf("Accepting CONNECT to %s", host)
 
-	go func(client, target net.Conn) {
-		clientConn := &proxyConn{
-			Conn:         client,
-			ReadTimeout:  time.Second * time.Duration(ctx.ProxyReadDeadline),
-			WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
-		}
-		targetConn := &proxyConn{
-			Conn:         target,
-			ReadTimeout:  time.Second * time.Duration(ctx.ProxyReadDeadline),
-			WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
-		}
-		var wg sync.WaitGroup
-		wg.Add(2)
-		go copyAndClose(ctx, targetConn, clientConn, "sent", &wg)
-		go copyAndClose(ctx, clientConn, targetConn, "recv", &wg)
-		wg.Wait()
-		targetConn.Close()
-		clientConn.Close()
-		if proxy.ContextPool {
-			ctxPool.Put(ctx)
-			trPool.Put(tr)
-		}
-	}(proxyClient, targetSiteCon)
+	clientConn := &proxyConn{
+		Conn:         proxyClient,
+		ReadTimeout:  time.Second * time.Duration(ctx.ProxyReadDeadline),
+		WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
+	}
+	targetConn := &proxyConn{
+		Conn:         targetSiteCon,
+		ReadTimeout:  time.Second * time.Duration(ctx.ProxyReadDeadline),
+		WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
+	}
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go copyAndClose(ctx, targetConn, clientConn, "sent", &wg)
+	go copyAndClose(ctx, clientConn, targetConn, "recv", &wg)
+	wg.Wait()
+	targetConn.Close()
+	clientConn.Close()
 
 }
 
@@ -233,8 +195,15 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		ctx.Session = atomic.AddInt64(&proxy.sess, 1)
 		ctx.Proxy = proxy
 		ctx.certStore = proxy.CertStore
+		defer func(ctx *ProxyCtx) {
+			ctxPool.Put(ctx)
+		}(ctx)
 	} else {
 		ctx = &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy, certStore: proxy.CertStore}
+	}
+
+	if proxy.ContextPool {
+
 	}
 
 	hij, ok := w.(http.Hijacker)
