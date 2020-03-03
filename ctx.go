@@ -57,10 +57,9 @@ type ProxyCtx struct {
 }
 
 type MetricsCounters struct {
-	NumIntSuccess *prometheus.Counter
-	NumIntError   *prometheus.Counter
-	NumExtSuccess *prometheus.Counter
-	NumExtError   *prometheus.Counter
+	Requests       *prometheus.CounterVec
+	ProxyBandwidth *prometheus.CounterVec
+	TLSTimes       *prometheus.SummaryVec
 }
 
 type ForwardProxyHeader struct {
@@ -83,34 +82,30 @@ func (f RoundTripperFunc) RoundTrip(req *http.Request, ctx *ProxyCtx) (*http.Res
 }
 
 func (ctx *ProxyCtx) SetErrorMetric() {
-	if ctx.ForwardProxy != "" {
+	if ctx.ForwardProxy != "" && ctx.ForwardMetricsCounters.Requests != nil {
+
+		var target string
 		if strings.HasPrefix(ctx.ForwardProxy, "127.0.0.1") {
-			if ctx.ForwardMetricsCounters.NumIntError != nil {
-				metric := *ctx.ForwardMetricsCounters.NumIntError
-				metric.Inc()
-			}
+			target = "local"
 		} else {
-			if ctx.ForwardMetricsCounters.NumExtError != nil {
-				metric := *ctx.ForwardMetricsCounters.NumExtError
-				metric.Inc()
-			}
+			target = "spoof"
 		}
+		ctx.ForwardMetricsCounters.Requests.WithLabelValues(target, "err").Inc()
+
 	}
 }
 
 func (ctx *ProxyCtx) SetSuccessMetric() {
-	if ctx.ForwardProxy != "" {
+	if ctx.ForwardProxy != "" && ctx.ForwardMetricsCounters.Requests != nil {
+
+		var target string
 		if strings.HasPrefix(ctx.ForwardProxy, "127.0.0.1") {
-			if ctx.ForwardMetricsCounters.NumIntSuccess != nil {
-				metric := *ctx.ForwardMetricsCounters.NumIntSuccess
-				metric.Inc()
-			}
+			target = "local"
 		} else {
-			if ctx.ForwardMetricsCounters.NumExtSuccess != nil {
-				metric := *ctx.ForwardMetricsCounters.NumExtSuccess
-				metric.Inc()
-			}
+			target = "spoof"
 		}
+		ctx.ForwardMetricsCounters.Requests.WithLabelValues(target, "ok").Inc()
+
 	}
 }
 
