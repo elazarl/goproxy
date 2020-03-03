@@ -58,8 +58,8 @@ type ProxyCtx struct {
 
 type MetricsCounters struct {
 	Requests       *prometheus.CounterVec
-	ProxyBandwidth *prometheus.CounterVec
-	TLSTimes       *prometheus.SummaryVec
+	ProxyBandwidth *prometheus.Counter
+	TLSTimes       *prometheus.Summary
 }
 
 type ForwardProxyHeader struct {

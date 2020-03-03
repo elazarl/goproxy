@@ -125,7 +125,18 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 			}
 		}
 
+		dialStart := time.Now().UnixNano()
+
 		targetSiteCon, err = tr.Dial("tcp", host)
+
+		dialEnd := time.Now().UnixNano()
+
+		if ctx.ForwardMetricsCounters.TLSTimes != nil {
+			tlsTime := float64(dialEnd/1000000) - float64(dialStart/1000000)
+			metric := *ctx.ForwardMetricsCounters.TLSTimes
+			metric.Observe(float64(tlsTime))
+		}
+
 	} else {
 		targetSiteCon, err = proxy.connectDial("tcp", host)
 	}
@@ -180,6 +191,10 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	go copyAndClose(ctx, targetConn, clientConn, "sent", &wg)
 	go copyAndClose(ctx, clientConn, targetConn, "recv", &wg)
 	wg.Wait()
+	if ctx.ForwardMetricsCounters.ProxyBandwidth != nil {
+		metric := *ctx.ForwardMetricsCounters.ProxyBandwidth
+		metric.Add(float64(targetConn.BytesWrote + targetConn.BytesRead))
+	}
 	targetConn.Close()
 	clientConn.Close()
 
