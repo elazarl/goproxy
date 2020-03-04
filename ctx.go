@@ -243,6 +243,8 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	conn := newProxyConn(rawConn)
 
+	defer conn.Close()
+
 	if ctx.ProxyReadDeadline > 0 {
 		conn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
 	}
@@ -298,7 +300,9 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	if err := <-writeDone; err != nil {
 		ctx.Logf("error-metric: writeDone failed: %v", err)
-		ctx.SetErrorMetric()
+		if !strings.Contains(err.Error(), "timeout") {
+			ctx.SetErrorMetric()
+		}
 		return nil, err
 	}
 
