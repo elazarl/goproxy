@@ -189,7 +189,13 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 				ctx.ForwardProxyFallbackTimeout = 10
 			}
 		}
+
+		dialStart := time.Now().UnixNano()
+
 		rawConn, err = tr.Dial("tcp4", host)
+
+		dialEnd := time.Now().UnixNano()
+
 		if err != nil {
 			dnsCheck, _ := net.LookupHost(strings.Split(host, ":")[0])
 			if len(dnsCheck) > 0 {
@@ -208,6 +214,13 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 			}
 			return nil, err
 		}
+
+		if ctx.ForwardMetricsCounters.TLSTimes != nil {
+			tlsTime := float64(dialEnd/1000000) - float64(dialStart/1000000)
+			metric := *ctx.ForwardMetricsCounters.TLSTimes
+			metric.Observe(float64(tlsTime))
+		}
+
 	} else {
 		// Dial with regular transport
 		tr = &http.Transport{
@@ -237,8 +250,14 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 		conn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
 	}
 
-	reader := bufio.NewReaderSize(conn, 32*1024)
-	writer := bufio.NewWriterSize(conn, 32*1024)
+	bufferSize := 32
+
+	if ctx.CopyBufferSize > 0 {
+		bufferSize = ctx.CopyBufferSize
+	}
+
+	reader := bufio.NewReaderSize(conn, bufferSize*1024)
+	writer := bufio.NewWriterSize(conn, bufferSize*1024)
 	readDone := make(chan responseAndError, 1)
 	writeDone := make(chan error, 1)
 
@@ -284,6 +303,7 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	ctx.BytesSent = conn.BytesWrote
+	ctx.BytesReceived = conn.BytesRead
 
 	r := <-readDone
 	if r.err != nil {
@@ -295,6 +315,10 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	ctx.SetSuccessMetric()
+	if ctx.ForwardMetricsCounters.ProxyBandwidth != nil {
+		metric := *ctx.ForwardMetricsCounters.ProxyBandwidth
+		metric.Add(float64(conn.BytesWrote + conn.BytesRead))
+	}
 	return r.resp, nil
 }
 
