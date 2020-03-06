@@ -243,8 +243,6 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	conn := newProxyConn(rawConn)
 
-	defer conn.Close()
-
 	if ctx.ProxyReadDeadline > 0 {
 		conn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
 	}
