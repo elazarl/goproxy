@@ -425,7 +425,7 @@ func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls
 		var cert *tls.Certificate
 
 		hostname := stripPort(host)
-		config := *defaultTLSConfig
+		config := defaultTLSConfig.Clone()
 		ctx.Logf("signing for %s", stripPort(host))
 
 		genCert := func() (*tls.Certificate, error) {
@@ -443,6 +443,6 @@ func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls
 		}
 
 		config.Certificates = append(config.Certificates, *cert)
-		return &config, nil
+		return config, nil
 	}
 }

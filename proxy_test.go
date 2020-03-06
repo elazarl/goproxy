@@ -507,8 +507,7 @@ func constantHttpServer(content []byte) (addr string) {
 
 func TestIcyResponse(t *testing.T) {
 	// TODO: fix this test
-	return // skip for now
-	s := constantHttpServer([]byte("ICY 200 OK\r\n\r\nblablabla"))
+	/*s := constantHttpServer([]byte("ICY 200 OK\r\n\r\nblablabla"))
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.Verbose = true
 	_, l := oneShotProxy(proxy, t)
@@ -525,7 +524,7 @@ func TestIcyResponse(t *testing.T) {
 	panicOnErr(err, "readAll")
 	if string(raw) != "ICY 200 OK\r\n\r\nblablabla" {
 		t.Error("Proxy did not send the malformed response received")
-	}
+	}*/
 }
 
 type VerifyNoProxyHeaders struct {
