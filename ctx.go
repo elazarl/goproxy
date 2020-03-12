@@ -43,6 +43,7 @@ type ProxyCtx struct {
 	ForwardProxyErrorFallback            func() (string, string)
 	ForwardProxyFallbackTimeout          int
 	ForwardProxyFallbackSecondaryTimeout int
+	ForwardProxyTProxy                   bool
 	ProxyUser                            string
 	MaxIdleConns                         int
 	MaxIdleConnsPerHost                  int

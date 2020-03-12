@@ -17,6 +17,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/LiamHaworth/go-tproxy"
 )
 
 type ConnectActionLiteral int
@@ -137,10 +139,22 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 			metric.Observe(float64(tlsTime))
 		}
 
+	} else if ctx.ForwardProxyTProxy {
+		targetSiteCon, err = proxyClient.(*tproxy.Conn).DialOriginalDestination(true)
 	} else {
 		targetSiteCon, err = proxy.connectDial("tcp", host)
 	}
 	if err != nil {
+
+		//handle tproxy errors
+		if ctx.ForwardProxy == "" && ctx.ForwardProxyTProxy {
+			ctx.Logf("error-metric: https (tproxy dial) to host: %s failed: %v - headers %+v", host, err, logHeaders)
+			ctx.ForwardProxy = "127.0.0.1"
+			ctx.SetErrorMetric()
+			httpError(proxyClient, ctx, err)
+			return
+		}
+
 		dnsCheck, _ := net.LookupHost(strings.Split(host, ":")[0])
 		if len(dnsCheck) > 0 {
 			ctx.Logf("error-metric: https to host: %s failed: %v - headers %+v", host, err, logHeaders)
@@ -172,6 +186,11 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	}
 
 	proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+
+	//This is a hack for now to support tproxy metrics
+	if ctx.ForwardProxy == "" && ctx.ForwardProxyTProxy {
+		ctx.ForwardProxy = "127.0.0.1"
+	}
 
 	ctx.SetSuccessMetric()
 	ctx.Logf("Accepting CONNECT to %s", host)

@@ -3,6 +3,7 @@ module github.com/Windscribe/goproxy
 go 1.12
 
 require (
+	github.com/LiamHaworth/go-tproxy v0.0.0-20190726054950-ef7efd7f24ed
 	github.com/elazarl/goproxy v0.0.0-20191011121108-aa519ddbe484
 	github.com/elazarl/goproxy/ext v0.0.0-20190911111923-ecfe977594f1
 	github.com/function61/gokit v0.0.0-20191029140004-6f85d12ce1ed
