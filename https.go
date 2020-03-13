@@ -17,8 +17,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/LiamHaworth/go-tproxy"
 )
 
 type ConnectActionLiteral int
@@ -140,7 +138,22 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		}
 
 	} else if ctx.ForwardProxyTProxy {
-		targetSiteCon, err = proxyClient.(*tproxy.Conn).DialOriginalDestination(true)
+
+		tcpLocal, errTCP := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:0", ctx.ForwardProxySourceIP))
+		if errTCP != nil {
+			ctx.Logf("Failed to resolve local TCP address: %s - err: %v", ctx.ForwardProxySourceIP, err)
+		}
+		tcpRemote, errTCP := net.ResolveTCPAddr("tcp", proxyClient.LocalAddr().String())
+		if errTCP != nil {
+			ctx.Logf("Failed to resolve remote TCP address: %s - err: %v", proxyClient.LocalAddr().String(), err)
+		}
+
+		if errTCP == nil {
+			targetSiteCon, err = net.DialTCP("tcp", tcpLocal, tcpRemote)
+		} else {
+			err = errTCP
+		}
+
 	} else {
 		targetSiteCon, err = proxy.connectDial("tcp", host)
 	}

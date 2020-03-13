@@ -44,6 +44,7 @@ type ProxyCtx struct {
 	ForwardProxyFallbackTimeout          int
 	ForwardProxyFallbackSecondaryTimeout int
 	ForwardProxyTProxy                   bool
+	ForwardProxySourceIP                 string
 	ProxyUser                            string
 	MaxIdleConns                         int
 	MaxIdleConnsPerHost                  int
