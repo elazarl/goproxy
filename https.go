@@ -150,10 +150,14 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 			ctx.Logf("Failed to resolve remote TCP address: %s - err: %v", proxyClient.LocalAddr().String(), err)
 		}
 
-		if errTCP == nil {
-			targetSiteCon, err = net.DialTCP("tcp", tcpLocal, tcpRemote)
+		if strings.HasPrefix(proxyClient.LocalAddr().String(), ctx.ForwatdTProxyDropIP) {
+			err = errors.New("cannot dial self")
 		} else {
-			err = errTCP
+			if errTCP == nil {
+				targetSiteCon, err = net.DialTCP("tcp", tcpLocal, tcpRemote)
+			} else {
+				err = errTCP
+			}
 		}
 
 	} else {
