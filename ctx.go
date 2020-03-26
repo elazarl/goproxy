@@ -1,6 +1,7 @@
 package goproxy
 
 import (
+	"io"
 	"net/http"
 	"regexp"
 )
@@ -15,6 +16,9 @@ type ProxyCtx struct {
 	RoundTripper RoundTripper
 	// will contain the recent error that occurred while trying to send receive or parse traffic
 	Error error
+	// Will be invoked to return a custom response to clients when goproxy fails to connect
+	// to a proxy target
+	HTTPErrorHandler func(io.WriteCloser, *ProxyCtx, error)
 	// A handle for the user to keep data in the context, from the call of ReqHandler to the
 	// call of RespHandler
 	UserData interface{}
