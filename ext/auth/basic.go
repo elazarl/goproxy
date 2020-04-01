@@ -7,13 +7,13 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/elazarl/goproxy"
+	"github.com/mach-spotqa/goproxy"
 )
 
 var unauthorizedMsg = []byte("407 Proxy Authentication Required")
 
 func BasicUnauthorized(req *http.Request, realm string) *http.Response {
-	// TODO(elazar): verify realm is well formed
+	// TODO(mach-spotqa): verify realm is well formed
 	return &http.Response{
 		StatusCode: 407,
 		ProtoMajor: 1,

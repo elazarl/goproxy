@@ -52,7 +52,7 @@ func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err er
 
 	serial := big.NewInt(rand.Int63())
 	template := x509.Certificate{
-		// TODO(elazar): instead of this ugly hack, just encode the certificate and hash the binary form.
+		// TODO(mach-spotqa): instead of this ugly hack, just encode the certificate and hash the binary form.
 		SerialNumber: serial,
 		Issuer:       x509ca.Subject,
 		Subject: pkix.Name{

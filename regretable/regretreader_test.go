@@ -2,7 +2,7 @@ package regretable_test
 
 import (
 	"bytes"
-	. "github.com/elazarl/goproxy/regretable"
+	. "github.com/mach-spotqa/goproxy/regretable"
 	"io"
 	"io/ioutil"
 	"strings"
@@ -170,5 +170,5 @@ func TestRegretableCloserRegretsClose(t *testing.T) {
 	if cc.closed != 2 {
 		t.Error("RegretableReaderCloser does ignore Close after regret")
 	}
-	// TODO(elazar): return an error if client issues Close more than once after regret
+	// TODO(mach-spotqa): return an error if client issues Close more than once after regret
 }
