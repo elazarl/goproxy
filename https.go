@@ -75,18 +75,18 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	var err error
 	var logHeaders http.Header
 
+	//check for idle override
+	var idleTimeout time.Duration
+	if ctx.IdleConnTimeout != 0 {
+		idleTimeout = ctx.IdleConnTimeout
+	} else {
+		idleTimeout = 90 * time.Second
+	}
+
 	if ctx.ForwardProxy != "" {
 
 		if ctx.ForwardProxyProto == "" {
 			ctx.ForwardProxyProto = "http"
-		}
-
-		//check for idle override
-		var idleTimeout time.Duration
-		if ctx.IdleConnTimeout != 0 {
-			idleTimeout = ctx.IdleConnTimeout
-		} else {
-			idleTimeout = 90 * time.Second
 		}
 
 		tr := &http.Transport{
@@ -136,6 +136,26 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 			metric := *ctx.ForwardMetricsCounters.TLSTimes
 			metric.Observe(float64(tlsTime))
 		}
+
+	} else if ctx.ForwardProxyDirect && ctx.ForwardProxySourceIP != "" {
+
+		// dont use a proxy and use specific source IP
+		tr := &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			Dial: func(network, address string) (net.Conn, error) {
+				d := net.Dialer{
+					Timeout: 15 * time.Second,
+				}
+				return d.Dial("tcp", ctx.ForwardProxySourceIP)
+			},
+			MaxIdleConns:          ctx.MaxIdleConns,
+			MaxIdleConnsPerHost:   ctx.MaxIdleConnsPerHost,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+			IdleConnTimeout:       idleTimeout,
+		}
+
+		targetSiteCon, err = tr.Dial("tcp", host)
 
 	} else if ctx.ForwardProxyTProxy {
 

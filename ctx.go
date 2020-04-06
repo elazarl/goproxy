@@ -46,6 +46,7 @@ type ProxyCtx struct {
 	ForwardProxyTProxy                   bool
 	ForwatdTProxyDropIP                  string
 	ForwardProxySourceIP                 string
+	ForwardProxyDirect                   bool
 	ProxyUser                            string
 	MaxIdleConns                         int
 	MaxIdleConnsPerHost                  int
