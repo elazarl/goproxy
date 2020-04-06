@@ -143,10 +143,16 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		tr := &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
 			Dial: func(network, address string) (net.Conn, error) {
-				d := net.Dialer{
-					Timeout: 15 * time.Second,
+				localAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:0", ctx.ForwardProxySourceIP))
+				if err != nil {
+					ctx.Logf("Failed to resolve local address: %s - err: %v", ctx.ForwardProxySourceIP, err)
+					return nil, err
 				}
-				return d.Dial("tcp", ctx.ForwardProxySourceIP)
+				d := net.Dialer{
+					Timeout:   15 * time.Second,
+					LocalAddr: localAddr,
+				}
+				return d.Dial("tcp", address)
 			},
 			MaxIdleConns:          ctx.MaxIdleConns,
 			MaxIdleConnsPerHost:   ctx.MaxIdleConnsPerHost,
@@ -163,11 +169,11 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 
 		tcpLocal, errTCP := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:0", ctx.ForwardProxySourceIP))
 		if errTCP != nil {
-			ctx.Logf("Failed to resolve local TCP address: %s - err: %v", ctx.ForwardProxySourceIP, err)
+			ctx.Logf("Failed to resolve local TCP address: %s - err: %v", ctx.ForwardProxySourceIP, errTCP)
 		}
 		tcpRemote, errTCP := net.ResolveTCPAddr("tcp", proxyClient.LocalAddr().String())
 		if errTCP != nil {
-			ctx.Logf("Failed to resolve remote TCP address: %s - err: %v", proxyClient.LocalAddr().String(), err)
+			ctx.Logf("Failed to resolve remote TCP address: %s - err: %v", proxyClient.LocalAddr().String(), errTCP)
 		}
 
 		if strings.HasPrefix(proxyClient.LocalAddr().String(), ctx.ForwatdTProxyDropIP) {
