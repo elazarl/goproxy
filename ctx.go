@@ -19,6 +19,8 @@ type ProxyCtx struct {
 	// Will be invoked to return a custom response to clients when goproxy fails to connect
 	// to a proxy target
 	HTTPErrorHandler func(io.WriteCloser, *ProxyCtx, error)
+	// Used to pass back errors returned during calls to copyAndWarn() for TLS CONNECT requests
+	ConnErrorHandler func(error)
 	// A handle for the user to keep data in the context, from the call of ReqHandler to the
 	// call of RespHandler
 	UserData interface{}
