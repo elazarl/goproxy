@@ -1,0 +1,19 @@
+on: [push, pull_request]
+name: Test
+jobs:
+  test:
+    env:
+      GOPATH: ${{ github.workspace }}
+      GO111MODULE: off
+    runs-on: ubuntu-latest
+    steps:
+    - name: Install Go
+      uses: actions/setup-go@v1
+      with:
+        go-version: 1.14.x
+    - name: Checkout code
+      uses: actions/checkout@v2
+      with:
+        path: ./src/github.com/${{ github.repository }}
+    - name: Test
+      run: go test ./...
