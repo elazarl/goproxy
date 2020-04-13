@@ -701,9 +701,13 @@ func readResponse(buf *bufio.Reader) string {
 }
 
 func writeConnect(w io.Writer) {
-	req, err := http.NewRequest("CONNECT", srv.URL[len("http://"):], nil)
-	panicOnErr(err, "NewRequest")
-	req.Write(w)
+	req := &http.Request{
+		Method: "CONNECT",
+		URL:    &url.URL{Opaque: srv.Listener.Addr().String()},
+		Host:   srv.Listener.Addr().String(),
+		Header: make(http.Header),
+	}
+	err := req.Write(w)
 	panicOnErr(err, "req(CONNECT).Write")
 }
 
