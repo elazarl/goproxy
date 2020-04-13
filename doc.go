@@ -64,37 +64,5 @@ Finally, we have convenience function to throw a quick response
 	})
 
 we close the body of the original repsonse, and return a new 403 response with a short message.
-
-Example use cases:
-
-1. https://github.com/stripe/goproxy/tree/master/examples/goproxy-avgsize
-
-To measure the average size of an Html served in your site. One can ask
-all the QA team to access the website by a proxy, and the proxy will
-measure the average size of all text/html responses from your host.
-
-2. [not yet implemented]
-
-All requests to your web servers should be directed through the proxy,
-when the proxy will detect html pieces sent as a response to AJAX
-request, it'll send a warning email.
-
-3. https://github.com/stripe/goproxy/blob/master/examples/goproxy-httpdump/
-
-Generate a real traffic to your website by real users using through
-proxy. Record the traffic, and try it again for more real load testing.
-
-4. https://github.com/stripe/goproxy/tree/master/examples/goproxy-no-reddit-at-worktime
-
-Will allow browsing to reddit.com between 8:00am and 17:00pm
-
-5. https://github.com/stripe/goproxy/tree/master/examples/goproxy-jquery-version
-
-Will warn if multiple versions of jquery are used in the same domain.
-
-6. https://github.com/stripe/goproxy/blob/master/examples/goproxy-upside-down-ternet/
-
-Modifies image files in an HTTP response via goproxy's image extension found in ext/.
-
 */
 package goproxy
