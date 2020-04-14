@@ -57,6 +57,9 @@ func TestHttpsProxyFromEnv(t *testing.T) {
 			if actual != spec.expectProxy {
 				t.Errorf("expected proxy url '%s' but got '%s'", spec.expectProxy, actual)
 			}
+
+			os.Unsetenv("no_proxy")
+			os.Unsetenv("https_proxy")
 		})
 	}
 }

@@ -1,0 +1,11 @@
+# github.com/rogpeppe/go-charset v0.0.0-20190617161244-0dc95cdf6f31
+github.com/rogpeppe/go-charset/charset
+github.com/rogpeppe/go-charset/data
+# golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e
+golang.org/x/net/http/httpproxy
+golang.org/x/net/idna
+# golang.org/x/text v0.3.0
+golang.org/x/text/secure/bidirule
+golang.org/x/text/transform
+golang.org/x/text/unicode/bidi
+golang.org/x/text/unicode/norm
