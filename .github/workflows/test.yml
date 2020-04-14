@@ -16,6 +16,5 @@ jobs:
       uses: actions/checkout@v2
     - name: Test
       run: |
-        go mod tidy
         go mod verify
         go test -mod=vendor ./...
