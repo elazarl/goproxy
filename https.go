@@ -152,6 +152,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				var err error
 				var wg sync.WaitGroup
 				wg.Add(2)
+				// Only capture an error from one of the calls to copyOrWarn.
+				// copyOrWarn() is called twice with the same net.Conn pair with
+				// the src and dst parameters inverted. When the connection is
+				// terminated prematurely the net.Error type is the same, but
+				// the directionality of the Error() message changes.
 				go func() {
 					err = copyOrWarn(ctx, targetSiteCon, proxyClient)
 					wg.Done()
