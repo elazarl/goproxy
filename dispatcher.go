@@ -163,12 +163,12 @@ func ContentTypeIs(typ string, types ...string) RespCondition {
 
 // StatusCodeIs returns a RespCondition, testing whether or not the HTTP status
 // code is one of the given ints
-func StatusCodeIs(codes ...int) goproxy.RespCondition {
+func StatusCodeIs(codes ...int) RespCondition {
 	codeSet := make(map[int]bool)
 	for _, c := range codes {
 		codeSet[c] = true
 	}
-	return goproxy.RespConditionFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) bool {
+	return RespConditionFunc(func(resp *http.Response, ctx *ProxyCtx) bool {
 		if resp == nil {
 			return false
 		}
