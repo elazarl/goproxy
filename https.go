@@ -149,14 +149,30 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			go copyAndClose(ctx, proxyClientTCP, targetTCP)
 		} else {
 			go func() {
+				var err error
 				var wg sync.WaitGroup
 				wg.Add(2)
-				go copyOrWarn(ctx, targetSiteCon, proxyClient, &wg)
-				go copyOrWarn(ctx, proxyClient, targetSiteCon, &wg)
+				// Only capture an error from one of the calls to copyOrWarn.
+				// copyOrWarn() is called twice with the same net.Conn pair with
+				// the src and dst parameters inverted. When the connection is
+				// terminated prematurely the net.Error type is the same, but
+				// the directionality of the Error() message changes.
+				go func() {
+					err = copyOrWarn(ctx, targetSiteCon, proxyClient)
+					wg.Done()
+				}()
+				go func() {
+					copyOrWarn(ctx, proxyClient, targetSiteCon)
+					wg.Done()
+				}()
 				wg.Wait()
+
+				if err != nil && ctx.ConnErrorHandler != nil {
+					ctx.ConnErrorHandler(err)
+				}
+
 				proxyClient.Close()
 				targetSiteCon.Close()
-
 			}()
 		}
 
@@ -330,11 +346,12 @@ func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
 	}
 }
 
-func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader, wg *sync.WaitGroup) {
-	if _, err := io.Copy(dst, src); err != nil {
+func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader) error {
+	_, err := io.Copy(dst, src)
+	if err != nil {
 		ctx.Warnf("Error copying to client: %s", err)
 	}
-	wg.Done()
+	return err
 }
 
 func copyAndClose(ctx *ProxyCtx, dst, src *net.TCPConn) {
