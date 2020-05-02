@@ -23,8 +23,7 @@ type ProxyHttpServer struct {
 	Logger          Logger
 	NonproxyHandler http.Handler
 	reqHandlers     []ReqHandler
-	// lateRequestHandlers => those run privileged after hop headers have been removed
-	lateReqHandlers []ReqHandler
+	lateReqHandlers []ReqHandler // lateRequestHandlers => those run privileged after hop headers have been removed
 	respHandlers    []RespHandler
 	httpsHandlers   []HttpsHandler
 	Tr              *http.Transport
@@ -136,22 +135,19 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 			removeProxyHeaders(ctx, r)
 
-			r, resp := proxy.lateFilterRequest(r, ctx)
+			r, resp = proxy.lateFilterRequest(r, ctx)
 
-			if resp != nil {
-				ctx.Logf("late request handlers should not drop requests")
-				return
+			if resp == nil {
+				resp, err = ctx.RoundTrip(r)
+				if err != nil {
+					ctx.Error = err
+					resp = proxy.filterResponse(nil, ctx)
+				}
+				if resp != nil {
+					ctx.Logf("Received response %v", resp.Status)
+				}
 			}
 
-			resp, err = ctx.RoundTrip(r)
-			if err != nil {
-				ctx.Error = err
-				resp = proxy.filterResponse(nil, ctx)
-
-			}
-			if resp != nil {
-				ctx.Logf("Received response %v", resp.Status)
-			}
 		}
 		resp = proxy.filterResponse(resp, ctx)
 
