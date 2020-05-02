@@ -24,7 +24,7 @@ type ProxyHttpServer struct {
 	NonproxyHandler http.Handler
 	reqHandlers     []ReqHandler
 	// lateRequestHandlers => those run privileged after hop headers have been removed
-	lateReqHandlers    []ReqHandler
+	lateReqHandlers []ReqHandler
 	respHandlers    []RespHandler
 	httpsHandlers   []HttpsHandler
 	Tr              *http.Transport
@@ -193,12 +193,12 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 // NewProxyHttpServer creates and returns a proxy server, logging to stderr by default
 func NewProxyHttpServer() *ProxyHttpServer {
 	proxy := ProxyHttpServer{
-		Logger:           log.New(os.Stderr, "", log.LstdFlags),
-		reqHandlers:      []ReqHandler{},
-		lateReqHandlers:  []ReqHandler{},
-		respHandlers:     []RespHandler{},
-		httpsHandlers:    []HttpsHandler{},
-		NonproxyHandler:  http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		Logger:          log.New(os.Stderr, "", log.LstdFlags),
+		reqHandlers:     []ReqHandler{},
+		lateReqHandlers: []ReqHandler{},
+		respHandlers:    []RespHandler{},
+		httpsHandlers:   []HttpsHandler{},
+		NonproxyHandler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, "This is a proxy server. Does not respond to non-proxy requests.", 500)
 		}),
 		Tr: &http.Transport{TLSClientConfig: tlsClientSkipVerify, Proxy: http.ProxyFromEnvironment},
