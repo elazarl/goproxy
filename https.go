@@ -36,6 +36,10 @@ var (
 	httpsRegexp     = regexp.MustCompile(`^https:\/\/`)
 )
 
+// ConnectAction enables the caller to override the standard connect flow.
+// When Action is ConnectHijack, it is up to the implementer to send the 
+// HTTP 200, or any other valid http response back to the client from within the 
+// Hijack func
 type ConnectAction struct {
 	Action    ConnectActionLiteral
 	Hijack    func(req *http.Request, client net.Conn, ctx *ProxyCtx)
@@ -64,8 +68,16 @@ func (proxy *ProxyHttpServer) connectDial(network, addr string) (c net.Conn, err
 	return proxy.ConnectDial(network, addr)
 }
 
+type halfClosable interface {
+	net.Conn
+	CloseWrite() error
+	CloseRead() error
+}
+
+var _ halfClosable = (*net.TCPConn)(nil)
+
 func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request) {
-	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy, certStore: proxy.CertStore}
+	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy, certStore: proxy.CertStore}
 
 	hij, ok := w.(http.Hijacker)
 	if !ok {
@@ -102,8 +114,8 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		ctx.Logf("Accepting CONNECT to %s", host)
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 
-		targetTCP, targetOK := targetSiteCon.(*net.TCPConn)
-		proxyClientTCP, clientOK := proxyClient.(*net.TCPConn)
+		targetTCP, targetOK := targetSiteCon.(halfClosable)
+		proxyClientTCP, clientOK := proxyClient.(halfClosable)
 		if targetOK && clientOK {
 			go copyAndClose(ctx, targetTCP, proxyClientTCP)
 			go copyAndClose(ctx, proxyClientTCP, targetTCP)
@@ -121,8 +133,6 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		}
 
 	case ConnectHijack:
-		ctx.Logf("Hijacking CONNECT to %s", host)
-		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 		todo.Hijack(r, proxyClient, ctx)
 	case ConnectHTTPMitm:
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
@@ -188,7 +198,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			clientTlsReader := bufio.NewReader(rawClientTls)
 			for !isEof(clientTlsReader) {
 				req, err := http.ReadRequest(clientTlsReader)
-				var ctx = &ProxyCtx{Req: req, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy, UserData: ctx.UserData}
+				var ctx = &ProxyCtx{Req: req, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy, UserData: ctx.UserData}
 				if err != nil && err != io.EOF {
 					return
 				}
@@ -298,7 +308,7 @@ func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader, wg *sync.WaitGroup)
 	wg.Done()
 }
 
-func copyAndClose(ctx *ProxyCtx, dst, src *net.TCPConn) {
+func copyAndClose(ctx *ProxyCtx, dst, src halfClosable) {
 	if _, err := io.Copy(dst, src); err != nil {
 		ctx.Warnf("Error copying to client: %s", err)
 	}
@@ -417,7 +427,7 @@ func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls
 		var cert *tls.Certificate
 
 		hostname := stripPort(host)
-		config := *defaultTLSConfig
+		config := defaultTLSConfig.Clone()
 		ctx.Logf("signing for %s", stripPort(host))
 
 		genCert := func() (*tls.Certificate, error) {
@@ -435,6 +445,6 @@ func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls
 		}
 
 		config.Certificates = append(config.Certificates, *cert)
-		return &config, nil
+		return config, nil
 	}
 }
