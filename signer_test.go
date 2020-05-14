@@ -37,24 +37,24 @@ func getBrowser(args []string) string {
 	return ""
 }
 
-func testSignerX509(t *testing.T, ca tls.Certificate) {
-	cert, err := signHost(ca, []string{"example.com", "1.1.1.1", "localhost"})
+func testSignerX509(t *testing.T, prefix string, ca tls.Certificate) {
+	cert, err := signHost(ca, []string{prefix + ".example.com", "1.1.1.1", "localhost"})
 	orFatal("singHost", err, t)
 	cert.Leaf, err = x509.ParseCertificate(cert.Certificate[0])
 	orFatal("ParseCertificate", err, t)
 	certpool := x509.NewCertPool()
 	certpool.AddCert(ca.Leaf)
-	orFatal("VerifyHostname", cert.Leaf.VerifyHostname("example.com"), t)
+	orFatal("VerifyHostname", cert.Leaf.VerifyHostname(prefix+".example.com"), t)
 	orFatal("CheckSignatureFrom", cert.Leaf.CheckSignatureFrom(ca.Leaf), t)
 	_, err = cert.Leaf.Verify(x509.VerifyOptions{
-		DNSName: "example.com",
+		DNSName: prefix + ".example.com",
 		Roots:   certpool,
 	})
 	orFatal("Verify", err, t)
 }
 
-func testSignerTls(t *testing.T, ca tls.Certificate) {
-	cert, err := signHost(ca, []string{"example.com", "1.1.1.1", "localhost"})
+func testSignerTls(t *testing.T, prefix string, ca tls.Certificate) {
+	cert, err := signHost(ca, []string{prefix + ".example.com", "1.1.1.1", "localhost"})
 	orFatal("singHost", err, t)
 	cert.Leaf, err = x509.ParseCertificate(cert.Certificate[0])
 	orFatal("ParseCertificate", err, t)
@@ -87,19 +87,19 @@ func testSignerTls(t *testing.T, ca tls.Certificate) {
 }
 
 func TestSignerRsaTls(t *testing.T) {
-	testSignerTls(t, GoproxyCa)
+	testSignerTls(t, "rsa", GoproxyCa)
 }
 
 func TestSignerRsaX509(t *testing.T) {
-	testSignerX509(t, GoproxyCa)
+	testSignerX509(t, "rsa", GoproxyCa)
 }
 
 func TestSignerEcdsaTls(t *testing.T) {
-	testSignerTls(t, EcdsaCa)
+	testSignerTls(t, "ecdsa", EcdsaCa)
 }
 
 func TestSignerEcdsaX509(t *testing.T) {
-	testSignerX509(t, EcdsaCa)
+	testSignerX509(t, "ecdsa", EcdsaCa)
 }
 
 var c *tls.Certificate

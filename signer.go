@@ -15,6 +15,8 @@ import (
 	"net"
 	"runtime"
 	"sort"
+	"strings"
+	"sync"
 	"time"
 )
 
@@ -36,8 +38,35 @@ func hashSortedBigInt(lst []string) *big.Int {
 }
 
 var goproxySignerVersion = ":goroxy1"
+var certCache sync.Map
+var certMutex sync.Mutex
+var certFifo []string
+
+const certMaxCount int = 4096
 
 func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err error) {
+	certKey := strings.Join(hosts, ",")
+	if cachedCert, found := certCache.Load(certKey); found {
+		cert = cachedCert.(*tls.Certificate)
+		return
+	}
+
+	// double check to avoid generate cert twice on race conditions
+	certMutex.Lock()
+	defer certMutex.Unlock()
+
+	if cachedCert, found := certCache.Load(certKey); found {
+		cert = cachedCert.(*tls.Certificate)
+		return
+	}
+
+	if len(certFifo) == certMaxCount {
+		deleteKey := certFifo[0]
+		certFifo[0] = ""
+		certFifo = certFifo[1:]
+		certCache.Delete(deleteKey)
+	}
+
 	var x509ca *x509.Certificate
 
 	// Use the provided ca and not the global GoproxyCa for certificate generation.
@@ -98,10 +127,15 @@ func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err er
 	if derBytes, err = x509.CreateCertificate(&csprng, &template, x509ca, certpriv.Public(), ca.PrivateKey); err != nil {
 		return
 	}
-	return &tls.Certificate{
+	cert = &tls.Certificate{
 		Certificate: [][]byte{derBytes, ca.Certificate[0]},
 		PrivateKey:  certpriv,
-	}, nil
+	}
+
+	certCache.Store(certKey, cert)
+	certFifo = append(certFifo, certKey)
+
+	return
 }
 
 func init() {
