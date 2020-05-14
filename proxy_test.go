@@ -8,8 +8,6 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
-	"github.com/elazarl/goproxy"
-	goproxy_image "github.com/elazarl/goproxy/ext/image"
 	"image"
 	"io"
 	"io/ioutil"
@@ -23,6 +21,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/elazarl/goproxy"
+	goproxy_image "github.com/elazarl/goproxy/ext/image"
 )
 
 var acceptAllCerts = &tls.Config{InsecureSkipVerify: true}
@@ -69,6 +70,7 @@ func get(url string, client *http.Client) ([]byte, error) {
 func getOrFail(url string, client *http.Client, t *testing.T) []byte {
 	txt, err := get(url, client)
 	if err != nil {
+		fmt.Println(txt)
 		t.Fatal("Can't fetch url", url, err)
 	}
 	return txt
@@ -139,6 +141,7 @@ func TestReplaceResponse(t *testing.T) {
 	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
 		resp.StatusCode = http.StatusOK
 		resp.Body = ioutil.NopCloser(bytes.NewBufferString("chico"))
+		resp.Header.Del("Content-Length")
 		return resp
 	})
 
@@ -853,6 +856,8 @@ func TestProxyWithCertStorage(t *testing.T) {
 }
 
 func TestHttpsMitmURLRewrite(t *testing.T) {
+	fmt.Printf("Host inside: %s\n", "Bla")
+
 	scheme := "https"
 
 	testCases := []struct {
@@ -881,6 +886,7 @@ func TestHttpsMitmURLRewrite(t *testing.T) {
 
 		proxy.OnRequest(goproxy.DstHostIs(tc.Host)).DoFunc(
 			func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+				fmt.Printf("Host inside: %s\n", req.Host)
 				return nil, goproxy.TextResponse(req, "Dummy response")
 			})
 
@@ -926,6 +932,8 @@ func returnNil(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
 }
 
 func TestSimpleHttpRequest(t *testing.T) {
+
+	fmt.Println("HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH")
 	proxy := goproxy.NewProxyHttpServer()
 
 	var server *http.Server
