@@ -4,21 +4,26 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"syscall"
 	"time"
+
+	"github.com/function61/gokit/logex"
 )
 
 type proxyConn struct {
-	net.Conn
+	Conn         net.TCPConn
 	BytesWrote   int64
 	BytesRead    int64
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
+	logger       *logex.Leveled
 }
 
 // newProxyConn is a wrapper around a net.Conn that allows us to log the number of bytes
 // written to the connection
 func newProxyConn(conn net.Conn) *proxyConn {
-	c := &proxyConn{Conn: conn}
+	tcpConn := conn.(*net.TCPConn)
+	c := &proxyConn{Conn: *tcpConn}
 	return c
 }
 
@@ -56,11 +61,35 @@ type responseAndError struct {
 // connCloser implements a wrapper containing an io.ReadCloser and a net.Conn
 type connCloser struct {
 	io.ReadCloser
-	Conn net.Conn
+	Conn net.TCPConn
 }
 
 // Close closes the connection and the io.ReadCloser
 func (cc connCloser) Close() error {
 	cc.Conn.Close()
 	return cc.ReadCloser.Close()
+}
+
+func (conn *proxyConn) setKeepaliveParameters(count, interval, period int) error {
+	conn.Conn.SetKeepAlive(true)
+	conn.Conn.SetKeepAlivePeriod(time.Duration(period) * time.Second)
+	rawConn, err := conn.Conn.SyscallConn()
+	if err != nil {
+		return err
+	}
+	rawConn.Control(
+		func(fdPtr uintptr) {
+			// got socket file descriptor. Setting parameters.
+			fd := int(fdPtr)
+			//Number of probes.
+			err := syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPCNT, count)
+			if err != nil {
+				conn.logger.Error.Printf("on setting keepalive probe count: %s", err.Error())
+			}
+			//Wait time after an unsuccessful probe.
+			err = syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPINTVL, interval)
+			if err != nil {
+				conn.logger.Error.Printf("on setting keepalive retry interval: %s", err.Error())
+			}
+		})
 }

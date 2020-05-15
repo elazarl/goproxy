@@ -240,16 +240,45 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	ctx.SetSuccessMetric()
 	ctx.Logf("Accepting CONNECT to %s", host)
 
-	clientConn := &proxyConn{
-		Conn:         proxyClient,
-		ReadTimeout:  time.Second * time.Duration(ctx.ProxyReadDeadline),
-		WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
+	//set tcp keep alives.
+	tcpKAPeriod := 30
+	if ctx.TCPKeepAlivePeriod > 0 {
+		tcpKAPeriod = ctx.TCPKeepAlivePeriod
 	}
-	targetConn := &proxyConn{
-		Conn:         targetSiteCon,
-		ReadTimeout:  time.Second * time.Duration(ctx.ProxyReadDeadline),
-		WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
+	tcpKACount := 3
+	if ctx.TCPKeepAliveCount > 0 {
+		tcpKACount = ctx.TCPKeepAliveCount
 	}
+	tcpKAInterval := 3
+	if ctx.TCPKeepAliveInterval > 0 {
+		tcpKAInterval = ctx.TCPKeepAliveInterval
+	}
+
+	// clientConn := &proxyConn{
+	// 	Conn:         proxyClient,
+	// 	ReadTimeout:  time.Second * time.Duration(ctx.ProxyReadDeadline),
+	// 	WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
+	// }
+	clientConn := newProxyConn(proxyClient)
+	kaErr := clientConn.setKeepaliveParameters(tcpKACount, tcpKAInterval, tcpKAPeriod)
+	if kaErr != nil {
+		ctx.Logf("clientConn KeepAlive error: %v", kaErr)
+		clientConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
+		clientConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
+	}
+	// targetConn := &proxyConn{
+	// 	Conn:         targetSiteCon,
+	// 	ReadTimeout:  time.Second * time.Duration(ctx.ProxyReadDeadline),
+	// 	WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
+	// }
+	targetConn := newProxyConn(targetSiteCon)
+	kaErr = targetConn.setKeepaliveParameters(tcpKACount, tcpKAInterval, tcpKAPeriod)
+	if kaErr != nil {
+		ctx.Logf("targetConn KeepAlive error: %v", kaErr)
+		targetConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
+		targetConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
+	}
+
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go copyAndClose(ctx, targetConn, clientConn, "sent", &wg)
@@ -259,8 +288,8 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		metric := *ctx.ForwardMetricsCounters.ProxyBandwidth
 		metric.Add(float64(targetConn.BytesWrote + targetConn.BytesRead))
 	}
-	targetConn.Close()
-	clientConn.Close()
+	targetConn.Conn.Close()
+	clientConn.Conn.Close()
 
 }
 

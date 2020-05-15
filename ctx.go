@@ -47,6 +47,9 @@ type ProxyCtx struct {
 	ForwatdTProxyDropIP                  string
 	ForwardProxySourceIP                 string
 	ForwardProxyDirect                   bool
+	TCPKeepAlivePeriod                   int
+	TCPKeepAliveCount                    int
+	TCPKeepAliveInterval                 int
 	ProxyUser                            string
 	MaxIdleConns                         int
 	MaxIdleConnsPerHost                  int
@@ -246,6 +249,20 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 	req.RequestURI = req.URL.String()
 
 	conn := newProxyConn(rawConn)
+	//set tcp keep alives.
+	tcpKAPeriod := 30
+	if ctx.TCPKeepAlivePeriod > 0 {
+		tcpKAPeriod = ctx.TCPKeepAlivePeriod
+	}
+	tcpKACount := 3
+	if ctx.TCPKeepAliveCount > 0 {
+		tcpKACount = ctx.TCPKeepAliveCount
+	}
+	tcpKAInterval := 3
+	if ctx.TCPKeepAliveInterval > 0 {
+		tcpKAInterval = ctx.TCPKeepAliveInterval
+	}
+	conn.setKeepaliveParameters(tcpKACount, tcpKAInterval, tcpKAPeriod)
 
 	if ctx.ProxyReadDeadline > 0 {
 		conn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
@@ -295,7 +312,7 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 			return
 		}
 
-		resp.Body = &connCloser{resp.Body, conn}
+		resp.Body = &connCloser{resp.Body, conn.Conn}
 
 		readDone <- responseAndError{resp, nil}
 	}()
