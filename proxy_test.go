@@ -70,7 +70,6 @@ func get(url string, client *http.Client) ([]byte, error) {
 func getOrFail(url string, client *http.Client, t *testing.T) []byte {
 	txt, err := get(url, client)
 	if err != nil {
-		fmt.Println(txt)
 		t.Fatal("Can't fetch url", url, err)
 	}
 	return txt
@@ -680,7 +679,6 @@ func TestGoproxyHijackConnect(t *testing.T) {
 	client, l := oneShotProxy(proxy, t)
 	defer l.Close()
 	proxyAddr := l.Listener.Addr().String()
-
 	conn, err := net.Dial("tcp", proxyAddr)
 	panicOnErr(err, "conn "+proxyAddr)
 	buf := bufio.NewReader(conn)
@@ -883,7 +881,6 @@ func TestHttpsMitmURLRewrite(t *testing.T) {
 
 		proxy.OnRequest(goproxy.DstHostIs(tc.Host)).DoFunc(
 			func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-				fmt.Printf("Host inside: %s\n", req.Host)
 				return nil, goproxy.TextResponse(req, "Dummy response")
 			})
 
