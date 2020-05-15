@@ -260,19 +260,25 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	// 	WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
 	// }
 
-	clientConn := newProxyConn(proxyClient)
+	clientConn, cErr := newProxyTCPConn(proxyClient)
+	if cErr != nil {
+		ctx.Logf("clientConn error: %v", cErr)
+		targetSiteCon.Close()
+		return
+	}
 	kaErr := clientConn.setKeepaliveParameters(tcpKACount, tcpKAInterval, tcpKAPeriod)
 	if kaErr != nil {
 		ctx.Logf("clientConn KeepAlive error: %v", kaErr)
 		clientConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
 		clientConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
 	}
+
 	// targetConn := &proxyConn{
 	// 	Conn:         targetSiteCon,
 	// 	ReadTimeout:  time.Second * time.Duration(ctx.ProxyReadDeadline),
 	// 	WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
 	// }
-	targetConn := newProxyConn(targetSiteCon)
+	targetConn, _ := newProxyTCPConn(targetSiteCon)
 	kaErr = targetConn.setKeepaliveParameters(tcpKACount, tcpKAInterval, tcpKAPeriod)
 	if kaErr != nil {
 		ctx.Logf("targetConn KeepAlive error: %v", kaErr)
@@ -498,7 +504,7 @@ func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader, wg *sync.WaitGroup)
 	wg.Done()
 }
 
-func copyAndClose(ctx *ProxyCtx, dst, src *proxyConn, dir string, wg *sync.WaitGroup) {
+func copyAndClose(ctx *ProxyCtx, dst, src *proxyTCPConn, dir string, wg *sync.WaitGroup) {
 	size := 32 * 1024
 	if ctx.CopyBufferSize > 0 {
 		size = ctx.CopyBufferSize * 1024
