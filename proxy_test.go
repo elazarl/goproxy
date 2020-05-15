@@ -681,11 +681,11 @@ func TestGoproxyHijackConnect(t *testing.T) {
 	client, l := oneShotProxy(proxy, t)
 	defer l.Close()
 	proxyAddr := l.Listener.Addr().String()
+
 	conn, err := net.Dial("tcp", proxyAddr)
 	panicOnErr(err, "conn "+proxyAddr)
 	buf := bufio.NewReader(conn)
 	writeConnect(conn)
-	readConnectResponse(buf)
 	if txt := readResponse(buf); txt != "bobo" {
 		t.Error("Expected bobo for CONNECT /foo, got", txt)
 	}
@@ -707,17 +707,15 @@ func readResponse(buf *bufio.Reader) string {
 }
 
 func writeConnect(w io.Writer) {
-	req, err := http.NewRequest("CONNECT", srv.URL[len("http://"):], nil)
+	// this will let us use IP address of server as url in http.NewRequest.
+	// Passing IP address alone will raise error: "first path segment in URL cannot contain colon"
+	// more details on this here: https://github.com/golang/go/issues/18824
+	validSrvURL := srv.URL[len("http:"):]
+
+	req, err := http.NewRequest("CONNECT", validSrvURL, nil)
 	panicOnErr(err, "NewRequest")
 	req.Write(w)
 	panicOnErr(err, "req(CONNECT).Write")
-}
-
-func readConnectResponse(buf *bufio.Reader) {
-	_, err := buf.ReadString('\n')
-	panicOnErr(err, "resp.Read connect resp")
-	_, err = buf.ReadString('\n')
-	panicOnErr(err, "resp.Read connect resp")
 }
 
 func TestCurlMinusP(t *testing.T) {
