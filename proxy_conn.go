@@ -92,4 +92,5 @@ func (conn *proxyConn) setKeepaliveParameters(count, interval, period int) error
 				conn.logger.Error.Printf("on setting keepalive retry interval: %s", err.Error())
 			}
 		})
+	return nil
 }
