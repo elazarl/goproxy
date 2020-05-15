@@ -37,8 +37,8 @@ var (
 )
 
 // ConnectAction enables the caller to override the standard connect flow.
-// When Action is ConnectHijack, it is up to the implementer to send the 
-// HTTP 200, or any other valid http response back to the client from within the 
+// When Action is ConnectHijack, it is up to the implementer to send the
+// HTTP 200, or any other valid http response back to the client from within the
 // Hijack func
 type ConnectAction struct {
 	Action    ConnectActionLiteral

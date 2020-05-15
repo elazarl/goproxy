@@ -93,6 +93,17 @@ func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 	//   The Connection general-header field allows the sender to specify
 	//   options that are desired for that particular connection and MUST NOT
 	//   be communicated by proxies over further connections.
+
+	// ASK: I'm not sure about this... as far as I see when server reads http request
+	// /usr/local/go/src/net/http/request.go:1085 it sets Close only in two cases
+	// when there is Connection: close header set or when req.isH2Upgrade (have
+	// no idea what is it).
+	// We need to set r.Close to false otherwise
+	// /usr/local/go/src/net/http/transfer.go:275 will add Connection:close header
+	// back. This is the reason of why test fails.
+	if r.Header.Get("Connection") == "close" && r.Close {
+		r.Close = false
+	}
 	r.Header.Del("Connection")
 }
 
@@ -153,7 +164,14 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		// We keep the original body to remove the header only if things changed.
 		// This will prevent problems with HEAD requests where there's no body, yet,
 		// the Content-Length header should be set.
-		if origBody != resp.Body {
+
+		// ASK: Does it happen at all? I can't see how origBody or resp.Body may change...
+		// but if this block removed then there is no need to fix failing tests...
+		// if origBody != resp.Body {
+		// resp.Header.Del("Content-Length")
+		// }
+		// With following tests work, but... I have no idea if it's right
+		if r != nil && r.Method != "HEAD" {
 			resp.Header.Del("Content-Length")
 		}
 		copyHeaders(w.Header(), resp.Header, proxy.KeepDestinationHeaders)
@@ -178,6 +196,7 @@ func NewProxyHttpServer() *ProxyHttpServer {
 		}),
 		Tr: &http.Transport{TLSClientConfig: tlsClientSkipVerify, Proxy: http.ProxyFromEnvironment},
 	}
+
 	proxy.ConnectDial = dialerFromEnv(&proxy)
 
 	return &proxy
