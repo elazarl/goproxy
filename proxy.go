@@ -143,6 +143,14 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 				ctx.Logf("Received response %v", resp.Status)
 			}
 		}
+
+		var origBody io.ReadCloser
+
+		if resp != nil {
+			origBody = resp.Body
+			defer origBody.Close()
+		}
+
 		resp = proxy.filterResponse(resp, ctx)
 
 		if resp == nil {
@@ -158,8 +166,6 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			}
 			return
 		}
-		origBody := resp.Body
-		defer origBody.Close()
 		ctx.Logf("Copying response to client %v [%d]", resp.Status, resp.StatusCode)
 		// http.ResponseWriter will take care of filling the correct response length
 		// Setting it now, might impose wrong value, contradicting the actual new
@@ -167,14 +173,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		// We keep the original body to remove the header only if things changed.
 		// This will prevent problems with HEAD requests where there's no body, yet,
 		// the Content-Length header should be set.
-
-		// ASK: Does it happen at all? I can't see how origBody or resp.Body may change...
-		// but if this block removed then there is no need to fix failing tests...
-		// if origBody != resp.Body {
-		// resp.Header.Del("Content-Length")
-		// }
-		// With following tests work, but... I have no idea if it's right
-		if r != nil && r.Method != "HEAD" {
+		if origBody != resp.Body {
 			resp.Header.Del("Content-Length")
 		}
 		copyHeaders(w.Header(), resp.Header, proxy.KeepDestinationHeaders)
