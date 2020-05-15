@@ -262,14 +262,19 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 	if ctx.TCPKeepAliveInterval > 0 {
 		tcpKAInterval = ctx.TCPKeepAliveInterval
 	}
-	conn.setKeepaliveParameters(tcpKACount, tcpKAInterval, tcpKAPeriod)
-
-	if ctx.ProxyReadDeadline > 0 {
+	kaErr := conn.setKeepaliveParameters(tcpKACount, tcpKAInterval, tcpKAPeriod)
+	if kaErr != nil {
+		ctx.Logf("HTTP conn KeepAlive error: %v", kaErr)
 		conn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
-	}
-	if ctx.ProxyWriteDeadline > 0 {
 		conn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
 	}
+
+	// if ctx.ProxyReadDeadline > 0 {
+	// 	conn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
+	// }
+	// if ctx.ProxyWriteDeadline > 0 {
+	// 	conn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
+	// }
 
 	bufferSize := 32
 
