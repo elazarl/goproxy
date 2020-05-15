@@ -706,9 +706,11 @@ func readResponse(buf *bufio.Reader) string {
 }
 
 func writeConnect(w io.Writer) {
-	// this will let us use IP address of server as url in http.NewRequest.
-	// Passing IP address alone will raise error: "first path segment in URL cannot contain colon"
-	// more details on this here: https://github.com/golang/go/issues/18824
+	// this will let us use IP address of server as url in http.NewRequest by
+	// passing it as //127.0.0.1:64584 (prefixed with //).
+	// Passing IP address with port alone (without //) will raise error:
+	// "first path segment in URL cannot contain colon" more details on this
+	// here: https://github.com/golang/go/issues/18824
 	validSrvURL := srv.URL[len("http:"):]
 
 	req, err := http.NewRequest("CONNECT", validSrvURL, nil)
