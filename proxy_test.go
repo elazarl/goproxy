@@ -141,7 +141,6 @@ func TestReplaceResponse(t *testing.T) {
 	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
 		resp.StatusCode = http.StatusOK
 		resp.Body = ioutil.NopCloser(bytes.NewBufferString("chico"))
-		resp.Header.Del("Content-Length")
 		return resp
 	})
 
@@ -854,8 +853,6 @@ func TestProxyWithCertStorage(t *testing.T) {
 }
 
 func TestHttpsMitmURLRewrite(t *testing.T) {
-	fmt.Printf("Host inside: %s\n", "Bla")
-
 	scheme := "https"
 
 	testCases := []struct {
@@ -930,8 +927,6 @@ func returnNil(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
 }
 
 func TestSimpleHttpRequest(t *testing.T) {
-
-	fmt.Println("HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH")
 	proxy := goproxy.NewProxyHttpServer()
 
 	var server *http.Server
