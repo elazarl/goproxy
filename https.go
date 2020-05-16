@@ -300,18 +300,25 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 
 }
 
-func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request) {
+func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request, conn *net.Conn) {
 
 	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy, certStore: proxy.CertStore}
 
-	hij, ok := w.(http.Hijacker)
-	if !ok {
-		panic("httpserver does not support hijacking")
-	}
+	var proxyClient net.Conn
 
-	proxyClient, _, e := hij.Hijack()
-	if e != nil {
-		panic("Cannot hijack connection " + e.Error())
+	//if connection not provided, attempt highjack
+	if conn == nil {
+		hij, ok := w.(http.Hijacker)
+		if !ok {
+			panic("httpserver does not support hijacking")
+		}
+		var e error
+		proxyClient, _, e = hij.Hijack()
+		if e != nil {
+			panic("Cannot hijack connection " + e.Error())
+		}
+	} else {
+		proxyClient = *conn
 	}
 
 	ctx.Logf("Running %d CONNECT handlers", len(proxy.httpsHandlers))
