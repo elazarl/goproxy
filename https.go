@@ -300,7 +300,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 
 }
 
-func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request, conn *net.Conn) {
+func (proxy *ProxyHttpServer) HandleHttps(w http.ResponseWriter, r *http.Request, conn *net.Conn) {
 
 	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy, certStore: proxy.CertStore}
 
