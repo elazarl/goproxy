@@ -35,7 +35,7 @@ func newProxyTCPConn(conn interface{}) (*proxyTCPConn, error) {
 		if ok {
 			tcpConn = v
 		} else {
-			return nil, fmt.Errorf("Unable to convert to TCPConn from %+v", reflect.TypeOf(conn))
+			return nil, fmt.Errorf("case dumbResponseWriter Unable to convert to TCPConn from %+v", reflect.TypeOf(conn))
 		}
 	default:
 		return nil, fmt.Errorf("Unable to convert to TCPConn from %+v", reflect.TypeOf(conn))
