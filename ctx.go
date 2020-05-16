@@ -248,12 +248,9 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	req.RequestURI = req.URL.String()
 
-	conn, cErr := newProxyTCPConn(rawConn)
-	if cErr != nil {
-		ctx.Logf("ctx newProxyTCPConn error: %v", cErr)
-		rawConn.Close()
-		return nil, fmt.Errorf("ctx newProxyTCPConn error: %v", cErr)
-	}
+	conn := newProxyTCPConn(rawConn)
+	conn.Logger = ctx.ProxyLogger
+
 	//set tcp keep alives.
 	tcpKAPeriod := 30
 	if ctx.TCPKeepAlivePeriod > 0 {

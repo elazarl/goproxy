@@ -2,7 +2,9 @@ package goproxy
 
 import (
 	"fmt"
+	"io"
 	"net"
+	"net/http"
 	"reflect"
 	"syscall"
 	"time"
@@ -11,37 +13,18 @@ import (
 )
 
 type proxyTCPConn struct {
-	Conn         net.TCPConn
+	Conn         net.Conn
 	BytesWrote   int64
 	BytesRead    int64
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
-	logger       *logex.Leveled
-}
-
-type dumbResponseWriter struct {
-	net.Conn
+	Logger       *logex.Leveled
 }
 
 // newProxyTCPConn is a wrapper around a net.TCPConn that allows us to log the number of bytes
 // written to the connection
-func newProxyTCPConn(conn interface{}) (*proxyTCPConn, error) {
-	var tcpConn *net.TCPConn
-	switch conn.(type) {
-	case *net.TCPConn:
-		tcpConn = conn.(*net.TCPConn)
-	case dumbResponseWriter:
-		v, ok := conn.(*net.TCPConn)
-		if ok {
-			tcpConn = v
-		} else {
-			return nil, fmt.Errorf("case dumbResponseWriter Unable to convert to TCPConn from %+v", reflect.TypeOf(conn))
-		}
-	default:
-		return nil, fmt.Errorf("Unable to convert to TCPConn from %+v", reflect.TypeOf(conn))
-	}
-	c := &proxyTCPConn{Conn: *tcpConn}
-	return c, nil
+func newProxyTCPConn(conn net.Conn) *proxyTCPConn {
+	return &proxyTCPConn{Conn: conn}
 }
 
 func (conn *proxyTCPConn) Write(b []byte) (n int, err error) {
@@ -71,9 +54,13 @@ func (conn *proxyTCPConn) Read(b []byte) (n int, err error) {
 }
 
 func (conn *proxyTCPConn) setKeepaliveParameters(count, interval, period int) error {
-	conn.Conn.SetKeepAlive(true)
-	conn.Conn.SetKeepAlivePeriod(time.Duration(period) * time.Second)
-	rawConn, err := conn.Conn.SyscallConn()
+	tcpConn, ok := conn.Conn.(*net.TCPConn)
+	if !ok {
+		return fmt.Errorf("Could not convert proxy conn from %v to net.TCPConn", reflect.TypeOf(conn.Conn))
+	}
+	tcpConn.SetKeepAlive(true)
+	tcpConn.SetKeepAlivePeriod(time.Duration(period) * time.Second)
+	rawConn, err := tcpConn.SyscallConn()
 	if err != nil {
 		return err
 	}
@@ -84,13 +71,30 @@ func (conn *proxyTCPConn) setKeepaliveParameters(count, interval, period int) er
 			//Number of probes.
 			err := syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPCNT, count)
 			if err != nil {
-				conn.logger.Error.Printf("on setting keepalive probe count: %s", err.Error())
+				conn.Logger.Error.Printf("on setting keepalive probe count: %s", err.Error())
 			}
 			//Wait time after an unsuccessful probe.
 			err = syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPINTVL, interval)
 			if err != nil {
-				conn.logger.Error.Printf("on setting keepalive retry interval: %s", err.Error())
+				conn.Logger.Error.Printf("on setting keepalive retry interval: %s", err.Error())
 			}
 		})
 	return nil
+}
+
+type responseAndError struct {
+	resp *http.Response
+	err  error
+}
+
+// connCloser implements a wrapper containing an io.ReadCloser and a net.Conn
+type connCloser struct {
+	io.ReadCloser
+	Conn net.Conn
+}
+
+// Close closes the connection and the io.ReadCloser
+func (cc connCloser) Close() error {
+	cc.Conn.Close()
+	return cc.ReadCloser.Close()
 }
