@@ -94,14 +94,13 @@ func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 	//   options that are desired for that particular connection and MUST NOT
 	//   be communicated by proxies over further connections.
 
-	// ASK: I'm not sure about this... as far as I see when server reads http request
-	// /usr/local/go/src/net/http/request.go:1085 it sets Close only in two cases
-	// when there is Connection: close header set or when req.isH2Upgrade (have
-	// no idea what is it).
-	// We need to set r.Close to false otherwise
-	// /usr/local/go/src/net/http/transfer.go:275 will add Connection:close header
-	// back. This is the reason of why test fails.
-	if r.Header.Get("Connection") == "close" && r.Close {
+	// When server reads http request it sets req.Close to true if
+	// "Connection" header contains "close".
+	// https://github.com/golang/go/blob/master/src/net/http/request.go#L1080
+	// Later, transfer.go adds "Connection: close" back when req.Close is true
+	// https://github.com/golang/go/blob/master/src/net/http/transfer.go#L275
+	// That's why tests that checks "Connection: close" removal fail
+	if r.Header.Get("Connection") == "close" {
 		r.Close = false
 	}
 	r.Header.Del("Connection")
