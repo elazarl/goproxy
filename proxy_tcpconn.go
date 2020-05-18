@@ -64,7 +64,7 @@ func (conn *proxyTCPConn) setKeepaliveParameters(count, interval, period int) er
 	if err != nil {
 		return err
 	}
-	rawConn.Control(
+	err = rawConn.Control(
 		func(fdPtr uintptr) {
 			// got socket file descriptor. Setting parameters.
 			fd := int(fdPtr)
@@ -79,6 +79,9 @@ func (conn *proxyTCPConn) setKeepaliveParameters(count, interval, period int) er
 				conn.Logger.Error.Printf("on setting keepalive retry interval: %s", err.Error())
 			}
 		})
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
