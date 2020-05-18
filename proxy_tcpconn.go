@@ -72,16 +72,18 @@ func (conn *proxyTCPConn) setKeepaliveParameters(count, interval, period int) er
 	}
 	err = rawConn.Control(
 		func(fdPtr uintptr) {
-			conn.Logger.Info.Printf("attempting KA options on: %+v", rawConn)
 			// got socket file descriptor. Setting parameters.
 			fd := int(fdPtr)
+
+			conn.Logger.Info.Printf("attempting KA options on: %+v - fd: %+v", rawConn, fd)
+
 			//Number of probes.
-			err := syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPCNT, count)
+			err := syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.TCP_KEEPCNT, count)
 			if err != nil {
 				conn.Logger.Error.Printf("on setting keepalive probe count: %s", err.Error())
 			}
 			//Wait time after an unsuccessful probe.
-			err = syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPINTVL, interval)
+			err = syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.TCP_KEEPINTVL, interval)
 			if err != nil {
 				conn.Logger.Error.Printf("on setting keepalive retry interval: %s", err.Error())
 			}
