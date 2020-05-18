@@ -58,14 +58,21 @@ func (conn *proxyTCPConn) setKeepaliveParameters(count, interval, period int) er
 	if !ok {
 		return fmt.Errorf("Could not convert proxy conn from %v to net.TCPConn", reflect.TypeOf(conn.Conn))
 	}
-	tcpConn.SetKeepAlive(true)
-	tcpConn.SetKeepAlivePeriod(time.Duration(period) * time.Second)
+	setErr := tcpConn.SetKeepAlive(true)
+	if setErr != nil {
+		return setErr
+	}
+	setErr = tcpConn.SetKeepAlivePeriod(time.Duration(period) * time.Second)
+	if setErr != nil {
+		return setErr
+	}
 	rawConn, err := tcpConn.SyscallConn()
 	if err != nil {
 		return err
 	}
 	err = rawConn.Control(
 		func(fdPtr uintptr) {
+			conn.Logger.Info.Printf("attempting KA options on: %+v", rawConn)
 			// got socket file descriptor. Setting parameters.
 			fd := int(fdPtr)
 			//Number of probes.
