@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -142,7 +143,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		// dont use a proxy and use specific source IP
 		tr := &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
-			Dial: func(network, address string) (net.Conn, error) {
+			DialTLS: func(network, address string) (net.Conn, error) {
 				localAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:0", ctx.ForwardProxySourceIP))
 				if err != nil {
 					ctx.Logf("Failed to resolve local address: %s - err: %v", ctx.ForwardProxySourceIP, err)
@@ -161,7 +162,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 			IdleConnTimeout:       idleTimeout,
 		}
 
-		targetSiteCon, err = tr.Dial("tcp", host)
+		targetSiteCon, err = tr.DialTLS("tcp", host)
 
 	} else if ctx.ForwardProxyTProxy {
 
@@ -241,18 +242,18 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	ctx.Logf("Accepting CONNECT to %s", host)
 
 	//set tcp keep alives.
-	// tcpKAPeriod := 30
-	// if ctx.TCPKeepAlivePeriod > 0 {
-	// 	tcpKAPeriod = ctx.TCPKeepAlivePeriod
-	// }
-	// tcpKACount := 3
-	// if ctx.TCPKeepAliveCount > 0 {
-	// 	tcpKACount = ctx.TCPKeepAliveCount
-	// }
-	// tcpKAInterval := 3
-	// if ctx.TCPKeepAliveInterval > 0 {
-	// 	tcpKAInterval = ctx.TCPKeepAliveInterval
-	// }
+	tcpKAPeriod := 30
+	if ctx.TCPKeepAlivePeriod > 0 {
+		tcpKAPeriod = ctx.TCPKeepAlivePeriod
+	}
+	tcpKACount := 3
+	if ctx.TCPKeepAliveCount > 0 {
+		tcpKACount = ctx.TCPKeepAliveCount
+	}
+	tcpKAInterval := 3
+	if ctx.TCPKeepAliveInterval > 0 {
+		tcpKAInterval = ctx.TCPKeepAliveInterval
+	}
 
 	// clientConn := &proxyTCPConn{
 	// 	Conn:         proxyClient,
@@ -262,12 +263,12 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 
 	clientConn := newProxyTCPConn(proxyClient)
 	clientConn.Logger = ctx.ProxyLogger
-	// kaErr := clientConn.setKeepaliveParameters(tcpKACount, tcpKAInterval, tcpKAPeriod)
-	// if kaErr != nil {
-	// 	ctx.Logf("clientConn KeepAlive error: %v", kaErr)
-	// 	clientConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
-	// 	clientConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
-	// }
+	kaErr := clientConn.setKeepaliveParameters(tcpKACount, tcpKAInterval, tcpKAPeriod)
+	if kaErr != nil {
+		ctx.Logf("clientConn KeepAlive error: %v", kaErr)
+		clientConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
+		clientConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
+	}
 
 	// targetConn := &proxyTCPConn{
 	// 	Conn:         targetSiteCon,
@@ -276,12 +277,12 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	// }
 	targetConn := newProxyTCPConn(targetSiteCon)
 	targetConn.Logger = ctx.ProxyLogger
-	// kaErr = targetConn.setKeepaliveParameters(tcpKACount, tcpKAInterval, tcpKAPeriod)
-	// if kaErr != nil {
-	// 	ctx.Logf("targetConn KeepAlive error: %v", kaErr)
-	// 	targetConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
-	// 	targetConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
-	// }
+	kaErr = targetConn.setKeepaliveParameters(tcpKACount, tcpKAInterval, tcpKAPeriod)
+	if kaErr != nil {
+		ctx.Logf("targetConn KeepAlive error: %v", kaErr)
+		targetConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
+		targetConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
+	}
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -316,6 +317,7 @@ func (proxy *ProxyHttpServer) HandleHttps(w http.ResponseWriter, r *http.Request
 		}
 	} else {
 		proxyClient = *conn
+		ctx.Logf("using provided proxyClient: %v, type %v", proxyClient, reflect.TypeOf(proxyClient))
 	}
 
 	ctx.Logf("Running %d CONNECT handlers", len(proxy.httpsHandlers))
