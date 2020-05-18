@@ -76,6 +76,8 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	var err error
 	var logHeaders http.Header
 
+	ctx.Logf("client type: %+v", reflect.TypeOf(proxyClient))
+
 	//check for idle override
 	var idleTimeout time.Duration
 	if ctx.IdleConnTimeout != 0 {
@@ -261,7 +263,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	// 	WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
 	// }
 
-	clientConn := newProxyTCPConn(proxyClient)
+	clientConn := newProxyTCPConn(proxyClient.(dumbResponseWriter))
 	clientConn.Logger = ctx.ProxyLogger
 	kaErr := clientConn.setKeepaliveParameters(tcpKACount, tcpKAInterval, tcpKAPeriod)
 	if kaErr != nil {
@@ -275,7 +277,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	// 	ReadTimeout:  time.Second * time.Duration(ctx.ProxyReadDeadline),
 	// 	WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
 	// }
-	targetConn := newProxyTCPConn(targetSiteCon)
+	targetConn := newProxyTCPConn(dumbResponseWriter{targetSiteCon})
 	targetConn.Logger = ctx.ProxyLogger
 	kaErr = targetConn.setKeepaliveParameters(tcpKACount, tcpKAInterval, tcpKAPeriod)
 	if kaErr != nil {

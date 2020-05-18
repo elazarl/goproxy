@@ -12,8 +12,12 @@ import (
 	"github.com/function61/gokit/logex"
 )
 
+type dumbResponseWriter struct {
+	net.Conn
+}
+
 type proxyTCPConn struct {
-	Conn         net.Conn
+	Conn         dumbResponseWriter
 	BytesWrote   int64
 	BytesRead    int64
 	ReadTimeout  time.Duration
@@ -23,7 +27,7 @@ type proxyTCPConn struct {
 
 // newProxyTCPConn is a wrapper around a net.TCPConn that allows us to log the number of bytes
 // written to the connection
-func newProxyTCPConn(conn net.Conn) *proxyTCPConn {
+func newProxyTCPConn(conn dumbResponseWriter) *proxyTCPConn {
 	return &proxyTCPConn{Conn: conn}
 }
 
@@ -54,7 +58,7 @@ func (conn *proxyTCPConn) Read(b []byte) (n int, err error) {
 }
 
 func (conn *proxyTCPConn) setKeepaliveParameters(count, interval, period int) error {
-	tcpConn, ok := conn.Conn.(*net.TCPConn)
+	tcpConn, ok := conn.Conn.Conn.(*net.TCPConn)
 	if !ok {
 		return fmt.Errorf("Could not convert proxy conn from %v to net.TCPConn", reflect.TypeOf(conn.Conn))
 	}
