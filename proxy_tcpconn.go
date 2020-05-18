@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/Windscribe/go-vhost"
 	"github.com/function61/gokit/logex"
 )
 
@@ -52,8 +53,16 @@ func (conn *proxyTCPConn) Read(b []byte) (n int, err error) {
 	return
 }
 
-func (conn *proxyTCPConn) setKeepaliveParameters(count, interval, period int) error {
-	tcpConn, ok := conn.Conn.(*net.TCPConn)
+func (conn *proxyTCPConn) setKeepaliveParameters(sharedConn bool, count, interval, period int) error {
+	var tcpConn *net.TCPConn
+	var ok bool
+	if sharedConn {
+		tlsConn := conn.Conn.(*vhost.TLSConn)
+		sConn := tlsConn.SharedConn.Conn
+		tcpConn, ok = sConn.(*net.TCPConn)
+	} else {
+		tcpConn, ok = conn.Conn.(*net.TCPConn)
+	}
 	if !ok {
 		return fmt.Errorf("Could not convert proxy conn from %v to net.TCPConn", reflect.TypeOf(conn.Conn))
 	}
