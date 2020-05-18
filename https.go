@@ -150,43 +150,28 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		ctx.Logf("dial locally from: %+v", ctx.ForwardProxySourceIP)
 
 		// dont use a proxy and use specific source IP
-		// tr := &http.Transport{
-		// 	Proxy: http.ProxyFromEnvironment,
-		// 	Dial: func(network, address string) (net.Conn, error) {
-		// 		localAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:0", ctx.ForwardProxySourceIP))
-		// 		if err != nil {
-		// 			ctx.Logf("Failed to resolve local address: %s - err: %v", ctx.ForwardProxySourceIP, err)
-		// 			return nil, err
-		// 		}
-		// 		d := net.Dialer{
-		// 			Timeout:   15 * time.Second,
-		// 			LocalAddr: localAddr,
-		// 		}
-		// 		return d.Dial("tcp", address)
-		// 	},
-		// 	MaxIdleConns:          ctx.MaxIdleConns,
-		// 	MaxIdleConnsPerHost:   ctx.MaxIdleConnsPerHost,
-		// 	TLSHandshakeTimeout:   10 * time.Second,
-		// 	ExpectContinueTimeout: 1 * time.Second,
-		// 	IdleConnTimeout:       idleTimeout,
-		// }
-
-		// targetSiteCon, err = tr.Dial("tcp", host)
-
-		tcpLocal, errTCP := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:0", ctx.ForwardProxySourceIP))
-		if errTCP != nil {
-			ctx.Logf("Failed to resolve local TCP address: %s - err: %v", ctx.ForwardProxySourceIP, errTCP)
-		}
-		tcpRemote, errTCP := net.ResolveTCPAddr("tcp", host)
-		if errTCP != nil {
-			ctx.Logf("Failed to resolve remote TCP address: %s - err: %v", host, errTCP)
+		tr := &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			Dial: func(network, address string) (net.Conn, error) {
+				localAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:0", ctx.ForwardProxySourceIP))
+				if err != nil {
+					ctx.Logf("Failed to resolve local address: %s - err: %v", ctx.ForwardProxySourceIP, err)
+					return nil, err
+				}
+				d := net.Dialer{
+					Timeout:   15 * time.Second,
+					LocalAddr: localAddr,
+				}
+				return d.Dial("tcp", address)
+			},
+			MaxIdleConns:          ctx.MaxIdleConns,
+			MaxIdleConnsPerHost:   ctx.MaxIdleConnsPerHost,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+			IdleConnTimeout:       idleTimeout,
 		}
 
-		if errTCP == nil {
-			targetSiteCon, err = net.DialTCP("tcp", tcpLocal, tcpRemote)
-		} else {
-			err = errTCP
-		}
+		targetSiteCon, err = tr.Dial("tcp", host)
 
 	} else if ctx.ForwardProxyTProxy {
 
@@ -273,18 +258,18 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	ctx.Logf("Accepting CONNECT to %s", host)
 
 	//set tcp keep alives.
-	// tcpKAPeriod := 30
-	// if ctx.TCPKeepAlivePeriod > 0 {
-	// 	tcpKAPeriod = ctx.TCPKeepAlivePeriod
-	// }
-	// tcpKACount := 3
-	// if ctx.TCPKeepAliveCount > 0 {
-	// 	tcpKACount = ctx.TCPKeepAliveCount
-	// }
-	// tcpKAInterval := 3
-	// if ctx.TCPKeepAliveInterval > 0 {
-	// 	tcpKAInterval = ctx.TCPKeepAliveInterval
-	// }
+	tcpKAPeriod := 30
+	if ctx.TCPKeepAlivePeriod > 0 {
+		tcpKAPeriod = ctx.TCPKeepAlivePeriod
+	}
+	tcpKACount := 3
+	if ctx.TCPKeepAliveCount > 0 {
+		tcpKACount = ctx.TCPKeepAliveCount
+	}
+	tcpKAInterval := 3
+	if ctx.TCPKeepAliveInterval > 0 {
+		tcpKAInterval = ctx.TCPKeepAliveInterval
+	}
 
 	clientConn := &proxyTCPConn{
 		Conn:         proxyClient,
@@ -292,12 +277,12 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
 		Logger:       ctx.ProxyLogger,
 	}
-	// kaErr := clientConn.setKeepaliveParameters(tcpKACount, tcpKAInterval, tcpKAPeriod)
-	// if kaErr != nil {
-	// 	ctx.Logf("clientConn KeepAlive error: %v", kaErr)
-	// 	clientConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
-	// 	clientConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
-	// }
+	kaErr := clientConn.setKeepaliveParameters(tcpKACount, tcpKAInterval, tcpKAPeriod)
+	if kaErr != nil {
+		ctx.Logf("clientConn KeepAlive error: %v", kaErr)
+		clientConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
+		clientConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
+	}
 
 	targetConn := &proxyTCPConn{
 		Conn:         targetSiteCon,
@@ -305,12 +290,12 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
 		Logger:       ctx.ProxyLogger,
 	}
-	// kaErr = targetConn.setKeepaliveParameters(tcpKACount, tcpKAInterval, tcpKAPeriod)
-	// if kaErr != nil {
-	// 	ctx.Logf("targetConn KeepAlive error: %v", kaErr)
-	// 	targetConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
-	// 	targetConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
-	// }
+	kaErr = targetConn.setKeepaliveParameters(tcpKACount, tcpKAInterval, tcpKAPeriod)
+	if kaErr != nil {
+		ctx.Logf("targetConn KeepAlive error: %v", kaErr)
+		targetConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
+		targetConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
+	}
 
 	var wg sync.WaitGroup
 	wg.Add(2)
