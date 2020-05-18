@@ -92,6 +92,8 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 			ctx.ForwardProxyProto = "http"
 		}
 
+		ctx.Logf("dial via forward proxy: %+v", ctx.ForwardProxy)
+
 		tr := &http.Transport{
 			MaxIdleConns:          ctx.MaxIdleConns,
 			MaxIdleConnsPerHost:   ctx.MaxIdleConnsPerHost,
@@ -142,33 +144,50 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 
 	} else if ctx.ForwardProxyDirect && ctx.ForwardProxySourceIP != "" {
 
+		ctx.Logf("dial locally from: %+v", ctx.ForwardProxySourceIP)
+
 		// dont use a proxy and use specific source IP
-		tr := &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
-			Dial: func(network, address string) (net.Conn, error) {
-				localAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:0", ctx.ForwardProxySourceIP))
-				if err != nil {
-					ctx.Logf("Failed to resolve local address: %s - err: %v", ctx.ForwardProxySourceIP, err)
-					return nil, err
-				}
-				d := net.Dialer{
-					Timeout:   15 * time.Second,
-					LocalAddr: localAddr,
-				}
-				return d.Dial("tcp", address)
-			},
-			MaxIdleConns:          ctx.MaxIdleConns,
-			MaxIdleConnsPerHost:   ctx.MaxIdleConnsPerHost,
-			TLSHandshakeTimeout:   10 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
-			IdleConnTimeout:       idleTimeout,
+		// tr := &http.Transport{
+		// 	Proxy: http.ProxyFromEnvironment,
+		// 	Dial: func(network, address string) (net.Conn, error) {
+		// 		localAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:0", ctx.ForwardProxySourceIP))
+		// 		if err != nil {
+		// 			ctx.Logf("Failed to resolve local address: %s - err: %v", ctx.ForwardProxySourceIP, err)
+		// 			return nil, err
+		// 		}
+		// 		d := net.Dialer{
+		// 			Timeout:   15 * time.Second,
+		// 			LocalAddr: localAddr,
+		// 		}
+		// 		return d.Dial("tcp", address)
+		// 	},
+		// 	MaxIdleConns:          ctx.MaxIdleConns,
+		// 	MaxIdleConnsPerHost:   ctx.MaxIdleConnsPerHost,
+		// 	TLSHandshakeTimeout:   10 * time.Second,
+		// 	ExpectContinueTimeout: 1 * time.Second,
+		// 	IdleConnTimeout:       idleTimeout,
+		// }
+
+		// targetSiteCon, err = tr.Dial("tcp", host)
+
+		tcpLocal, errTCP := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:0", ctx.ForwardProxySourceIP))
+		if errTCP != nil {
+			ctx.Logf("Failed to resolve local TCP address: %s - err: %v", ctx.ForwardProxySourceIP, errTCP)
+		}
+		tcpRemote, errTCP := net.ResolveTCPAddr("tcp", host)
+		if errTCP != nil {
+			ctx.Logf("Failed to resolve remote TCP address: %s - err: %v", host, errTCP)
 		}
 
-		targetSiteCon, err = tr.Dial("tcp", host)
+		if errTCP == nil {
+			targetSiteCon, err = net.DialTCP("tcp", tcpLocal, tcpRemote)
+		} else {
+			err = errTCP
+		}
 
 	} else if ctx.ForwardProxyTProxy {
 
-		ctx.Logf("dialing from: %s", ctx.ForwardProxySourceIP)
+		ctx.Logf("dialing via TPROXY from: %s", ctx.ForwardProxySourceIP)
 
 		tcpLocal, errTCP := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:0", ctx.ForwardProxySourceIP))
 		if errTCP != nil {
