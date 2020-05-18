@@ -258,18 +258,18 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	ctx.Logf("Accepting CONNECT to %s", host)
 
 	//set tcp keep alives.
-	tcpKAPeriod := 30
-	if ctx.TCPKeepAlivePeriod > 0 {
-		tcpKAPeriod = ctx.TCPKeepAlivePeriod
-	}
-	tcpKACount := 3
-	if ctx.TCPKeepAliveCount > 0 {
-		tcpKACount = ctx.TCPKeepAliveCount
-	}
-	tcpKAInterval := 3
-	if ctx.TCPKeepAliveInterval > 0 {
-		tcpKAInterval = ctx.TCPKeepAliveInterval
-	}
+	// tcpKAPeriod := 30
+	// if ctx.TCPKeepAlivePeriod > 0 {
+	// 	tcpKAPeriod = ctx.TCPKeepAlivePeriod
+	// }
+	// tcpKACount := 3
+	// if ctx.TCPKeepAliveCount > 0 {
+	// 	tcpKACount = ctx.TCPKeepAliveCount
+	// }
+	// tcpKAInterval := 3
+	// if ctx.TCPKeepAliveInterval > 0 {
+	// 	tcpKAInterval = ctx.TCPKeepAliveInterval
+	// }
 
 	clientConn := &proxyTCPConn{
 		Conn: proxyClient,
@@ -277,12 +277,12 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		//WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
 		Logger: ctx.ProxyLogger,
 	}
-	kaErr := clientConn.setKeepaliveParameters(tcpKACount, tcpKAInterval, tcpKAPeriod)
-	if kaErr != nil {
-		ctx.Logf("clientConn KeepAlive error: %v", kaErr)
-		clientConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
-		clientConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
-	}
+	// kaErr := clientConn.setKeepaliveParameters(tcpKACount, tcpKAInterval, tcpKAPeriod)
+	// if kaErr != nil {
+	// 	ctx.Logf("clientConn KeepAlive error: %v", kaErr)
+	// 	clientConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
+	// 	clientConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
+	// }
 
 	targetConn := &proxyTCPConn{
 		Conn: targetSiteCon,
@@ -290,12 +290,12 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		//WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
 		Logger: ctx.ProxyLogger,
 	}
-	kaErr = targetConn.setKeepaliveParameters(tcpKACount, tcpKAInterval, tcpKAPeriod)
-	if kaErr != nil {
-		ctx.Logf("targetConn KeepAlive error: %v", kaErr)
-		targetConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
-		targetConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
-	}
+	// kaErr = targetConn.setKeepaliveParameters(tcpKACount, tcpKAInterval, tcpKAPeriod)
+	// if kaErr != nil {
+	// 	ctx.Logf("targetConn KeepAlive error: %v", kaErr)
+	// 	targetConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
+	// 	targetConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
+	// }
 
 	var wg sync.WaitGroup
 	wg.Add(2)
