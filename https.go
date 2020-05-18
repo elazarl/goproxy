@@ -272,10 +272,10 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	}
 
 	clientConn := &proxyTCPConn{
-		Conn:         proxyClient,
-		ReadTimeout:  time.Second * time.Duration(ctx.ProxyReadDeadline),
-		WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
-		Logger:       ctx.ProxyLogger,
+		Conn: proxyClient,
+		//ReadTimeout:  time.Second * time.Duration(ctx.ProxyReadDeadline),
+		//WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
+		Logger: ctx.ProxyLogger,
 	}
 	kaErr := clientConn.setKeepaliveParameters(tcpKACount, tcpKAInterval, tcpKAPeriod)
 	if kaErr != nil {
@@ -285,10 +285,10 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	}
 
 	targetConn := &proxyTCPConn{
-		Conn:         targetSiteCon,
-		ReadTimeout:  time.Second * time.Duration(ctx.ProxyReadDeadline),
-		WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
-		Logger:       ctx.ProxyLogger,
+		Conn: targetSiteCon,
+		//ReadTimeout:  time.Second * time.Duration(ctx.ProxyReadDeadline),
+		//WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
+		Logger: ctx.ProxyLogger,
 	}
 	kaErr = targetConn.setKeepaliveParameters(tcpKACount, tcpKAInterval, tcpKAPeriod)
 	if kaErr != nil {
