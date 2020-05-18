@@ -87,6 +87,8 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		idleTimeout = 90 * time.Second
 	}
 
+	var sendHTTPOK := false
+
 	if ctx.ForwardProxy != "" {
 
 		if ctx.ForwardProxyProto == "" {
@@ -211,6 +213,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 
 	} else {
 		targetSiteCon, err = proxy.connectDial("tcp", host)
+		sendHTTPOK = true
 	}
 	if err != nil {
 
@@ -253,8 +256,11 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		return
 	}
 
-	proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
-
+	// only send HTTP OK if this is not a transparent proxy request
+	if sendHTTPOK {
+		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+	}
+	
 	ctx.Logf("targetSiteCon type: %+v", reflect.TypeOf(targetSiteCon))
 	ctx.Logf("targetSiteCon info: %s -> %s", targetSiteCon.LocalAddr().String(), targetSiteCon.RemoteAddr().String())
 
