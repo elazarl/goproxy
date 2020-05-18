@@ -317,7 +317,9 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	}
 	targetConn.Conn.Close()
 	clientConn.Conn.Close()
-
+	if ctx.Tail != nil {
+		ctx.Tail(ctx)
+	}
 }
 
 func (proxy *ProxyHttpServer) HandleHttps(w http.ResponseWriter, r *http.Request, conn *net.Conn) {
@@ -548,10 +550,6 @@ func copyAndClose(ctx *ProxyCtx, dst, src *proxyTCPConn, dir string, wg *sync.Wa
 		ctx.BytesSent = copied
 	case "recv":
 		ctx.BytesReceived = copied
-	}
-
-	if ctx.Tail != nil {
-		ctx.Tail(ctx)
 	}
 	wg.Done()
 }

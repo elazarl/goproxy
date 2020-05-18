@@ -13,7 +13,7 @@ import (
 )
 
 type proxyTCPConn struct {
-	Conn         net.Conn
+	net.Conn
 	BytesWrote   int64
 	BytesRead    int64
 	ReadTimeout  time.Duration
