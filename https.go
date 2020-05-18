@@ -143,7 +143,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		// dont use a proxy and use specific source IP
 		tr := &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
-			DialTLS: func(network, address string) (net.Conn, error) {
+			Dial: func(network, address string) (net.Conn, error) {
 				localAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:0", ctx.ForwardProxySourceIP))
 				if err != nil {
 					ctx.Logf("Failed to resolve local address: %s - err: %v", ctx.ForwardProxySourceIP, err)
@@ -162,7 +162,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 			IdleConnTimeout:       idleTimeout,
 		}
 
-		targetSiteCon, err = tr.DialTLS("tcp", host)
+		targetSiteCon, err = tr.Dial("tcp", host)
 
 	} else if ctx.ForwardProxyTProxy {
 
