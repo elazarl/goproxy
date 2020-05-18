@@ -263,18 +263,18 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	ctx.Logf("Accepting CONNECT to %s", host)
 
 	//set tcp keep alives.
-	tcpKAPeriod := 30
-	if ctx.TCPKeepAlivePeriod > 0 {
-		tcpKAPeriod = ctx.TCPKeepAlivePeriod
-	}
-	tcpKACount := 3
-	if ctx.TCPKeepAliveCount > 0 {
-		tcpKACount = ctx.TCPKeepAliveCount
-	}
-	tcpKAInterval := 3
-	if ctx.TCPKeepAliveInterval > 0 {
-		tcpKAInterval = ctx.TCPKeepAliveInterval
-	}
+	// tcpKAPeriod := 30
+	// if ctx.TCPKeepAlivePeriod > 0 {
+	// 	tcpKAPeriod = ctx.TCPKeepAlivePeriod
+	// }
+	// tcpKACount := 3
+	// if ctx.TCPKeepAliveCount > 0 {
+	// 	tcpKACount = ctx.TCPKeepAliveCount
+	// }
+	// tcpKAInterval := 3
+	// if ctx.TCPKeepAliveInterval > 0 {
+	// 	tcpKAInterval = ctx.TCPKeepAliveInterval
+	// }
 
 	clientConn := &proxyTCPConn{
 		Conn:         proxyClient,
