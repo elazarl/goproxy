@@ -248,7 +248,7 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	req.RequestURI = req.URL.String()
 
-	conn := newProxyTCPConn(dumbResponseWriter{rawConn})
+	conn := newProxyTCPConn(rawConn)
 	conn.Logger = ctx.ProxyLogger
 
 	//set tcp keep alives.
