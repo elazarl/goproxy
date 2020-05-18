@@ -87,7 +87,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		idleTimeout = 90 * time.Second
 	}
 
-	var sendHTTPOK := false
+	sendHTTPOK := false
 
 	if ctx.ForwardProxy != "" {
 
@@ -260,7 +260,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	if sendHTTPOK {
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 	}
-	
+
 	ctx.Logf("targetSiteCon type: %+v", reflect.TypeOf(targetSiteCon))
 	ctx.Logf("targetSiteCon info: %s -> %s", targetSiteCon.LocalAddr().String(), targetSiteCon.RemoteAddr().String())
 
