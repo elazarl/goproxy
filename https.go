@@ -93,10 +93,12 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 
 	if ctx.ForwardProxy != "" {
 
-		setTargetKA = false
-
 		if ctx.ForwardProxyProto == "" {
 			ctx.ForwardProxyProto = "http"
+		}
+
+		if ctx.ForwardProxyProto == "https" {
+			setTargetKA = false
 		}
 
 		ctx.Logf("dial via forward proxy: %+v", ctx.ForwardProxy)
@@ -647,72 +649,119 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 	if err != nil {
 		return nil
 	}
-	if strings.IndexRune(u.Host, ':') == -1 {
-		u.Host += ":443"
-	}
 
-	//set tcp keep alives.
-	tcpKAPeriod := 30
-	if ctx.TCPKeepAlivePeriod > 0 {
-		tcpKAPeriod = ctx.TCPKeepAlivePeriod
-	}
-	tcpKACount := 3
-	if ctx.TCPKeepAliveCount > 0 {
-		tcpKACount = ctx.TCPKeepAliveCount
-	}
-	tcpKAInterval := 3
-	if ctx.TCPKeepAliveInterval > 0 {
-		tcpKAInterval = ctx.TCPKeepAliveInterval
-	}
-
-	return func(network, addr string) (net.Conn, error) {
-		c, err := proxy.dial(network, u.Host)
-		if err != nil {
-			return nil, err
+	if u.Scheme == "" || u.Scheme == "http" {
+		if strings.IndexRune(u.Host, ':') == -1 {
+			u.Host += ":80"
 		}
-		// set the tcp keepalives before we create the tls.Conn since we lose access to the
-		// underlying connection.
-		targetConn := &ProxyTCPConn{
-			Conn:   c,
-			Logger: ctx.ProxyLogger,
-		}
-		kaErr := targetConn.SetKeepaliveParameters(false, tcpKACount, tcpKAInterval, tcpKAPeriod)
-		if kaErr != nil {
-			ctx.Logf("targetConn KeepAlive error: %v", kaErr)
-			targetConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
-			targetConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
-		}
-		c = tls.Client(targetConn, proxy.Tr.TLSClientConfig)
-		connectReq := &http.Request{
-			Method: "CONNECT",
-			URL:    &url.URL{Opaque: addr},
-			Host:   addr,
-			Header: make(http.Header),
-		}
-		if connectReqHandler != nil {
-			connectReqHandler(connectReq)
-		}
-		connectReq.Write(c)
-		// Read response.
-		// Okay to use and discard buffered reader here, because
-		// TLS server will not speak until spoken to.
-		br := bufio.NewReader(c)
-		resp, err := http.ReadResponse(br, connectReq)
-		if err != nil {
-			c.Close()
-			return nil, err
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != 200 {
-			body, err := ioutil.ReadAll(io.LimitReader(resp.Body, 500))
+		return func(network, addr string) (net.Conn, error) {
+			connectReq := &http.Request{
+				Method: "CONNECT",
+				URL:    &url.URL{Opaque: addr},
+				Host:   addr,
+				Header: make(http.Header),
+			}
+			if connectReqHandler != nil {
+				connectReqHandler(connectReq)
+			}
+			c, err := proxy.dial(network, u.Host)
 			if err != nil {
 				return nil, err
 			}
-			c.Close()
-			return nil, errors.New("proxy refused connection" + string(body))
+			connectReq.Write(c)
+			// Read response.
+			// Okay to use and discard buffered reader here, because
+			// TLS server will not speak until spoken to.
+			br := bufio.NewReader(c)
+			resp, err := http.ReadResponse(br, connectReq)
+			if err != nil {
+				c.Close()
+				return nil, err
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				resp, err := ioutil.ReadAll(resp.Body)
+				if err != nil {
+					return nil, err
+				}
+				c.Close()
+				return nil, errors.New("proxy refused connection" + string(resp))
+			}
+			return c, nil
 		}
-		return c, nil
 	}
+
+	if u.Scheme == "https" {
+
+		if strings.IndexRune(u.Host, ':') == -1 {
+			u.Host += ":443"
+		}
+
+		//set tcp keep alives. TODO: make these defaults smaller for forward proxied requests
+		tcpKAPeriod := 30
+		if ctx.TCPKeepAlivePeriod > 0 {
+			tcpKAPeriod = ctx.TCPKeepAlivePeriod
+		}
+		tcpKACount := 3
+		if ctx.TCPKeepAliveCount > 0 {
+			tcpKACount = ctx.TCPKeepAliveCount
+		}
+		tcpKAInterval := 3
+		if ctx.TCPKeepAliveInterval > 0 {
+			tcpKAInterval = ctx.TCPKeepAliveInterval
+		}
+
+		return func(network, addr string) (net.Conn, error) {
+			c, err := proxy.dial(network, u.Host)
+			if err != nil {
+				return nil, err
+			}
+			// set the tcp keepalives before we create the tls.Conn since we lose access to the
+			// underlying connection.
+			targetConn := &ProxyTCPConn{
+				Conn:   c,
+				Logger: ctx.ProxyLogger,
+			}
+			kaErr := targetConn.SetKeepaliveParameters(false, tcpKACount, tcpKAInterval, tcpKAPeriod)
+			if kaErr != nil {
+				ctx.Logf("targetConn KeepAlive error: %v", kaErr)
+				targetConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
+				targetConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
+			}
+			c = tls.Client(targetConn, proxy.Tr.TLSClientConfig)
+			connectReq := &http.Request{
+				Method: "CONNECT",
+				URL:    &url.URL{Opaque: addr},
+				Host:   addr,
+				Header: make(http.Header),
+			}
+			if connectReqHandler != nil {
+				connectReqHandler(connectReq)
+			}
+			connectReq.Write(c)
+			// Read response.
+			// Okay to use and discard buffered reader here, because
+			// TLS server will not speak until spoken to.
+			br := bufio.NewReader(c)
+			resp, err := http.ReadResponse(br, connectReq)
+			if err != nil {
+				c.Close()
+				return nil, err
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				body, err := ioutil.ReadAll(io.LimitReader(resp.Body, 500))
+				if err != nil {
+					return nil, err
+				}
+				c.Close()
+				return nil, errors.New("proxy refused connection" + string(body))
+			}
+			return c, nil
+		}
+
+	}
+	return nil
 }
 
 func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy string, connectReqHandler func(req *http.Request)) func(network, addr string) (net.Conn, error) {
