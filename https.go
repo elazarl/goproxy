@@ -88,8 +88,11 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	}
 
 	sendHTTPOK := false
+	setTargetKA := true
 
 	if ctx.ForwardProxy != "" {
+
+		setTargetKA = false
 
 		if ctx.ForwardProxyProto == "" {
 			ctx.ForwardProxyProto = "http"
@@ -106,7 +109,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 			Proxy: func(req *http.Request) (*url.URL, error) {
 				return url.Parse(ctx.ForwardProxyProto + "://" + ctx.ForwardProxy)
 			},
-			Dial: ctx.Proxy.NewConnectDialToProxyWithHandler(ctx.ForwardProxyProto+"://"+ctx.ForwardProxy, func(req *http.Request) {
+			Dial: ctx.Proxy.NewConnectDialWithKeepAlives(ctx, ctx.ForwardProxyProto+"://"+ctx.ForwardProxy, func(req *http.Request) {
 				if ctx.ForwardProxyAuth != "" {
 					req.Header.Set("Proxy-Authorization", fmt.Sprintf("Basic %s", ctx.ForwardProxyAuth))
 				}
@@ -272,9 +275,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	}
 
 	clientConn := &proxyTCPConn{
-		Conn: proxyClient,
-		//ReadTimeout:  time.Second * time.Duration(ctx.ProxyReadDeadline),
-		//WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
+		Conn:   proxyClient,
 		Logger: ctx.ProxyLogger,
 	}
 	kaErr := clientConn.setKeepaliveParameters(true, tcpKACount, tcpKAInterval, tcpKAPeriod)
@@ -285,16 +286,18 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	}
 
 	targetConn := &proxyTCPConn{
-		Conn: targetSiteCon,
-		//ReadTimeout:  time.Second * time.Duration(ctx.ProxyReadDeadline),
-		//WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
+		Conn:   targetSiteCon,
 		Logger: ctx.ProxyLogger,
 	}
-	kaErr = targetConn.setKeepaliveParameters(false, tcpKACount, tcpKAInterval, tcpKAPeriod)
-	if kaErr != nil {
-		ctx.Logf("targetConn KeepAlive error: %v", kaErr)
-		targetConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
-		targetConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
+	// Since we dont have access to the *tls.Conn underlying connection, we have to set it
+	// during the connectDial to proxy
+	if setTargetKA {
+		kaErr = targetConn.setKeepaliveParameters(false, tcpKACount, tcpKAInterval, tcpKAPeriod)
+		if kaErr != nil {
+			ctx.Logf("targetConn KeepAlive error: %v", kaErr)
+			targetConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
+			targetConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
+		}
 	}
 
 	var wg sync.WaitGroup
@@ -596,6 +599,78 @@ func dialerFromEnv(proxy *ProxyHttpServer) func(network, addr string) (net.Conn,
 
 func (proxy *ProxyHttpServer) NewConnectDialToProxy(https_proxy string) func(network, addr string) (net.Conn, error) {
 	return proxy.NewConnectDialToProxyWithHandler(https_proxy, nil)
+}
+
+func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_proxy string, connectReqHandler func(req *http.Request)) func(network, addr string) (net.Conn, error) {
+	u, err := url.Parse(https_proxy)
+	if err != nil {
+		return nil
+	}
+	if strings.IndexRune(u.Host, ':') == -1 {
+		u.Host += ":443"
+	}
+	//set tcp keep alives.
+	tcpKAPeriod := 30
+	if ctx.TCPKeepAlivePeriod > 0 {
+		tcpKAPeriod = ctx.TCPKeepAlivePeriod
+	}
+	tcpKACount := 3
+	if ctx.TCPKeepAliveCount > 0 {
+		tcpKACount = ctx.TCPKeepAliveCount
+	}
+	tcpKAInterval := 3
+	if ctx.TCPKeepAliveInterval > 0 {
+		tcpKAInterval = ctx.TCPKeepAliveInterval
+	}
+
+	return func(network, addr string) (net.Conn, error) {
+		c, err := proxy.dial(network, u.Host)
+		if err != nil {
+			return nil, err
+		}
+		targetConn := &proxyTCPConn{
+			Conn: c,
+			//ReadTimeout:  time.Second * time.Duration(ctx.ProxyReadDeadline),
+			//WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
+			Logger: ctx.ProxyLogger,
+		}
+		kaErr := targetConn.setKeepaliveParameters(false, tcpKACount, tcpKAInterval, tcpKAPeriod)
+		if kaErr != nil {
+			ctx.Logf("targetConn KeepAlive error: %v", kaErr)
+			targetConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
+			targetConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
+		}
+		c = tls.Client(c, proxy.Tr.TLSClientConfig)
+		connectReq := &http.Request{
+			Method: "CONNECT",
+			URL:    &url.URL{Opaque: addr},
+			Host:   addr,
+			Header: make(http.Header),
+		}
+		if connectReqHandler != nil {
+			connectReqHandler(connectReq)
+		}
+		connectReq.Write(c)
+		// Read response.
+		// Okay to use and discard buffered reader here, because
+		// TLS server will not speak until spoken to.
+		br := bufio.NewReader(c)
+		resp, err := http.ReadResponse(br, connectReq)
+		if err != nil {
+			c.Close()
+			return nil, err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != 200 {
+			body, err := ioutil.ReadAll(io.LimitReader(resp.Body, 500))
+			if err != nil {
+				return nil, err
+			}
+			c.Close()
+			return nil, errors.New("proxy refused connection" + string(body))
+		}
+		return c, nil
+	}
 }
 
 func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy string, connectReqHandler func(req *http.Request)) func(network, addr string) (net.Conn, error) {
