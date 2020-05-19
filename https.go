@@ -629,9 +629,7 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 			return nil, err
 		}
 		targetConn := &proxyTCPConn{
-			Conn: c,
-			//ReadTimeout:  time.Second * time.Duration(ctx.ProxyReadDeadline),
-			//WriteTimeout: time.Second * time.Duration(ctx.ProxyWriteDeadline),
+			Conn:   c,
 			Logger: ctx.ProxyLogger,
 		}
 		kaErr := targetConn.setKeepaliveParameters(false, tcpKACount, tcpKAInterval, tcpKAPeriod)
@@ -640,7 +638,7 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 			targetConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
 			targetConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
 		}
-		c = tls.Client(c, proxy.Tr.TLSClientConfig)
+		c = tls.Client(targetConn, proxy.Tr.TLSClientConfig)
 		connectReq := &http.Request{
 			Method: "CONNECT",
 			URL:    &url.URL{Opaque: addr},
