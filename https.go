@@ -285,19 +285,22 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		clientConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
 	}
 
-	targetConn := &proxyTCPConn{
-		Conn:   targetSiteCon,
-		Logger: ctx.ProxyLogger,
-	}
+	var targetConn *proxyTCPConn
 	// Since we dont have access to the *tls.Conn underlying connection, we have to set it
 	// during the connectDial to proxy
 	if setTargetKA {
+		targetConn = &proxyTCPConn{
+			Conn:   targetSiteCon,
+			Logger: ctx.ProxyLogger,
+		}
 		kaErr = targetConn.setKeepaliveParameters(false, tcpKACount, tcpKAInterval, tcpKAPeriod)
 		if kaErr != nil {
 			ctx.Logf("targetConn KeepAlive error: %v", kaErr)
 			targetConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
 			targetConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
 		}
+	} else {
+		targetConn = targetSiteCon.(*proxyTCPConn)
 	}
 
 	var wg sync.WaitGroup
