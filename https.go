@@ -2,6 +2,7 @@ package goproxy
 
 import (
 	"bufio"
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -203,6 +204,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		targetSiteCon, err = proxy.connectDial("tcp", host)
 		sendHTTPOK = true
 	}
+
 	if err != nil {
 
 		//handle tproxy errors
@@ -302,8 +304,9 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 
 	var wg sync.WaitGroup
 	wg.Add(2)
-	go copyAndClose(ctx, targetConn, clientConn, "sent", &wg)
-	go copyAndClose(ctx, clientConn, targetConn, "recv", &wg)
+	cancelCtx, cancel := context.WithCancel(context.Background())
+	go copyAndClose(cancelCtx, cancel, ctx, targetConn, clientConn, "sent", &wg)
+	go copyAndClose(cancelCtx, cancel, ctx, clientConn, targetConn, "recv", &wg)
 	wg.Wait()
 	if ctx.ForwardMetricsCounters.ProxyBandwidth != nil {
 		metric := *ctx.ForwardMetricsCounters.ProxyBandwidth
@@ -528,24 +531,62 @@ func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader, wg *sync.WaitGroup)
 	wg.Done()
 }
 
-func copyAndClose(ctx *ProxyCtx, dst, src *proxyTCPConn, dir string, wg *sync.WaitGroup) {
+func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *ProxyCtx, dst, src *proxyTCPConn, dir string, wg *sync.WaitGroup) {
+	defer cancel()
+	defer wg.Done()
+
 	size := 32 * 1024
-	if ctx.CopyBufferSize > 0 {
-		size = ctx.CopyBufferSize * 1024
+	if proxyCtx.CopyBufferSize > 0 {
+		size = proxyCtx.CopyBufferSize * 1024
 	}
 
-	copied, err := copyWithBuffer(dst, src, size)
+	buf := make([]byte, size)
+	var written int64
+	var err error
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		nr, er := src.Read(buf)
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		if nr > 0 {
+			nw, ew := dst.Write(buf[0:nr])
+			if nw > 0 {
+				written += int64(nw)
+			}
+			if ew != nil {
+				err = ew
+				break
+			}
+			if nr != nw {
+				err = io.ErrShortWrite
+				break
+			}
+		}
+		if er != nil {
+			if er != io.EOF {
+				err = er
+			}
+			break
+		}
+	}
 	if err != nil {
-		ctx.Warnf("Error copying to client: %s", err)
+		proxyCtx.Warnf("Error copying to client: %s", err)
 	}
 
 	switch dir {
 	case "sent":
-		ctx.BytesSent = copied
+		proxyCtx.BytesSent = written
 	case "recv":
-		ctx.BytesReceived = copied
+		proxyCtx.BytesReceived = written
 	}
-	wg.Done()
 }
 
 func copyWithBuffer(dst io.Writer, src io.Reader, size int) (written int64, err error) {
@@ -609,6 +650,7 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 	if strings.IndexRune(u.Host, ':') == -1 {
 		u.Host += ":443"
 	}
+
 	//set tcp keep alives.
 	tcpKAPeriod := 30
 	if ctx.TCPKeepAlivePeriod > 0 {
@@ -628,6 +670,8 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 		if err != nil {
 			return nil, err
 		}
+		// set the tcp keepalives before we create the tls.Conn since we lose access to the
+		// underlying connection.
 		targetConn := &proxyTCPConn{
 			Conn:   c,
 			Logger: ctx.ProxyLogger,
