@@ -276,7 +276,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		tcpKAInterval = ctx.TCPKeepAliveInterval
 	}
 
-	clientConn := &proxyTCPConn{
+	clientConn := &ProxyTCPConn{
 		Conn:   proxyClient,
 		Logger: ctx.ProxyLogger,
 	}
@@ -287,7 +287,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		clientConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
 	}
 
-	targetConn := &proxyTCPConn{
+	targetConn := &ProxyTCPConn{
 		Conn:   targetSiteCon,
 		Logger: ctx.ProxyLogger,
 	}
@@ -531,7 +531,7 @@ func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader, wg *sync.WaitGroup)
 	wg.Done()
 }
 
-func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *ProxyCtx, dst, src *proxyTCPConn, dir string, wg *sync.WaitGroup) {
+func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *ProxyCtx, dst, src *ProxyTCPConn, dir string, wg *sync.WaitGroup) {
 	defer cancel()
 	defer wg.Done()
 
@@ -672,7 +672,7 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 		}
 		// set the tcp keepalives before we create the tls.Conn since we lose access to the
 		// underlying connection.
-		targetConn := &proxyTCPConn{
+		targetConn := &ProxyTCPConn{
 			Conn:   c,
 			Logger: ctx.ProxyLogger,
 		}

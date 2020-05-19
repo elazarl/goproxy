@@ -13,7 +13,7 @@ import (
 	"github.com/function61/gokit/logex"
 )
 
-type proxyTCPConn struct {
+type ProxyTCPConn struct {
 	net.Conn
 	BytesWrote   int64
 	BytesRead    int64
@@ -24,11 +24,11 @@ type proxyTCPConn struct {
 
 // newProxyTCPConn is a wrapper around a net.TCPConn that allows us to log the number of bytes
 // written to the connection
-func newProxyTCPConn(conn net.Conn) *proxyTCPConn {
-	return &proxyTCPConn{Conn: conn}
+func newProxyTCPConn(conn net.Conn) *ProxyTCPConn {
+	return &ProxyTCPConn{Conn: conn}
 }
 
-func (conn *proxyTCPConn) Write(b []byte) (n int, err error) {
+func (conn *ProxyTCPConn) Write(b []byte) (n int, err error) {
 	if conn.WriteTimeout > 0 {
 		conn.Conn.SetWriteDeadline(time.Now().Add(conn.WriteTimeout))
 	}
@@ -41,7 +41,7 @@ func (conn *proxyTCPConn) Write(b []byte) (n int, err error) {
 	return
 }
 
-func (conn *proxyTCPConn) Read(b []byte) (n int, err error) {
+func (conn *ProxyTCPConn) Read(b []byte) (n int, err error) {
 	if conn.ReadTimeout > 0 {
 		conn.Conn.SetReadDeadline(time.Now().Add(conn.ReadTimeout))
 	}
@@ -54,7 +54,7 @@ func (conn *proxyTCPConn) Read(b []byte) (n int, err error) {
 	return
 }
 
-func (conn *proxyTCPConn) setKeepaliveParameters(sharedConn bool, count, interval, period int) error {
+func (conn *ProxyTCPConn) setKeepaliveParameters(sharedConn bool, count, interval, period int) error {
 	var tcpConn *net.TCPConn
 	var ok bool
 	if sharedConn {
