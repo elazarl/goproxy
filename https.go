@@ -280,7 +280,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		Conn:   proxyClient,
 		Logger: ctx.ProxyLogger,
 	}
-	kaErr := clientConn.setKeepaliveParameters(true, tcpKACount, tcpKAInterval, tcpKAPeriod)
+	kaErr := clientConn.SetKeepaliveParameters(true, tcpKACount, tcpKAInterval, tcpKAPeriod)
 	if kaErr != nil {
 		ctx.Logf("clientConn KeepAlive error: %v", kaErr)
 		clientConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
@@ -294,7 +294,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	// Since we dont have access to the *tls.Conn underlying connection, we have to set it
 	// during the connectDial to proxy
 	if setTargetKA {
-		kaErr = targetConn.setKeepaliveParameters(false, tcpKACount, tcpKAInterval, tcpKAPeriod)
+		kaErr = targetConn.SetKeepaliveParameters(false, tcpKACount, tcpKAInterval, tcpKAPeriod)
 		if kaErr != nil {
 			ctx.Logf("targetConn KeepAlive error: %v", kaErr)
 			targetConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
@@ -676,7 +676,7 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 			Conn:   c,
 			Logger: ctx.ProxyLogger,
 		}
-		kaErr := targetConn.setKeepaliveParameters(false, tcpKACount, tcpKAInterval, tcpKAPeriod)
+		kaErr := targetConn.SetKeepaliveParameters(false, tcpKACount, tcpKAInterval, tcpKAPeriod)
 		if kaErr != nil {
 			ctx.Logf("targetConn KeepAlive error: %v", kaErr)
 			targetConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)

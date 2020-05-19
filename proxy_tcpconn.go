@@ -54,7 +54,7 @@ func (conn *ProxyTCPConn) Read(b []byte) (n int, err error) {
 	return
 }
 
-func (conn *ProxyTCPConn) setKeepaliveParameters(sharedConn bool, count, interval, period int) error {
+func (conn *ProxyTCPConn) SetKeepaliveParameters(sharedConn bool, count, interval, period int) error {
 	var tcpConn *net.TCPConn
 	var ok bool
 	if sharedConn {
