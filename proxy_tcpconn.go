@@ -11,6 +11,7 @@ import (
 
 	"github.com/Windscribe/go-vhost"
 	"github.com/function61/gokit/logex"
+	"golang.org/x/sys/unix"
 )
 
 type ProxyTCPConn struct {
@@ -79,6 +80,9 @@ func (conn *ProxyTCPConn) SetKeepaliveParameters(sharedConn bool, count, interva
 	if err != nil {
 		return err
 	}
+
+	tcpUserTimeout := period + interval*count
+
 	err = rawConn.Control(
 		func(fdPtr uintptr) {
 			// got socket file descriptor. Setting parameters.
@@ -92,6 +96,11 @@ func (conn *ProxyTCPConn) SetKeepaliveParameters(sharedConn bool, count, interva
 			err = syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPINTVL, interval)
 			if err != nil {
 				conn.Logger.Error.Printf("on setting keepalive retry interval: %s", err.Error())
+			}
+			//Set the user timeout to make sure connections close
+			err = syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, unix.TCP_USER_TIMEOUT, int(tcpUserTimeout))
+			if err != nil {
+				conn.Logger.Error.Printf("on setting user timeout to %v: %s", tcpUserTimeout, err.Error())
 			}
 		})
 	if err != nil {

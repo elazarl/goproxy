@@ -11,4 +11,5 @@ require (
 	github.com/oxtoacart/bpool v0.0.0-20190530202638-03653db5a59c
 	github.com/prometheus/client_golang v1.2.1
 	github.com/valyala/bytebufferpool v1.0.0
+	golang.org/x/sys v0.0.0-20191010194322-b09406accb47
 )
