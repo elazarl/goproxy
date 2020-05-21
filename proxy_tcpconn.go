@@ -81,7 +81,7 @@ func (conn *ProxyTCPConn) SetKeepaliveParameters(sharedConn bool, count, interva
 		return err
 	}
 
-	tcpUserTimeout := period + interval*count
+	tcpUserTimeout := ((period + interval*count) - 1) * 1000
 
 	err = rawConn.Control(
 		func(fdPtr uintptr) {
