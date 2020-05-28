@@ -15,7 +15,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 
 	"golang.org/x/net/http/httpproxy"
@@ -148,31 +147,31 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			go copyAndClose(ctx, targetTCP, proxyClientTCP)
 			go copyAndClose(ctx, proxyClientTCP, targetTCP)
 		} else {
+			// There is a race with the runtime here. In the case where the
+			// connection to the target site times out, we cannot control which
+			// io.Copy loop will receive the timeout signal first. This means
+			// that in some cases the error passed to the ConnErrorHandler will
+			// be the timeout error, and in other cases it will be an error raised
+			// by the use of a closed network connection.
+			//
+			// 2020/05/28 23:42:17 [001] WARN: Error copying to client: read tcp 127.0.0.1:33742->127.0.0.1:34763: i/o timeout
+			// 2020/05/28 23:42:17 [001] WARN: Error copying to client: read tcp 127.0.0.1:45145->127.0.0.1:60494: use of closed network connection
+			//
+			// It's also not possible to synchronize these connection closures due to
+			// TCP connections which are half-closed by the target site. When this
+			// happens, only the one side of the connection breaks out of its
+			// io.Copy loop. The other side of the connection remains open until
+			// it either times out or is reset by the client.
 			go func() {
-				var err error
-				var wg sync.WaitGroup
-				wg.Add(2)
-				// Only capture an error from one of the calls to copyOrWarn.
-				// copyOrWarn() is called twice with the same net.Conn pair with
-				// the src and dst parameters inverted. When the connection is
-				// terminated prematurely the net.Error type is the same, but
-				// the directionality of the Error() message changes.
-				go func() {
-					err = copyOrWarn(ctx, targetSiteCon, proxyClient)
-					wg.Done()
-				}()
-				go func() {
-					copyOrWarn(ctx, proxyClient, targetSiteCon)
-					wg.Done()
-				}()
-				wg.Wait()
-
+				err := copyOrWarn(ctx, targetSiteCon, proxyClient)
 				if err != nil && ctx.ConnErrorHandler != nil {
 					ctx.ConnErrorHandler(err)
 				}
-
-				proxyClient.Close()
 				targetSiteCon.Close()
+			}()
+			go func() {
+				copyOrWarn(ctx, proxyClient, targetSiteCon)
+				proxyClient.Close()
 			}()
 		}
 
