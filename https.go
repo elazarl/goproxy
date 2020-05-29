@@ -158,10 +158,10 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			// 2020/05/28 23:42:17 [001] WARN: Error copying to client: read tcp 127.0.0.1:45145->127.0.0.1:60494: use of closed network connection
 			//
 			// It's also not possible to synchronize these connection closures due to
-			// TCP connections which are half-closed by the target site. When this
-			// happens, only the one side of the connection breaks out of its
-			// io.Copy loop. The other side of the connection remains open until
-			// it either times out or is reset by the client.
+			// TCP connections which are half-closed. When this happens, only the one
+			// side of the connection breaks out of its io.Copy loop. The other side
+			// of the connection remains open until it either times out or is reset by
+			// the client.
 			go func() {
 				err := copyOrWarn(ctx, targetSiteCon, proxyClient)
 				if err != nil && ctx.ConnErrorHandler != nil {
