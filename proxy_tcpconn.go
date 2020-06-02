@@ -76,6 +76,12 @@ func (conn *ProxyTCPConn) SetKeepaliveParameters(sharedConn bool, count, interva
 	if setErr != nil {
 		return setErr
 	}
+
+	setErr = tcpConn.SetLinger(0)
+	if setErr != nil {
+		return setErr
+	}
+
 	rawConn, err := tcpConn.SyscallConn()
 	if err != nil {
 		return err
