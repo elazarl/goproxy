@@ -195,8 +195,13 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		if strings.HasPrefix(proxyClient.LocalAddr().String(), ctx.ForwatdTProxyDropIP) {
 			err = errors.New("cannot dial self")
 		} else {
-			if errTCP == nil {
-				targetSiteCon, err = net.DialTCP("tcp", tcpLocal, tcpRemote)
+			if errTCP == nil && tcpRemote != nil {
+				d := net.Dialer{
+					Timeout:   10 * time.Second,
+					LocalAddr: tcpLocal,
+				}
+				targetSiteCon, err = d.Dial("tcp", proxyClient.LocalAddr().String())
+				// targetSiteCon, err = net.DialTCP("tcp", tcpLocal, tcpRemote)
 			} else {
 				err = errTCP
 			}
@@ -279,19 +284,26 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	}
 
 	clientConn := &ProxyTCPConn{
-		Conn:   proxyClient,
-		Logger: ctx.ProxyLogger,
+		Conn:                 proxyClient,
+		Logger:               ctx.ProxyLogger,
+		ReadTimeout:          time.Second * 5,
+		WriteTimeout:         time.Second * 5,
+		IgnoreDeadlineErrors: true,
 	}
 	kaErr := clientConn.SetKeepaliveParameters(true, tcpKACount, tcpKAInterval, tcpKAPeriod)
 	if kaErr != nil {
 		ctx.Logf("clientConn KeepAlive error: %v", kaErr)
 		clientConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
 		clientConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
+		clientConn.IgnoreDeadlineErrors = false
 	}
 
 	targetConn := &ProxyTCPConn{
-		Conn:   targetSiteCon,
-		Logger: ctx.ProxyLogger,
+		Conn:                 targetSiteCon,
+		Logger:               ctx.ProxyLogger,
+		ReadTimeout:          time.Second * 5,
+		WriteTimeout:         time.Second * 5,
+		IgnoreDeadlineErrors: true,
 	}
 	// Since we dont have access to the *tls.Conn underlying connection, we have to set it
 	// during the connectDial to proxy
@@ -301,6 +313,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 			ctx.Logf("targetConn KeepAlive error: %v", kaErr)
 			targetConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
 			targetConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
+			targetConn.IgnoreDeadlineErrors = false
 		}
 	}
 
@@ -573,6 +586,9 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 			}
 		}
 		if er != nil {
+			if netErr, ok := er.(net.Error); ok && netErr.Timeout() && src.IgnoreDeadlineErrors {
+				continue
+			}
 			if er != io.EOF {
 				err = er
 			}
@@ -580,7 +596,7 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 		}
 	}
 	if err != nil {
-		proxyCtx.Warnf("Error copying to client: %s", err)
+		proxyCtx.Warnf("Error copying: %s", err)
 	}
 
 	switch dir {
@@ -719,14 +735,18 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 			// set the tcp keepalives before we create the tls.Conn since we lose access to the
 			// underlying connection.
 			targetConn := &ProxyTCPConn{
-				Conn:   c,
-				Logger: ctx.ProxyLogger,
+				Conn:                 c,
+				Logger:               ctx.ProxyLogger,
+				ReadTimeout:          time.Second * 5,
+				WriteTimeout:         time.Second * 5,
+				IgnoreDeadlineErrors: true,
 			}
 			kaErr := targetConn.SetKeepaliveParameters(false, tcpKACount, tcpKAInterval, tcpKAPeriod)
 			if kaErr != nil {
 				ctx.Logf("targetConn KeepAlive error: %v", kaErr)
 				targetConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
 				targetConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
+				targetConn.IgnoreDeadlineErrors = false
 			}
 			c = tls.Client(targetConn, proxy.Tr.TLSClientConfig)
 			connectReq := &http.Request{

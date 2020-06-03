@@ -250,6 +250,9 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	conn := newProxyTCPConn(rawConn)
 	conn.Logger = ctx.ProxyLogger
+	conn.ReadTimeout = time.Second * 5
+	conn.WriteTimeout = time.Second * 5
+	conn.IgnoreDeadlineErrors = true
 
 	//set tcp keep alives.
 	tcpKAPeriod := 30
@@ -269,6 +272,7 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 		ctx.Logf("HTTP conn KeepAlive error: %v", kaErr)
 		conn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
 		conn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
+		conn.IgnoreDeadlineErrors = false
 	}
 
 	// if ctx.ProxyReadDeadline > 0 {

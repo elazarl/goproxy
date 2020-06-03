@@ -16,11 +16,12 @@ import (
 
 type ProxyTCPConn struct {
 	net.Conn
-	BytesWrote   int64
-	BytesRead    int64
-	ReadTimeout  time.Duration
-	WriteTimeout time.Duration
-	Logger       *logex.Leveled
+	BytesWrote           int64
+	BytesRead            int64
+	ReadTimeout          time.Duration
+	WriteTimeout         time.Duration
+	Logger               *logex.Leveled
+	IgnoreDeadlineErrors bool
 }
 
 // newProxyTCPConn is a wrapper around a net.TCPConn that allows us to log the number of bytes
