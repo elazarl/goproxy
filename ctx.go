@@ -255,7 +255,7 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 	conn.IgnoreDeadlineErrors = true
 
 	//set tcp keep alives.
-	tcpKAPeriod := 30
+	tcpKAPeriod := 5
 	if ctx.TCPKeepAlivePeriod > 0 {
 		tcpKAPeriod = ctx.TCPKeepAlivePeriod
 	}

@@ -1,3 +1,6 @@
+github.com/LiamHaworth/go-tproxy v0.0.0-20190726054950-ef7efd7f24ed/go.mod h1:rA52xkgZwql9LRZXWb2arHEFP6qSR48KY2xOfWzEciQ=
+github.com/Windscribe/go-vhost v0.0.0-20200515224728-512271e17f30 h1:kt/n47TbYRF6GCkP9+LsIxz0gr6BJrcn4KrYZLrS/4g=
+github.com/Windscribe/go-vhost v0.0.0-20200515224728-512271e17f30/go.mod h1:tHa9KOlVZ17d4ZuaNxzdpOKgJszEa6/onY+3QeMt5XM=
 github.com/Windscribe/goproxy v0.0.0-20191106214216-b139bf89b3b9 h1:5LSYj/DzW9if8nb25kYa9NvH9t0Fm22lEmZKUFX2XEM=
 github.com/Windscribe/goproxy v0.0.0-20191106214216-b139bf89b3b9/go.mod h1:jcxWteRILin3Ws4BcHkTcVmQsWg57zqUEFt8mIh4abw=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
@@ -78,6 +81,7 @@ golang.org/x/sys v0.0.0-20180905080454-ebe1bf3edb33/go.mod h1:STP8DvDyc/dI5b8T5h
 golang.org/x/sys v0.0.0-20181116152217-5ac8a444bdc5/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
 golang.org/x/sys v0.0.0-20190215142949-d0b11bdaac8a/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
 golang.org/x/sys v0.0.0-20190422165155-953cdadca894/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+golang.org/x/sys v0.0.0-20191010194322-b09406accb47 h1:/XfQ9z7ib8eEJX2hdgFTZJ/ntt0swNk5oYBziWeTCvY=
 golang.org/x/sys v0.0.0-20191010194322-b09406accb47/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
 golang.org/x/text v0.3.0/go.mod h1:NqM8EUOU14njkJ3fqMW+pc6Ldnwhi/IjpwHt7yyuwOQ=
 gopkg.in/alecthomas/kingpin.v2 v2.2.6/go.mod h1:FMv+mEhP44yOT+4EoQTLFTRgOQ1FBLkstjWtayDeSgw=

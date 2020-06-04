@@ -270,7 +270,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	ctx.Logf("Accepting CONNECT to %s", host)
 
 	//set tcp keep alives.
-	tcpKAPeriod := 30
+	tcpKAPeriod := 5
 	if ctx.TCPKeepAlivePeriod > 0 {
 		tcpKAPeriod = ctx.TCPKeepAlivePeriod
 	}
@@ -714,7 +714,7 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 		}
 
 		//set tcp keep alives. TODO: make these defaults smaller for forward proxied requests
-		tcpKAPeriod := 30
+		tcpKAPeriod := 5
 		if ctx.TCPKeepAlivePeriod > 0 {
 			tcpKAPeriod = ctx.TCPKeepAlivePeriod
 		}
