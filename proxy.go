@@ -30,6 +30,7 @@ type ProxyHttpServer struct {
 	// if nil Tr.Dial will be used
 	ConnectDial func(network string, addr string) (net.Conn, error)
 	CertStore   CertStorage
+	KeepHeader  bool
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
@@ -118,7 +119,9 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 				proxy.serveWebsocket(ctx, w, r)
 			}
 
-			removeProxyHeaders(ctx, r)
+			if !proxy.KeepHeader {
+				removeProxyHeaders(ctx, r)
+			}
 			resp, err = ctx.RoundTrip(r)
 			if err != nil {
 				ctx.Error = err
