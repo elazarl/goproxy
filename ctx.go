@@ -40,6 +40,7 @@ type ProxyCtx struct {
 	ForwardProxyHeaders                  []ForwardProxyHeader
 	ForwardMetricsCounters               MetricsCounters
 	ForwardProxyRegWrite                 bool
+	ForwardProxyErrorFallbackAuth        bool
 	ForwardProxyErrorFallback            func() (string, string)
 	ForwardProxyFallbackTimeout          int
 	ForwardProxyFallbackSecondaryTimeout int
@@ -212,10 +213,14 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 			// if a fallback func was provided, retry
 			if ctx.ForwardProxyErrorFallback != nil {
 				ctx.ForwardProxyErrorFallback = nil
-				newForwardProxy, acc := ctx.ForwardProxyErrorFallback()
+				newForwardProxy, extra := ctx.ForwardProxyErrorFallback()
 				if newForwardProxy != "" {
 					ctx.ForwardProxy = newForwardProxy
-					ctx.Accounting = acc
+					if ctx.ForwardProxyErrorFallbackAuth {
+						ctx.ForwardProxyAuth = extra
+					} else {
+						ctx.Accounting = extra
+					}
 					return ctx.RoundTrip(req)
 				}
 			}
