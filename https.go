@@ -101,7 +101,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 			setTargetKA = false
 		}
 
-		ctx.Logf("dial via forward proxy: %+v", ctx.ForwardProxy)
+		ctx.Logf("dial via forward proxy: %v %+v", ctx.ForwardProxyProto, ctx.ForwardProxy)
 
 		tr := &http.Transport{
 			MaxIdleConns:          ctx.MaxIdleConns,
@@ -127,6 +127,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		}
 
 		if ctx.ForwardProxyFallbackTimeout > 0 {
+			ctx.Logf("forward proxt fallback timeout set %+v", ctx.ForwardProxyFallbackTimeout)
 			tr.DialContext = (&net.Dialer{
 				Timeout:   time.Duration(int64(ctx.ForwardProxyFallbackTimeout)) * time.Second,
 				KeepAlive: 30 * time.Second,
