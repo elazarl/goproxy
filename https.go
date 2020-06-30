@@ -771,8 +771,10 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 			}
 			defer resp.Body.Close()
 			if resp.StatusCode != 200 {
+				ctx.Logf("connect dial got error reponse: %v", resp.StatusCode)
 				body, err := ioutil.ReadAll(io.LimitReader(resp.Body, 500))
 				if err != nil {
+					ctx.Logf("connect dial error read body: %v", err)
 					return nil, err
 				}
 				c.Close()
