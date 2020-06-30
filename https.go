@@ -681,7 +681,6 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 			if connectReqHandler != nil {
 				connectReqHandler(connectReq)
 			}
-			ctx.Logf("dialing target with url: %+v  and req: %+v", u, connectReq)
 			c, err := proxy.dial(network, u.Host)
 			if err != nil {
 				return nil, err
@@ -698,6 +697,7 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 			}
 			defer resp.Body.Close()
 			if resp.StatusCode != 200 {
+				ctx.Logf("dialing target with url: %+v  and req: %+v", u, connectReq)
 				ctx.Logf("connect dial got error reponse: %+v", resp)
 				resp, err := ioutil.ReadAll(resp.Body)
 				if err != nil {
@@ -774,6 +774,7 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 			}
 			defer resp.Body.Close()
 			if resp.StatusCode != 200 {
+				ctx.Logf("dialing target with url: %+v  and req: %+v", u, connectReq)
 				ctx.Logf("connect dial got error reponse: %+v", resp)
 				body, err := ioutil.ReadAll(io.LimitReader(resp.Body, 500))
 				if err != nil {
