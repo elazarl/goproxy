@@ -969,3 +969,41 @@ func TestSimpleHttpRequest(t *testing.T) {
 
 	server.Shutdown(context.TODO())
 }
+
+func TestResponseContentLength(t *testing.T) {
+	// target server
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("hello world"))
+	}))
+	defer srv.Close()
+
+	// proxy server
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		buf := &bytes.Buffer{}
+		buf.Write([]byte("change"))
+		resp.Body = ioutil.NopCloser(buf)
+		return resp
+	})
+	proxySrv := httptest.NewServer(proxy)
+	defer proxySrv.Close()
+
+	// send request
+	http.DefaultClient.Transport = &http.Transport{
+		Proxy: func(req *http.Request) (*url.URL, error) {
+			return url.Parse(proxySrv.URL)
+		},
+	}
+	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
+	resp, _ := http.DefaultClient.Do(req)
+
+	body, _ := ioutil.ReadAll(resp.Body)
+	defer resp.Body.Close()
+
+	if int64(len(body)) != resp.ContentLength {
+		t.Logf("response body: %s", string(body))
+		t.Logf("response body Length: %d", len(body))
+		t.Logf("response Content-Length: %d", resp.ContentLength)
+		t.Fatalf("Wrong response Content-Length.")
+	}
+}
