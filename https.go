@@ -164,7 +164,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			// the client.
 			go func() {
 				err := copyOrWarn(ctx, targetSiteCon, proxyClient)
-				if err != nil && ctx.ConnErrorHandler != nil {
+				if err != nil && ctx.ConnErrorHandler != nil && !isClosedNetworkConnError(err) {
 					ctx.ConnErrorHandler(err)
 				}
 				targetSiteCon.Close()
@@ -347,9 +347,15 @@ func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
 	}
 }
 
+// isClosedNetworkConnError returns true if the error contains the suffix "use of closed network connection".
+// This isn't ideal, and in Go 1.16 we will be able to check for net.ErrClosed.
+func isClosedNetworkConnError(err error) bool {
+	return strings.HasSuffix(err.Error(), "use of closed network connection")
+}
+
 func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader) error {
 	_, err := io.Copy(dst, src)
-	if err != nil {
+	if err != nil && !isClosedNetworkConnError(err) {
 		ctx.Warnf("Error copying to client: %s", err)
 	}
 	return err
