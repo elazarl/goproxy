@@ -347,6 +347,8 @@ func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
 	}
 }
 
+// isClosedNetworkConnError returns true if the error contains the suffix "use of closed network connection".
+// This isn't ideal, and in Go 1.16 we will be able to check for net.ErrClosed.
 func isClosedNetworkConnError(err error) bool {
 	return strings.HasSuffix(err.Error(), "use of closed network connection")
 }
