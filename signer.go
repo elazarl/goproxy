@@ -134,7 +134,6 @@ func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err er
 		},
 		NotBefore:             start,
 		NotAfter:              end,
-		DNSNames:              hosts,
 		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
