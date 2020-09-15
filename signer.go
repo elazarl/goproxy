@@ -36,40 +36,41 @@ func hashSortedBigInt(lst []string) *big.Int {
 var goproxySignerVersion = ":goroxy1"
 
 type ExpiringCertMap struct {
-	TTLSeconds int64
+	TTL  time.Duration
 
 	data sync.Map
-	ttls sync.Map
 }
 
-func (t *ExpiringCertMap) Store(key string, val *tls.Certificate) {
-	t.ttls.Store(key, time.Now().Unix())
-	t.data.Store(key, val)
+type expireEntry struct {
+	ExpiresAt time.Time
+	Value	  interface{}
 }
 
-func (t *ExpiringCertMap) Load(key string) (cert *tls.Certificate) {
-	ttl, ok := t.ttls.Load(key)
-	if !ok || time.Now().Unix()-ttl.(int64) > t.TTLSeconds {
-		return nil
-	}
-
-	loadedCert, ok := t.data.Load(key)
-	if !ok {
-		return nil
-	}
-
-	return loadedCert.(*tls.Certificate)
+func (t *ExpiringCertMap) Store(key string, val interface{}) {
+	t.data.Store(key, expireEntry{
+		ExpiresAt: time.Now().Add(t.TTL),
+		Value: val,
+	})
 }
 
-func newTTLMap(ttlSeconds int64) (m ExpiringCertMap) {
-	m.TTLSeconds = ttlSeconds
+func (t *ExpiringCertMap) Load(key string) (val interface{}) {
+	entry, ok := t.data.Load(key)
+	if !ok { return nil }
+
+	expireEntry := entry.(expireEntry)
+	if expireEntry.ExpiresAt.After(time.Now()) { return nil }
+
+	return expireEntry.Value
+}
+
+func newTTLMap(ttl time.Duration) (m ExpiringCertMap) {
+	m.TTL = ttl
 
 	go func() {
 		for now := range time.Tick(time.Second) {
-			m.ttls.Range(func(k, v interface{}) bool {
-				if now.Unix()-v.(int64) > ttlSeconds {
+			m.data.Range(func(k, v interface{}) bool {
+				if v.(expireEntry).ExpiresAt.After(now) {
 					m.data.Delete(k)
-					m.ttls.Delete(k)
 				}
 				return true
 			})
@@ -103,7 +104,7 @@ func (s *cachedSigner) signHost(ca tls.Certificate, hosts []string) (cert *tls.C
 	defer func() { <-s.semaphore }()
 
 	if cachedCert := s.cache.Load(hostKey); cachedCert != nil {
-		return cachedCert, nil
+		return cachedCert.(*tls.Certificate), nil
 	}
 
 	genCert, err := signHost(ca, hosts)
