@@ -1,15 +1,10 @@
 package goproxy
 
 import (
-	"crypto"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rsa"
 	"crypto/sha1"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"fmt"
 	"math/big"
 	"math/rand"
 	"net"
@@ -80,27 +75,13 @@ func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err er
 		return
 	}
 
-	var certpriv crypto.Signer
-	switch ca.PrivateKey.(type) {
-	case *rsa.PrivateKey:
-		if certpriv, err = rsa.GenerateKey(&csprng, 2048); err != nil {
-			return
-		}
-	case *ecdsa.PrivateKey:
-		if certpriv, err = ecdsa.GenerateKey(elliptic.P256(), &csprng); err != nil {
-			return
-		}
-	default:
-		err = fmt.Errorf("unsupported key type %T", ca.PrivateKey)
-	}
-
 	var derBytes []byte
-	if derBytes, err = x509.CreateCertificate(&csprng, &template, x509ca, certpriv.Public(), ca.PrivateKey); err != nil {
+	if derBytes, err = x509.CreateCertificate(&csprng, &template, x509ca, x509ca.PublicKey, ca.PrivateKey); err != nil {
 		return
 	}
 	return &tls.Certificate{
 		Certificate: [][]byte{derBytes, ca.Certificate[0]},
-		PrivateKey:  certpriv,
+		PrivateKey:  ca.PrivateKey,
 	}, nil
 }
 
