@@ -35,7 +35,6 @@ var goproxySignerVersion = ":goroxy1"
 func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err error) {
 	var x509ca *x509.Certificate
 
-	// Use the provided ca and not the global GoproxyCa for certificate generation.
 	if x509ca, err = x509.ParseCertificate(ca.Certificate[0]); err != nil {
 		return
 	}
@@ -47,11 +46,10 @@ func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err er
 
 	serial := big.NewInt(rand.Int63())
 	template := x509.Certificate{
-		// TODO(elazar): instead of this ugly hack, just encode the certificate and hash the binary form.
 		SerialNumber: serial,
 		Issuer:       x509ca.Subject,
 		Subject: pkix.Name{
-			Organization: []string{"GoProxy untrusted MITM proxy Inc"},
+			Organization: []string{"http proxy inc."},
 		},
 		NotBefore: start,
 		NotAfter:  end,

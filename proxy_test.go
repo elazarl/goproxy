@@ -22,8 +22,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/elazarl/goproxy"
-	goproxy_image "github.com/elazarl/goproxy/ext/image"
+	"github.com/hazcod/goproxy"
+	goproxy_image "github.com/hazcod/goproxy/ext/image"
 )
 
 var acceptAllCerts = &tls.Config{InsecureSkipVerify: true}
