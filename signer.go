@@ -5,11 +5,14 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"errors"
 	"math/big"
 	"math/rand"
 	"net"
 	"runtime"
 	"sort"
+	"strings"
+	"sync"
 	"time"
 )
 
@@ -32,17 +35,94 @@ func hashSortedBigInt(lst []string) *big.Int {
 
 var goproxySignerVersion = ":goroxy1"
 
+type ExpiringCertMap struct {
+	TTLSeconds int64
+
+	data sync.Map
+	ttls sync.Map
+}
+
+func (t *ExpiringCertMap) Store(key string, val *tls.Certificate) {
+	t.ttls.Store(key, time.Now().Unix())
+	t.data.Store(key, val)
+}
+
+func (t *ExpiringCertMap) Load(key string) (cert *tls.Certificate) {
+	ttl, ok := t.ttls.Load(key)
+	if !ok || time.Now().Unix()-ttl.(int64) > t.TTLSeconds {
+		return nil
+	}
+
+	loadedCert, ok := t.data.Load(key)
+	if !ok {
+		return nil
+	}
+
+	return loadedCert.(*tls.Certificate)
+}
+
+func newTTLMap(ttlSeconds int64) (m ExpiringCertMap) {
+	m.TTLSeconds = ttlSeconds
+
+	go func() {
+		for now := range time.Tick(time.Second) {
+			m.ttls.Range(func(k, v interface{}) bool {
+				if now.Unix()-v.(int64) > ttlSeconds {
+					m.data.Delete(k)
+					m.ttls.Delete(k)
+				}
+				return true
+			})
+		}
+	}()
+
+	return
+}
+
+type cachedSigner struct {
+	cache     ExpiringCertMap
+	semaphore chan struct{}
+}
+
+func newCachedSigner() cachedSigner {
+	return cachedSigner{cache: newTTLMap(3600), semaphore: make(chan struct{}, 1)}
+}
+
+func (s *cachedSigner) signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err error) {
+	if len(hosts) == 0 {
+		return cert, errors.New("empty hosts given")
+	}
+
+	if len(ca.Certificate) == 0 {
+		return cert, errors.New("no CA certificates given")
+	}
+
+	hostKey := strings.Join(hosts, "/")
+
+	s.semaphore <- struct{}{}
+	defer func() { <-s.semaphore }()
+
+	if cachedCert := s.cache.Load(hostKey); cachedCert != nil {
+		return cachedCert, nil
+	}
+
+	genCert, err := signHost(ca, hosts)
+	if err != nil {
+		return cert, err
+	}
+
+	s.cache.Store(hostKey, genCert)
+
+	return genCert, nil
+}
+
 func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err error) {
 	var x509ca *x509.Certificate
-
 	if x509ca, err = x509.ParseCertificate(ca.Certificate[0]); err != nil {
 		return
 	}
-	start := time.Unix(0, 0)
-	end, err := time.Parse("2006-01-02", "2049-12-31")
-	if err != nil {
-		panic(err)
-	}
+	start := time.Now()
+	end := start.AddDate(10, 0, 0)
 
 	serial := big.NewInt(rand.Int63())
 	template := x509.Certificate{
@@ -51,9 +131,9 @@ func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err er
 		Subject: pkix.Name{
 			Organization: []string{"http proxy inc."},
 		},
-		NotBefore: start,
-		NotAfter:  end,
-
+		NotBefore:             start,
+		NotAfter:              end,
+		DNSNames:              hosts,
 		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
@@ -77,10 +157,13 @@ func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err er
 	if derBytes, err = x509.CreateCertificate(&csprng, &template, x509ca, x509ca.PublicKey, ca.PrivateKey); err != nil {
 		return
 	}
-	return &tls.Certificate{
+
+	tlsCert := &tls.Certificate{
 		Certificate: [][]byte{derBytes, ca.Certificate[0]},
 		PrivateKey:  ca.PrivateKey,
-	}, nil
+	}
+
+	return tlsCert, nil
 }
 
 func init() {

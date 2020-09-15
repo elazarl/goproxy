@@ -432,6 +432,8 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy strin
 }
 
 func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls.Config, error) {
+	cachedSigner := newCachedSigner()
+
 	return func(host string, ctx *ProxyCtx) (*tls.Config, error) {
 		var err error
 		var cert *tls.Certificate
@@ -441,7 +443,7 @@ func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls
 		ctx.Logf("signing for %s", stripPort(host))
 
 		genCert := func() (*tls.Certificate, error) {
-			return signHost(*ca, []string{hostname})
+			return cachedSigner.signHost(*ca, []string{hostname})
 		}
 		if ctx.certStore != nil {
 			cert, err = ctx.certStore.Fetch(hostname, genCert)
