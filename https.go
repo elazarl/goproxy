@@ -29,10 +29,11 @@ const (
 )
 
 var (
-	OkConnect       = &ConnectAction{Action: ConnectAccept, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
-	MitmConnect     = &ConnectAction{Action: ConnectMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
-	HTTPMitmConnect = &ConnectAction{Action: ConnectHTTPMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
-	RejectConnect   = &ConnectAction{Action: ConnectReject, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
+	certSigner		= newCachedSigner()
+	OkConnect       = &ConnectAction{Action: ConnectAccept, TLSConfig: TLSConfigFromCA(&GoproxyCa, &certSigner)}
+	MitmConnect     = &ConnectAction{Action: ConnectMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa, &certSigner)}
+	HTTPMitmConnect = &ConnectAction{Action: ConnectHTTPMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa, &certSigner)}
+	RejectConnect   = &ConnectAction{Action: ConnectReject, TLSConfig: TLSConfigFromCA(&GoproxyCa, &certSigner)}
 	httpsRegexp     = regexp.MustCompile(`^https:\/\/`)
 )
 
@@ -431,20 +432,19 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy strin
 	return nil
 }
 
-func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls.Config, error) {
-	cachedSigner := newCachedSigner()
-
+func TLSConfigFromCA(ca *tls.Certificate, signer *cachedSigner) func(host string, ctx *ProxyCtx) (*tls.Config, error) {
 	return func(host string, ctx *ProxyCtx) (*tls.Config, error) {
 		var err error
 		var cert *tls.Certificate
 
 		hostname := stripPort(host)
 		config := defaultTLSConfig.Clone()
-		ctx.Logf("signing for %s", stripPort(host))
+		ctx.Logf("signing for %s (%s)", stripPort(host), host)
 
 		genCert := func() (*tls.Certificate, error) {
-			return cachedSigner.signHost(*ca, []string{hostname})
+			return signer.signHost(*ca, []string{host})
 		}
+
 		if ctx.certStore != nil {
 			cert, err = ctx.certStore.Fetch(hostname, genCert)
 		} else {

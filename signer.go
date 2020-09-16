@@ -1,7 +1,6 @@
 package goproxy
 
 import (
-	"crypto/sha1"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -15,25 +14,6 @@ import (
 	"sync"
 	"time"
 )
-
-func hashSorted(lst []string) []byte {
-	c := make([]string, len(lst))
-	copy(c, lst)
-	sort.Strings(c)
-	h := sha1.New()
-	for _, s := range c {
-		h.Write([]byte(s + ","))
-	}
-	return h.Sum(nil)
-}
-
-func hashSortedBigInt(lst []string) *big.Int {
-	rv := new(big.Int)
-	rv.SetBytes(hashSorted(lst))
-	return rv
-}
-
-var goproxySignerVersion = ":goroxy1"
 
 type ExpiringCertMap struct {
 	TTL  time.Duration
@@ -86,19 +66,16 @@ type cachedSigner struct {
 }
 
 func newCachedSigner() cachedSigner {
-	return cachedSigner{cache: newTTLMap(3600), semaphore: make(chan struct{}, 1)}
+	return cachedSigner{cache: newTTLMap(time.Hour), semaphore: make(chan struct{}, 1)}
 }
 
 func (s *cachedSigner) signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err error) {
-	if len(hosts) == 0 {
-		return cert, errors.New("empty hosts given")
-	}
-
 	if len(ca.Certificate) == 0 {
 		return cert, errors.New("no CA certificates given")
 	}
 
-	hostKey := strings.Join(hosts, "/")
+	sort.Strings(hosts)
+	hostKey := strings.Join(hosts, ";")
 
 	s.semaphore <- struct{}{}
 	defer func() { <-s.semaphore }()
@@ -117,7 +94,7 @@ func (s *cachedSigner) signHost(ca tls.Certificate, hosts []string) (cert *tls.C
 	return genCert, nil
 }
 
-func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err error) {
+func signHost(ca tls.Certificate, hosts  []string) (cert *tls.Certificate, err error) {
 	var x509ca *x509.Certificate
 	if x509ca, err = x509.ParseCertificate(ca.Certificate[0]); err != nil {
 		return
@@ -138,18 +115,26 @@ func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err er
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
 	}
-	for _, h := range hosts {
-		if ip := net.ParseIP(h); ip != nil {
-			template.IPAddresses = append(template.IPAddresses, ip)
-		} else {
-			template.DNSNames = append(template.DNSNames, h)
-			template.Subject.CommonName = h
+
+	for _, host := range hosts {
+		host = stripPort(host)
+
+		if template.Subject.CommonName == "" {
+			template.Subject.CommonName = host
 		}
+
+		if ip := net.ParseIP(host); ip != nil {
+			template.IPAddresses = append(template.IPAddresses, ip)
+			continue
+		}
+
+		template.DNSNames = append(template.DNSNames, host)
+		template.Subject.CommonName = host
 	}
 
-	hash := hashSorted(append(hosts, goproxySignerVersion, ":"+runtime.Version()))
+	hash := strings.Join(hosts,",") + ":" + runtime.Version()
 	var csprng CounterEncryptorRand
-	if csprng, err = NewCounterEncryptorRandFromKey(ca.PrivateKey, hash); err != nil {
+	if csprng, err = NewCounterEncryptorRandFromKey(ca.PrivateKey, []byte(hash)); err != nil {
 		return
 	}
 

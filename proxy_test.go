@@ -753,6 +753,7 @@ func TestSelfRequest(t *testing.T) {
 
 func TestHasGoproxyCA(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
+	proxy.Verbose = true
 	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 	s := httptest.NewServer(proxy)
 
