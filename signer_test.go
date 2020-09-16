@@ -87,11 +87,11 @@ func testSignerTls(t *testing.T, ca tls.Certificate) {
 }
 
 func TestSignerRsaTls(t *testing.T) {
-	testSignerTls(t, GoproxyCa)
+	testSignerTls(t, CertificateAuthority)
 }
 
 func TestSignerRsaX509(t *testing.T) {
-	testSignerX509(t, GoproxyCa)
+	testSignerX509(t, CertificateAuthority)
 }
 
 func TestSignerEcdsaTls(t *testing.T) {
@@ -109,7 +109,7 @@ func BenchmarkSignRsa(b *testing.B) {
 	var cert *tls.Certificate
 	var err error
 	for n := 0; n < b.N; n++ {
-		cert, err = signHost(GoproxyCa, []string{"example.com", "1.1.1.1", "localhost"})
+		cert, err = signHost(CertificateAuthority, []string{"example.com", "1.1.1.1", "localhost"})
 
 	}
 	c = cert

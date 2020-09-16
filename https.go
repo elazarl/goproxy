@@ -30,10 +30,10 @@ const (
 
 var (
 	certSigner		= newCachedSigner()
-	OkConnect       = &ConnectAction{Action: ConnectAccept, TLSConfig: TLSConfigFromCA(&GoproxyCa, &certSigner)}
-	MitmConnect     = &ConnectAction{Action: ConnectMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa, &certSigner)}
-	HTTPMitmConnect = &ConnectAction{Action: ConnectHTTPMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa, &certSigner)}
-	RejectConnect   = &ConnectAction{Action: ConnectReject, TLSConfig: TLSConfigFromCA(&GoproxyCa, &certSigner)}
+	OkConnect       = &ConnectAction{Action: ConnectAccept, TLSConfig: TLSConfigFromCA(&CertificateAuthority, &certSigner)}
+	MitmConnect     = &ConnectAction{Action: ConnectMitm, TLSConfig: TLSConfigFromCA(&CertificateAuthority, &certSigner)}
+	HTTPMitmConnect = &ConnectAction{Action: ConnectHTTPMitm, TLSConfig: TLSConfigFromCA(&CertificateAuthority, &certSigner)}
+	RejectConnect   = &ConnectAction{Action: ConnectReject, TLSConfig: TLSConfigFromCA(&CertificateAuthority, &certSigner)}
 	httpsRegexp     = regexp.MustCompile(`^https:\/\/`)
 )
 
@@ -126,7 +126,6 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				wg.Wait()
 				proxyClientTCP.Close()
 				targetTCP.Close()
-
 			}()
 		} else {
 			go func() {
@@ -137,7 +136,6 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				wg.Wait()
 				proxyClient.Close()
 				targetSiteCon.Close()
-
 			}()
 		}
 
@@ -182,7 +180,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		}
 	case ConnectMitm:
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
-		ctx.Logf("Assuming CONNECT is TLS, mitm proxying it")
+		ctx.Logf("Assuming CONNECT is TLS, mitm proxying for host %s", host)
 		// this goes in a separate goroutine, so that the net/http server won't think we're
 		// still handling the request even after hijacking the connection. Those HTTP CONNECT
 		// request can take forever, and the server will be stuck when "closed".
@@ -205,6 +203,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			}
 			defer rawClientTls.Close()
 			clientTlsReader := bufio.NewReader(rawClientTls)
+
 			for !isEof(clientTlsReader) {
 				req, err := http.ReadRequest(clientTlsReader)
 				var ctx = &ProxyCtx{Req: req, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy, UserData: ctx.UserData}
@@ -253,15 +252,18 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				if strings.HasPrefix(text, statusCode) {
 					text = text[len(statusCode):]
 				}
+
 				// always use 1.1 to support chunked encoding
 				if _, err := io.WriteString(rawClientTls, "HTTP/1.1"+" "+statusCode+text+"\r\n"); err != nil {
 					ctx.Warnf("Cannot write TLS response HTTP status from mitm'd client: %v", err)
 					return
 				}
+
 				// Since we don't know the length of resp, return chunked encoded response
 				// TODO: use a more reasonable scheme
 				resp.Header.Del("Content-Length")
 				resp.Header.Set("Transfer-Encoding", "chunked")
+
 				// Force connection close otherwise chrome will keep CONNECT tunnel open forever
 				resp.Header.Set("Connection", "close")
 				if err := resp.Header.Write(rawClientTls); err != nil {
@@ -277,12 +279,17 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					ctx.Warnf("Cannot write TLS response body from mitm'd client: %v", err)
 					return
 				}
+				_ = resp.Body.Close()
 				if err := chunked.Close(); err != nil {
 					ctx.Warnf("Cannot write TLS chunked EOF from mitm'd client: %v", err)
 					return
 				}
 				if _, err = io.WriteString(rawClientTls, "\r\n"); err != nil {
 					ctx.Warnf("Cannot write TLS response chunked trailer from mitm'd client: %v", err)
+					return
+				}
+				if req.Close {
+					ctx.Logf("non-persistent connection, closing...")
 					return
 				}
 			}
@@ -318,7 +325,7 @@ func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader, wg *sync.WaitGroup)
 }
 
 func copyAndClose(ctx *ProxyCtx, dst, src halfClosable, wg *sync.WaitGroup) {
-	if _, err := io.Copy(dst, src); err != nil {
+	if n, err := io.Copy(dst, src); err != nil && n == 0 {
 		ctx.Warnf("Error copying to client: %s", err)
 	}
 

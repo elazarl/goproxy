@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"github.com/hazcod/goproxy"
-	"github.com/rogpeppe/go-charset/charset"
-	_ "github.com/rogpeppe/go-charset/data"
+	"github.com/paulrosania/go-charset/charset"
+	_ "github.com/paulrosania/go-charset/data"
 )
 
 var IsHtml goproxy.RespCondition = goproxy.ContentTypeIs("text/html")

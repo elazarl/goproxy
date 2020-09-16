@@ -10,7 +10,7 @@ func init() {
 		panic("Error parsing builtin CA " + goproxyCaErr.Error())
 	}
 	var err error
-	if GoproxyCa.Leaf, err = x509.ParseCertificate(GoproxyCa.Certificate[0]); err != nil {
+	if CertificateAuthority.Leaf, err = x509.ParseCertificate(CertificateAuthority.Certificate[0]); err != nil {
 		panic("Error parsing builtin CA " + err.Error())
 	}
 }
@@ -19,6 +19,10 @@ var tlsClientSkipVerify = &tls.Config{InsecureSkipVerify: true}
 
 var defaultTLSConfig = &tls.Config{
 	InsecureSkipVerify: true,
+	Renegotiation: tls.RenegotiateOnceAsClient,
+	SessionTicketsDisabled: true,
+	PreferServerCipherSuites: true,
+	NextProtos: []string{"http/1.1", "http/1.0"},
 }
 
 var CA_CERT = []byte(`-----BEGIN CERTIFICATE-----
@@ -108,4 +112,4 @@ cj/azKBaT04IOMLaN8xfSqitJYSraWMVNgGJM5vfcVaivZnNh0lZBv+qu6YkdM88
 4/avCJ8IutT+FcMM+GbGazOm5ALWqUyhrnbLGc4CQMPfe7Il6NxwcrOxT8w=
 -----END RSA PRIVATE KEY-----`)
 
-var GoproxyCa, goproxyCaErr = tls.X509KeyPair(CA_CERT, CA_KEY)
+var CertificateAuthority, goproxyCaErr = tls.X509KeyPair(CA_CERT, CA_KEY)
