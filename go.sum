@@ -1,3 +1,5 @@
+github.com/gorilla/websocket v1.4.2 h1:+/TMaTYc4QFitKJxsQ7Yye35DkWvkdLcvGKqM+x0Ufc=
+github.com/gorilla/websocket v1.4.2/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/hazcod/goproxy/ext v0.0.0-20200915072859-4a2db01fc5a4 h1:g0UeBBAAt/l33p1L5cLMhHq5GQPu2IqcOhgCri/sMes=
 github.com/hazcod/goproxy/ext v0.0.0-20200915072859-4a2db01fc5a4/go.mod h1:U09EjHFpO67GjPe3i04ckbcnmsixjbT1tc2NgOcd6J0=
 github.com/rogpeppe/go-charset v0.0.0-20180617210344-2471d30d28b4/go.mod h1:qgYeAmZ5ZIpBWTGllZSQnw97Dj+woV0toclVaRGI8pc=
