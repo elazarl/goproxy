@@ -36,9 +36,8 @@ var (
 )
 
 type ConnectAction struct {
-	Action    ConnectActionLiteral
-	Hijack    func(req *http.Request, client net.Conn, ctx *ProxyCtx)
-	TLSConfig func(host string, ctx *ProxyCtx) (*tls.Config, error)
+	Action ConnectActionLiteral
+	Hijack func(req *http.Request, client net.Conn, ctx *ProxyCtx)
 }
 
 func stripPort(s string) string {
@@ -191,14 +190,10 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 	case ConnectMitm:
 		ctx.Logf("Assuming CONNECT is TLS, mitm proxying it")
 
-		tlsConfig := defaultTLSConfig
-		if todo.TLSConfig != nil {
-			var err error
-			tlsConfig, err = todo.TLSConfig(host, ctx)
-			if err != nil {
-				httpError(proxyClient, ctx, err)
-				return
-			}
+		tlsConfig, err := TLSConfigFromCA(proxy.CertificateAuthority)(host, ctx)
+		if err != nil {
+			httpError(proxyClient, ctx, err)
+			return
 		}
 
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))

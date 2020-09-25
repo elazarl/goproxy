@@ -765,7 +765,7 @@ func TestHasGoproxyCA(t *testing.T) {
 
 	proxyUrl, _ := url.Parse(s.URL)
 	goproxyCA := x509.NewCertPool()
-	goproxyCA.AddCert(goproxy.CertificateAuthority.Leaf)
+	goproxyCA.AddCert(proxy.CertificateAuthority.Leaf)
 
 	tr := &http.Transport{TLSClientConfig: &tls.Config{RootCAs: goproxyCA}, Proxy: http.ProxyURL(proxyUrl)}
 	client := &http.Client{Transport: tr}
@@ -828,7 +828,7 @@ func TestProxyWithCertStorage(t *testing.T) {
 
 	proxyUrl, _ := url.Parse(s.URL)
 	goproxyCA := x509.NewCertPool()
-	goproxyCA.AddCert(goproxy.CertificateAuthority.Leaf)
+	goproxyCA.AddCert(proxy.CertificateAuthority.Leaf)
 
 	tr := &http.Transport{TLSClientConfig: &tls.Config{RootCAs: goproxyCA}, Proxy: http.ProxyURL(proxyUrl)}
 	client := &http.Client{Transport: tr}
