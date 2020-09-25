@@ -2,6 +2,7 @@ package goproxy
 
 import (
 	"crypto/tls"
+	"log"
 	"sort"
 	"strings"
 	"sync"
@@ -74,9 +75,11 @@ func (s *cachedSigner) signHost(ca tls.Certificate, hosts []string) (cert *tls.C
 	defer func() { <-s.semaphore }()
 
 	if cachedCert := s.cache.Load(hostKey); cachedCert != nil {
+		log.Print("returning cached cert for " + hostKey)
 		return cachedCert.(*tls.Certificate), nil
 	}
 
+	log.Print("generating fresh cert for " + hostKey)
 	genCert, err := signHost(ca, hosts)
 	if err != nil {
 		return cert, err
