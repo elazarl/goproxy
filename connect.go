@@ -3,6 +3,7 @@ package goproxy
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/tls"
 	"errors"
 	"io"
@@ -28,10 +29,10 @@ const (
 )
 
 var (
-	OkConnect       = &ConnectAction{Action: ConnectAccept, TLSConfig: TLSConfigFromCA(&CertificateAuthority)}
-	MitmConnect     = &ConnectAction{Action: ConnectMitm, TLSConfig: TLSConfigFromCA(&CertificateAuthority)}
-	HTTPMitmConnect = &ConnectAction{Action: ConnectHTTPMitm, TLSConfig: TLSConfigFromCA(&CertificateAuthority)}
-	RejectConnect   = &ConnectAction{Action: ConnectReject, TLSConfig: TLSConfigFromCA(&CertificateAuthority)}
+	OkConnect       = &ConnectAction{Action: ConnectAccept}
+	MitmConnect     = &ConnectAction{Action: ConnectMitm}
+	HTTPMitmConnect = &ConnectAction{Action: ConnectHTTPMitm}
+	RejectConnect   = &ConnectAction{Action: ConnectReject}
 )
 
 type ConnectAction struct {
@@ -95,7 +96,7 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 		// If found a result, break the loop immediately
 		if newtodo != nil {
 			todo, host = newtodo, newhost
-			ctx.Logf("on %dth handler: %v %s", i, todo, host)
+			ctx.Logf("on %dth https handler: %v %s", i, todo, host)
 			break
 		}
 	}
@@ -225,6 +226,11 @@ func (proxy *ProxyHttpServer) handleConnect(w http.ResponseWriter, r *http.Reque
 		for {
 			// Read a request from the client.
 			req, err := http.ReadRequest(clientTls)
+
+			// migrate any set context
+			if r.TLS != nil {
+				req = req.WithContext(context.WithValue(req.Context(), "peercerts", r.TLS.PeerCertificates))
+			}
 
 			// [oec, 2019-11-02] debugging helper
 			/*

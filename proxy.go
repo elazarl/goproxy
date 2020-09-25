@@ -34,9 +34,10 @@ type ProxyHttpServer struct {
 	ConnectDial func(network string, addr string) (net.Conn, error)
 	// Signer can be set by consumers with their own implementation.  This allows
 	// f.e. for caching of Certificates.
-	Signer   func(ca *tls.Certificate, hostname []string) (*tls.Certificate, error)
-	WsServer *websocket.Upgrader
-	WsDialer *websocket.Dialer
+	Signer               func(ca *tls.Certificate, hostname []string) (*tls.Certificate, error)
+	WsServer             *websocket.Upgrader
+	WsDialer             *websocket.Dialer
+	CertificateAuthority *tls.Certificate
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
@@ -344,7 +345,7 @@ func NewProxyHttpServer() *ProxyHttpServer {
 			ExpectContinueTimeout: 1 * time.Second,
 			TLSHandshakeTimeout:   10 * time.Second,
 			TLSClientConfig:       tlsClientSkipVerify,
-			DisableCompression:    true,
+			DisableCompression:    false,
 		},
 		WsDialer: &websocket.Dialer{TLSClientConfig: tlsClientSkipVerify},
 		WsServer: &websocket.Upgrader{

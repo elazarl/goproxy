@@ -9,29 +9,33 @@ import (
 )
 
 type ExpiringCertMap struct {
-	TTL  time.Duration
+	TTL time.Duration
 
 	data sync.Map
 }
 
 type expireEntry struct {
 	ExpiresAt time.Time
-	Value	  interface{}
+	Value     interface{}
 }
 
 func (t *ExpiringCertMap) Store(key string, val interface{}) {
 	t.data.Store(key, expireEntry{
 		ExpiresAt: time.Now().Add(t.TTL),
-		Value: val,
+		Value:     val,
 	})
 }
 
 func (t *ExpiringCertMap) Load(key string) (val interface{}) {
 	entry, ok := t.data.Load(key)
-	if !ok { return nil }
+	if !ok {
+		return nil
+	}
 
 	expireEntry := entry.(expireEntry)
-	if expireEntry.ExpiresAt.After(time.Now()) { return nil }
+	if time.Now().After(expireEntry.ExpiresAt) {
+		return nil
+	}
 
 	return expireEntry.Value
 }
