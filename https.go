@@ -585,12 +585,19 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 		// If DNS Spoofing is enabled, we want to look for an SNI header
 		// If one is found, close the dst socket, establish a new socket to the new destination
 		if proxyCtx.ForwardProxyDNSSpoofing {
-			tlsConn, _ := vhost.TLS(src)
+			proxyCtx.Warnf("Checking for TLS data")
+			tlsConn, err := vhost.TLS(src)
+			if err != nil {
+				proxyCtx.Warnf("Error reading TLS data", err)
+			}
 			if tlsConn != nil && tlsConn.Host() != "" {
+				proxyCtx.Warnf("Found TLS host", tlsConn.Host())
 				// replace dst with new connection and write to it
 				_, _, _, targetSiteCon, err := proxyCtx.Proxy.getTargetSiteConnection(proxyCtx, src, tlsConn.Host())
 				if err == nil && targetSiteCon != nil {
 					dst.Conn = targetSiteCon
+				} else {
+					proxyCtx.Warnf("Error connecting to new target site", err)
 				}
 			}
 			// populate the buffer
