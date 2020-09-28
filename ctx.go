@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/function61/gokit/logex"
+	"github.com/function61/gokit/log/logex"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

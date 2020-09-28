@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/Windscribe/go-vhost"
-	"github.com/function61/gokit/logex"
+	"github.com/function61/gokit/log/logex"
 	"golang.org/x/sys/unix"
 )
 

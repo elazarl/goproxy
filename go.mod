@@ -7,9 +7,9 @@ require (
 	github.com/Windscribe/go-vhost v0.0.0-20200515224728-512271e17f30
 	github.com/elazarl/goproxy v0.0.0-20191011121108-aa519ddbe484
 	github.com/elazarl/goproxy/ext v0.0.0-20190911111923-ecfe977594f1
-	github.com/function61/gokit v0.0.0-20191029140004-6f85d12ce1ed
+	github.com/function61/gokit v0.0.0-20200923114939-f8d7e065a5c3
 	github.com/oxtoacart/bpool v0.0.0-20190530202638-03653db5a59c
 	github.com/prometheus/client_golang v1.2.1
 	github.com/valyala/bytebufferpool v1.0.0
-	golang.org/x/sys v0.0.0-20191010194322-b09406accb47
+	golang.org/x/sys v0.0.0-20200121082415-34d275377bf9
 )
