@@ -588,16 +588,16 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 			proxyCtx.Warnf("Checking for TLS data")
 			tlsConn, err := vhost.TLS(src)
 			if err != nil {
-				proxyCtx.Warnf("Error reading TLS data", err)
+				proxyCtx.Warnf("Error reading TLS data %v", err)
 			}
 			if tlsConn != nil && tlsConn.Host() != "" {
-				proxyCtx.Warnf("Found TLS host", tlsConn.Host())
+				proxyCtx.Warnf("Found TLS host %v", tlsConn.Host())
 				// replace dst with new connection and write to it
 				_, _, _, targetSiteCon, err := proxyCtx.Proxy.getTargetSiteConnection(proxyCtx, src, tlsConn.Host())
 				if err == nil && targetSiteCon != nil {
 					dst.Conn = targetSiteCon
 				} else {
-					proxyCtx.Warnf("Error connecting to new target site", err)
+					proxyCtx.Warnf("Error connecting to new target site %v", err)
 				}
 			}
 			// populate the buffer
