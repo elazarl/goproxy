@@ -19,6 +19,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/Windscribe/go-vhost"
 )
 
 type ConnectActionLiteral int
@@ -68,17 +70,10 @@ func (proxy *ProxyHttpServer) connectDial(network, addr string) (c net.Conn, err
 	return proxy.ConnectDial(network, addr)
 }
 
-func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host string, proxyClient net.Conn) {
+func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient net.Conn, host string) (sendHTTPOK bool, setTargetKA bool, logHeaders http.Header, targetSiteCon net.Conn, err error) {
 
-	if !hasPort.MatchString(host) {
-		host += ":80"
-	}
-	var targetSiteCon net.Conn
-	var err error
-	var logHeaders http.Header
-
-	ctx.Logf("client type: %+v", reflect.TypeOf(proxyClient))
-	ctx.Logf("client info: %s -> %s", proxyClient.LocalAddr().String(), proxyClient.RemoteAddr().String())
+	sendHTTPOK = false
+	setTargetKA = true
 
 	//check for idle override
 	var idleTimeout time.Duration
@@ -87,9 +82,6 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	} else {
 		idleTimeout = 90 * time.Second
 	}
-
-	sendHTTPOK := false
-	setTargetKA := true
 
 	if ctx.ForwardProxy != "" {
 
@@ -212,6 +204,26 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		targetSiteCon, err = proxy.connectDial("tcp", host)
 		sendHTTPOK = true
 	}
+
+	return
+}
+
+func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host string, proxyClient net.Conn) {
+
+	if !hasPort.MatchString(host) {
+		host += ":80"
+	}
+	var targetSiteCon net.Conn
+	var err error
+	var logHeaders http.Header
+	var sendHTTPOK bool
+	var setTargetKA bool
+
+	ctx.Logf("client type: %+v", reflect.TypeOf(proxyClient))
+	ctx.Logf("client info: %s -> %s", proxyClient.LocalAddr().String(), proxyClient.RemoteAddr().String())
+
+	// init target connection
+	sendHTTPOK, setTargetKA, logHeaders, targetSiteCon, err = proxy.getTargetSiteConnection(ctx, proxyClient, host)
 
 	if err != nil {
 
@@ -566,7 +578,28 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 			return
 		default:
 		}
-		nr, er := src.Read(buf)
+
+		var nr int
+		var er error
+
+		// If DNS Spoofing is enabled, we want to look for an SNI header
+		// If one is found, close the dst socket, establish a new socket to the new destination
+		if proxyCtx.ForwardProxyDNSSpoofing {
+			tlsConn, _ := vhost.TLS(src)
+			if tlsConn != nil && tlsConn.Host() != "" {
+				// replace dst with new connection and write to it
+				_, _, _, targetSiteCon, err := proxyCtx.Proxy.getTargetSiteConnection(proxyCtx, src, tlsConn.Host())
+				if err == nil && targetSiteCon != nil {
+					dst.Conn = targetSiteCon
+				}
+			}
+			// populate the buffer
+			buf = tlsConn.SharedConn.VhostBuf.Bytes()
+			nr = len(buf)
+		} else {
+			nr, er = src.Read(buf)
+		}
+
 		select {
 		case <-ctx.Done():
 			return
