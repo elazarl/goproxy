@@ -1,3 +1,8 @@
-module github.com/elazarl/goproxy
+module github.com/hazcod/goproxy
 
-require github.com/elazarl/goproxy/ext v0.0.0-20190711103511-473e67f1d7d2
+go 1.15
+
+require (
+	github.com/gorilla/websocket v1.4.2
+	github.com/hazcod/goproxy/ext v0.0.0-20200915072859-4a2db01fc5a4
+)

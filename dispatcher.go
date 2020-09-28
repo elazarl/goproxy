@@ -51,7 +51,7 @@ func UrlHasPrefix(prefix string) ReqConditionFunc {
 	return func(req *http.Request, ctx *ProxyCtx) bool {
 		return strings.HasPrefix(req.URL.Path, prefix) ||
 			strings.HasPrefix(req.URL.Host+req.URL.Path, prefix) ||
-			strings.HasPrefix(req.URL.Scheme+req.URL.Host+req.URL.Path, prefix)
+			strings.HasPrefix(req.URL.Scheme+"://"+req.URL.Host+req.URL.Path, prefix)
 	}
 }
 

@@ -1,0 +1,267 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoTestManager">
+    <enabled-run-configurations>
+      <run-configuration type="GoTestRunConfiguration" name="TestHasGoproxyCA in github.com/hazcod/goproxy" />
+    </enabled-run-configurations>
+  </component>
+  <component name="BranchesTreeState">
+    <expand>
+      <path>
+        <item name="ROOT" type="e8cecc67:BranchNodeDescriptor" />
+        <item name="LOCAL_ROOT" type="e8cecc67:BranchNodeDescriptor" />
+      </path>
+      <path>
+        <item name="ROOT" type="e8cecc67:BranchNodeDescriptor" />
+        <item name="REMOTE_ROOT" type="e8cecc67:BranchNodeDescriptor" />
+      </path>
+      <path>
+        <item name="ROOT" type="e8cecc67:BranchNodeDescriptor" />
+        <item name="REMOTE_ROOT" type="e8cecc67:BranchNodeDescriptor" />
+        <item name="GROUP_NODE:origin" type="e8cecc67:BranchNodeDescriptor" />
+      </path>
+    </expand>
+    <select />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="254dd60c-4a0b-412d-912b-a2764f2da006" name="Default Changelist" comment="feat(mod): move to fork">
+      <change afterPath="$PROJECT_DIR$/cached_signer.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/conn.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/connect.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/all.bash" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ca.pem" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/certs/openssl-gen.sh" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/certs/openssl.cnf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ctx.go" beforeDir="false" afterPath="$PROJECT_DIR$/ctx.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/dispatcher.go" beforeDir="false" afterPath="$PROJECT_DIR$/dispatcher.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/cascadeproxy/main.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/go.mod" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/go.sum" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-basic/README.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-basic/main.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-customca/cert.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-customca/main.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-eavesdropper/main.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-httpdump/README.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-httpdump/httpdump.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-jquery-version/README.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-jquery-version/jquery1.html" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-jquery-version/jquery2.html" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-jquery-version/jquery_homepage.html" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-jquery-version/jquery_test.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-jquery-version/main.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-jquery-version/php_man.html" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-jquery-version/w3schools.html" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-no-reddit-at-worktime/README.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-no-reddit-at-worktime/noreddit.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-sokeepalive/sokeepalive.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-sslstrip/sslstrip.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-stats/README.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-stats/main.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-transparent/README.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-transparent/proxy.sh" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-transparent/transparent.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-upside-down-ternet/main.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-websockets/localhost-key.pem" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-websockets/localhost.pem" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-websockets/main.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/goproxy-yui-minify/yui.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ext/auth/basic.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ext/auth/basic_test.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ext/go.mod" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ext/go.sum" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ext/html/cp1255.html" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ext/html/cp1255.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ext/html/html.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ext/html/html_test.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ext/image/image.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/fd_test.go" beforeDir="false" afterPath="$PROJECT_DIR$/fd_test.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/go.mod" beforeDir="false" afterPath="$PROJECT_DIR$/go.mod" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/go.sum" beforeDir="false" afterPath="$PROJECT_DIR$/go.sum" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/https.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/proxy.go" beforeDir="false" afterPath="$PROJECT_DIR$/proxy.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/proxy_test.go" beforeDir="false" afterPath="$PROJECT_DIR$/proxy_test.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/responses.go" beforeDir="false" afterPath="$PROJECT_DIR$/responses.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/signer.go" beforeDir="false" afterPath="$PROJECT_DIR$/signer.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/signer_test.go" beforeDir="false" afterPath="$PROJECT_DIR$/signer_test.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/test_data/baby.jpg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test_data/football.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/test_data/panda.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/websocket.go" beforeDir="false" afterPath="$PROJECT_DIR$/websocket.go" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Go File" />
+      </list>
+    </option>
+  </component>
+  <component name="GOROOT" path="/usr/local/Cellar/go/1.15.2/libexec" />
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="ProjectId" id="1hXOLgDAmWYAP1vLYta9rSXTT3V" />
+  <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">
+    <property name="ASKED_ADD_EXTERNAL_FILES" value="true" />
+    <property name="ASKED_SHARE_PROJECT_CONFIGURATION_FILES" value="true" />
+    <property name="DefaultGoTemplateProperty" value="Go File" />
+    <property name="GO_FMT" value="true" />
+    <property name="RunOnceActivity.OpenProjectViewOnStart" value="true" />
+    <property name="WebServerToolWindowFactoryState" value="false" />
+    <property name="go.import.settings.migrated" value="true" />
+    <property name="go.sdk.automatically.set" value="true" />
+    <property name="last_opened_file_path" value="$PROJECT_DIR$" />
+    <property name="nodejs_interpreter_path.stuck_in_default_project" value="undefined stuck path" />
+    <property name="nodejs_npm_path_reset_for_default_project" value="true" />
+    <property name="settings.editor.selected.configurable" value="go.vgo" />
+  </component>
+  <component name="RunManager" selected="Go Test.TestSingerX509 in github.com/hazcod/goproxy (1)">
+    <configuration name="TestHasGoproxyCA in github.com/hazcod/goproxy (1)" type="GoTestRunConfiguration" factoryName="Go Test" temporary="true" nameIsGenerated="true">
+      <module name="goproxy" />
+      <working_directory value="$PROJECT_DIR$" />
+      <framework value="gotest" />
+      <kind value="PACKAGE" />
+      <package value="github.com/hazcod/goproxy" />
+      <directory value="$PROJECT_DIR$" />
+      <filePath value="$PROJECT_DIR$" />
+      <pattern value="^\QTestHasGoproxyCA\E$" />
+      <method v="2" />
+    </configuration>
+    <configuration name="TestHasGoproxyCA in github.com/hazcod/goproxy" type="GoTestRunConfiguration" factoryName="Go Test" temporary="true" nameIsGenerated="true">
+      <module name="goproxy" />
+      <working_directory value="$PROJECT_DIR$" />
+      <framework value="gotest" />
+      <kind value="PACKAGE" />
+      <package value="github.com/hazcod/goproxy" />
+      <directory value="$PROJECT_DIR$" />
+      <filePath value="$PROJECT_DIR$" />
+      <pattern value="^\QTestHasGoproxyCA\E$" />
+      <method v="2" />
+    </configuration>
+    <configuration name="TestSingerTls in github.com/hazcod/goproxy" type="GoTestRunConfiguration" factoryName="Go Test" temporary="true" nameIsGenerated="true">
+      <module name="goproxy" />
+      <working_directory value="$PROJECT_DIR$" />
+      <framework value="gotest" />
+      <kind value="PACKAGE" />
+      <package value="github.com/hazcod/goproxy" />
+      <directory value="$PROJECT_DIR$" />
+      <filePath value="$PROJECT_DIR$" />
+      <pattern value="^\QTestSingerTls\E$" />
+      <method v="2" />
+    </configuration>
+    <configuration name="TestSingerX509 in github.com/hazcod/goproxy (1)" type="GoTestRunConfiguration" factoryName="Go Test" temporary="true" nameIsGenerated="true">
+      <module name="goproxy" />
+      <working_directory value="$PROJECT_DIR$" />
+      <framework value="gotest" />
+      <kind value="PACKAGE" />
+      <package value="github.com/hazcod/goproxy" />
+      <directory value="$PROJECT_DIR$" />
+      <filePath value="$PROJECT_DIR$" />
+      <pattern value="^\QTestSingerX509\E$" />
+      <method v="2" />
+    </configuration>
+    <configuration name="TestSingerX509 in github.com/hazcod/goproxy" type="GoTestRunConfiguration" factoryName="Go Test" temporary="true" nameIsGenerated="true">
+      <module name="goproxy" />
+      <working_directory value="$PROJECT_DIR$" />
+      <framework value="gotest" />
+      <kind value="PACKAGE" />
+      <package value="github.com/hazcod/goproxy" />
+      <directory value="$PROJECT_DIR$" />
+      <filePath value="$PROJECT_DIR$" />
+      <pattern value="^\QTestSingerX509\E$" />
+      <method v="2" />
+    </configuration>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Go Test.TestSingerX509 in github.com/hazcod/goproxy (1)" />
+        <item itemvalue="Go Test.TestSingerTls in github.com/hazcod/goproxy" />
+        <item itemvalue="Go Test.TestSingerX509 in github.com/hazcod/goproxy" />
+        <item itemvalue="Go Test.TestHasGoproxyCA in github.com/hazcod/goproxy (1)" />
+        <item itemvalue="Go Test.TestHasGoproxyCA in github.com/hazcod/goproxy" />
+      </list>
+    </recent_temporary>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+    <option name="oldMeFiltersMigrated" value="true" />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="refactor(signer): use ca cert instead of generating new ones" />
+    <MESSAGE value="refactor(signer): use cached certs with ttl" />
+    <MESSAGE value="feat(mod): move to fork" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat(mod): move to fork" />
+    <option name="GROUP_MULTIFILE_MERGE_BY_DIRECTORY" value="true" />
+  </component>
+  <component name="VgoProject">
+    <integration-enabled>true</integration-enabled>
+    <vendoring-mode>true</vendoring-mode>
+  </component>
+  <component name="WindowStateProjectService">
+    <state x="2069" y="569" key="#com.intellij.ide.util.MemberChooser" timestamp="1600250898999">
+      <screen x="0" y="0" width="3008" height="1692" />
+    </state>
+    <state x="2069" y="569" key="#com.intellij.ide.util.MemberChooser/0.0.3008.1692@0.0.3008.1692" timestamp="1600250898999" />
+    <state x="1604" y="100" width="1304" height="1492" key="DiffContextDialog" timestamp="1600250592075">
+      <screen x="0" y="0" width="3008" height="1692" />
+    </state>
+    <state x="1604" y="100" width="1304" height="1492" key="DiffContextDialog/0.0.3008.1692@0.0.3008.1692" timestamp="1600250592075" />
+    <state width="1462" height="500" key="GridCell.Tab.0.bottom" timestamp="1600250854942">
+      <screen x="0" y="0" width="3008" height="1692" />
+    </state>
+    <state width="1462" height="500" key="GridCell.Tab.0.bottom/0.0.3008.1692@0.0.3008.1692" timestamp="1600250854942" />
+    <state width="1462" height="500" key="GridCell.Tab.0.center" timestamp="1600250854942">
+      <screen x="0" y="0" width="3008" height="1692" />
+    </state>
+    <state width="1462" height="500" key="GridCell.Tab.0.center/0.0.3008.1692@0.0.3008.1692" timestamp="1600250854942" />
+    <state width="1462" height="500" key="GridCell.Tab.0.left" timestamp="1600250854941">
+      <screen x="0" y="0" width="3008" height="1692" />
+    </state>
+    <state width="1462" height="500" key="GridCell.Tab.0.left/0.0.3008.1692@0.0.3008.1692" timestamp="1600250854941" />
+    <state width="1462" height="500" key="GridCell.Tab.0.right" timestamp="1600250854942">
+      <screen x="0" y="0" width="3008" height="1692" />
+    </state>
+    <state width="1462" height="500" key="GridCell.Tab.0.right/0.0.3008.1692@0.0.3008.1692" timestamp="1600250854942" />
+    <state x="0" y="0" width="3008" height="1692" key="MergeDialog" timestamp="1600249185403">
+      <screen x="0" y="0" width="3008" height="1692" />
+    </state>
+    <state x="0" y="0" width="3008" height="1692" key="MergeDialog/0.0.3008.1692@0.0.3008.1692" timestamp="1600249185403" />
+    <state x="1887" y="614" key="MultipleFileMergeDialog" timestamp="1600249195192">
+      <screen x="0" y="0" width="3008" height="1692" />
+    </state>
+    <state x="1887" y="614" key="MultipleFileMergeDialog/0.0.3008.1692@0.0.3008.1692" timestamp="1600249195192" />
+    <state x="1856" y="586" key="Vcs.Push.Dialog.v2" timestamp="1600162174230">
+      <screen x="0" y="0" width="3008" height="1692" />
+    </state>
+    <state x="1856" y="586" key="Vcs.Push.Dialog.v2/0.0.3008.1692@0.0.3008.1692" timestamp="1600162174230" />
+    <state x="1957" y="572" width="598" height="548" key="find.popup" timestamp="1600249819051">
+      <screen x="0" y="0" width="3008" height="1692" />
+    </state>
+    <state x="1957" y="572" width="598" height="548" key="find.popup/0.0.3008.1692@0.0.3008.1692" timestamp="1600249819051" />
+    <state x="1921" y="394" width="670" height="676" key="search.everywhere.popup" timestamp="1600250728495">
+      <screen x="0" y="0" width="3008" height="1692" />
+    </state>
+    <state x="1921" y="394" width="670" height="676" key="search.everywhere.popup/0.0.3008.1692@0.0.3008.1692" timestamp="1600250728495" />
+  </component>
+</project>
