@@ -586,7 +586,7 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 		// If one is found, close the dst socket, establish a new socket to the new destination
 		if dir == "sent" && proxyCtx.ForwardProxyDNSSpoofing {
 			src.IgnoreDeadlineErrors = false
-			src.ReadTimeout = time.Second * 1
+			src.ReadTimeout = time.Second * 3
 			proxyCtx.Warnf("Checking for TLS data")
 			tlsConn, err := vhost.TLS(src)
 			if err != nil {
