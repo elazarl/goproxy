@@ -572,6 +572,8 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 	var written int64
 	var err error
 
+	firstRun := true
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -584,7 +586,7 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 
 		// If DNS Spoofing is enabled, we want to look for an SNI header
 		// If one is found, close the dst socket, establish a new socket to the new destination
-		if dir == "sent" && proxyCtx.ForwardProxyDNSSpoofing {
+		if !firstRun && dir == "sent" && proxyCtx.ForwardProxyDNSSpoofing {
 			src.IgnoreDeadlineErrors = false
 			src.ReadTimeout = time.Second * 3
 			proxyCtx.Warnf("Checking for TLS data")
@@ -594,22 +596,25 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 				if err == io.EOF {
 					return
 				}
-			}
-			if tlsConn != nil && tlsConn.Host() != "" {
-				proxyCtx.Warnf("Found TLS host %v", tlsConn.Host())
-				// replace dst with new connection and write to it
-				newHost := tlsConn.Host() + ":443"
-				_, _, _, targetSiteCon, err := proxyCtx.Proxy.getTargetSiteConnection(proxyCtx, src, newHost)
-				if err == nil && targetSiteCon != nil {
-					dst.Conn = targetSiteCon
-					proxyCtx.Warnf("Resetting dst socket to new conn")
-				} else {
-					proxyCtx.Warnf("Error connecting to new target site %v", err)
+				src.IgnoreDeadlineErrors = true
+				nr, er = src.Read(buf)
+			} else {
+				if tlsConn != nil && tlsConn.Host() != "" {
+					proxyCtx.Warnf("Found TLS host %v", tlsConn.Host())
+					// replace dst with new connection and write to it
+					newHost := tlsConn.Host() + ":443"
+					_, _, _, targetSiteCon, err := proxyCtx.Proxy.getTargetSiteConnection(proxyCtx, src, newHost)
+					if err == nil && targetSiteCon != nil {
+						dst.Conn = targetSiteCon
+						proxyCtx.Warnf("Resetting dst socket to new conn")
+					} else {
+						proxyCtx.Warnf("Error connecting to new target site %v", err)
+					}
 				}
+				// populate the buffer
+				buf = tlsConn.SharedConn.VhostBuf.Bytes()
+				nr = len(buf)
 			}
-			// populate the buffer
-			buf = tlsConn.SharedConn.VhostBuf.Bytes()
-			nr = len(buf)
 		} else {
 			nr, er = src.Read(buf)
 		}
@@ -642,6 +647,7 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 			}
 			break
 		}
+		firstRun = false
 	}
 	if err != nil {
 		proxyCtx.Warnf("Error copying: %s", err)
