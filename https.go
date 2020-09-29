@@ -589,23 +589,23 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 		if !firstRun && dir == "sent" && proxyCtx.ForwardProxyDNSSpoofing {
 			src.IgnoreDeadlineErrors = false
 			src.ReadTimeout = time.Second * 5
-			proxyCtx.Warnf("Checking for TLS data")
+			proxyCtx.Warnf("SPOOF: Checking for TLS data")
 			tlsConn, err := vhost.TLS(src)
 			if err != nil {
-				proxyCtx.Warnf("Error reading TLS data %v", err)
+				proxyCtx.Warnf("SPOOF: Error reading TLS data %v", err)
 				if err == io.EOF {
 					return
 				}
 			} else if tlsConn != nil && tlsConn.Host() != "" {
-				proxyCtx.Warnf("Found TLS host %v", tlsConn.Host())
+				proxyCtx.Warnf("SPOOF: Found TLS host %v", tlsConn.Host())
 				// replace dst with new connection and write to it
 				newHost := tlsConn.Host() + ":443"
 				_, _, _, targetSiteCon, err := proxyCtx.Proxy.getTargetSiteConnection(proxyCtx, src, newHost)
 				if err == nil && targetSiteCon != nil {
 					dst.Conn = targetSiteCon
-					proxyCtx.Warnf("Resetting dst socket to new conn")
+					proxyCtx.Warnf("SPOOF: Resetting dst socket to new conn")
 				} else {
-					proxyCtx.Warnf("Error connecting to new target site %v", err)
+					proxyCtx.Warnf("SPOOF: Error connecting to new target site %v", err)
 					return
 				}
 			}
