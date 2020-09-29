@@ -591,6 +591,9 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 			tlsConn, err := vhost.TLS(src)
 			if err != nil {
 				proxyCtx.Warnf("Error reading TLS data %v", err)
+				if err == io.EOF {
+					return
+				}
 			}
 			if tlsConn != nil && tlsConn.Host() != "" {
 				proxyCtx.Warnf("Found TLS host %v", tlsConn.Host())
