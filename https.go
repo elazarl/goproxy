@@ -593,7 +593,8 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 			if tlsConn != nil && tlsConn.Host() != "" {
 				proxyCtx.Warnf("Found TLS host %v", tlsConn.Host())
 				// replace dst with new connection and write to it
-				_, _, _, targetSiteCon, err := proxyCtx.Proxy.getTargetSiteConnection(proxyCtx, src, tlsConn.Host())
+				newHost := tlsConn.Host() + ":443"
+				_, _, _, targetSiteCon, err := proxyCtx.Proxy.getTargetSiteConnection(proxyCtx, src, newHost)
 				if err == nil && targetSiteCon != nil {
 					dst.Conn = targetSiteCon
 				} else {
