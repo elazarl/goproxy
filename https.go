@@ -598,18 +598,17 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 				}
 				src.IgnoreDeadlineErrors = true
 				nr, er = src.Read(buf)
-			} else {
-				if tlsConn != nil && tlsConn.Host() != "" {
-					proxyCtx.Warnf("Found TLS host %v", tlsConn.Host())
-					// replace dst with new connection and write to it
-					newHost := tlsConn.Host() + ":443"
-					_, _, _, targetSiteCon, err := proxyCtx.Proxy.getTargetSiteConnection(proxyCtx, src, newHost)
-					if err == nil && targetSiteCon != nil {
-						dst.Conn = targetSiteCon
-						proxyCtx.Warnf("Resetting dst socket to new conn")
-					} else {
-						proxyCtx.Warnf("Error connecting to new target site %v", err)
-					}
+			} else if tlsConn != nil && tlsConn.Host() != "" {
+				proxyCtx.Warnf("Found TLS host %v", tlsConn.Host())
+				// replace dst with new connection and write to it
+				newHost := tlsConn.Host() + ":443"
+				_, _, _, targetSiteCon, err := proxyCtx.Proxy.getTargetSiteConnection(proxyCtx, src, newHost)
+				if err == nil && targetSiteCon != nil {
+					dst.Conn = targetSiteCon
+					proxyCtx.Warnf("Resetting dst socket to new conn")
+				} else {
+					proxyCtx.Warnf("Error connecting to new target site %v", err)
+					return
 				}
 				// populate the buffer
 				buf = tlsConn.SharedConn.VhostBuf.Bytes()
