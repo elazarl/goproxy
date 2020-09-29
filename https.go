@@ -596,8 +596,6 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 				if err == io.EOF {
 					return
 				}
-				src.IgnoreDeadlineErrors = true
-				nr, er = src.Read(buf)
 			} else if tlsConn != nil && tlsConn.Host() != "" {
 				proxyCtx.Warnf("Found TLS host %v", tlsConn.Host())
 				// replace dst with new connection and write to it
@@ -610,10 +608,10 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 					proxyCtx.Warnf("Error connecting to new target site %v", err)
 					return
 				}
-				// populate the buffer
-				buf = tlsConn.SharedConn.VhostBuf.Bytes()
-				nr = len(buf)
 			}
+			// populate the buffer
+			buf = tlsConn.SharedConn.VhostBuf.Bytes()
+			nr = len(buf)
 		} else {
 			nr, er = src.Read(buf)
 		}
