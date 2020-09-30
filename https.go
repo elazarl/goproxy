@@ -572,7 +572,7 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 	var written int64
 	var err error
 
-	//firstRun := true
+	firstRun := true
 
 	for {
 		select {
@@ -586,16 +586,13 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 
 		// If DNS Spoofing is enabled, we want to look for an SNI header
 		// If one is found, close the dst socket, establish a new socket to the new destination
-		if dir == "sent" && proxyCtx.ForwardProxyDNSSpoofing {
-			//src.IgnoreDeadlineErrors = false
-			src.ReadTimeout = time.Millisecond * 300
+		if !firstRun && dir == "sent" && proxyCtx.ForwardProxyDNSSpoofing {
+			src.ReadTimeout = time.Millisecond * 500
 			proxyCtx.Warnf("SPOOF: Checking for TLS data")
 			tlsConn, err := vhost.TLS(src)
 			if err != nil {
 				proxyCtx.Warnf("SPOOF: Error reading TLS data %v", err)
 				if err == io.EOF {
-					return
-				} else if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 					return
 				}
 				// reset the timeout
@@ -616,7 +613,9 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 			// populate the buffer
 			buf = tlsConn.SharedConn.VhostBuf.Bytes()
 			nr = len(buf)
-		} else {
+		}
+
+		if nr == 0 {
 			nr, er = src.Read(buf)
 		}
 
@@ -648,7 +647,7 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 			}
 			break
 		}
-		//firstRun = false
+		firstRun = false
 	}
 	if err != nil {
 		proxyCtx.Warnf("Error copying: %s", err)
