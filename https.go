@@ -591,10 +591,10 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 		var er error
 
 		if dir == "sent" && proxyCtx.ForwardProxyDNSSpoofing {
-			proxyCtx.Warnf("SPOOF: Checking for TLS data")
+			proxyCtx.Warnf("SPOOF: Checking for TLS data %v", host)
 			tlsConn, tlsErr := vhost.TLS(src)
 			if tlsErr != nil {
-				if err == io.EOF {
+				if tlsErr == io.EOF {
 					return
 				}
 			} else if tlsConn != nil && tlsConn.Host() != host {
