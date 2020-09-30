@@ -572,7 +572,7 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 	var written int64
 	var err error
 
-	firstRun := true
+	//firstRun := true
 
 	for {
 		select {
@@ -644,7 +644,7 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 			}
 			break
 		}
-		firstRun = false
+		//firstRun = false
 	}
 	if err != nil {
 		proxyCtx.Warnf("Error copying: %s", err)
