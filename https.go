@@ -590,18 +590,20 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 		var nr int
 		var er error
 
-		if dir == "sent" && proxyCtx.ForwardProxyDNSSpoofing {
-			proxyCtx.Warnf("SPOOF: Checking for TLS data %v", host)
+		if proxyCtx.ForwardProxyDNSSpoofing {
+			proxyCtx.Warnf("SPOOF: %v Checking for TLS data %v", dir, host)
+			src.ReadTimeout = time.Second * 1
 			tlsConn, tlsErr := vhost.TLS(src)
 			if tlsErr != nil {
-				proxyCtx.Warnf("SPOOF: %v TLS error %v", host, tlsErr)
+				proxyCtx.Warnf("SPOOF: %v %v TLS error %v", dir, host, tlsErr)
 				if tlsErr == io.EOF {
 					return
 				}
+				src.ReadTimeout = time.Second * 5
 				nr, er = src.Read(buf)
 			} else if tlsConn != nil && tlsConn.Host() != host {
 				newHost := tlsConn.Host() + ":443"
-				proxyCtx.Warnf("SPOOF: %v Found new TLS host %v", host, newHost)
+				proxyCtx.Warnf("SPOOF: %v %v Found new TLS host %v", dir, host, newHost)
 				_, _, _, targetSiteCon, err := proxyCtx.Proxy.getTargetSiteConnection(proxyCtx, src, newHost)
 				if err == nil && targetSiteCon != nil {
 					dst.Conn = targetSiteCon
