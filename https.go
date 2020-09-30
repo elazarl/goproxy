@@ -594,21 +594,22 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 			proxyCtx.Warnf("SPOOF: Checking for TLS data %v", host)
 			tlsConn, tlsErr := vhost.TLS(src)
 			if tlsErr != nil {
+				proxyCtx.Warnf("SPOOF: %v TLS error %v", host, tlsErr)
 				if tlsErr == io.EOF {
 					return
 				}
 				nr, er = src.Read(buf)
 			} else if tlsConn != nil && tlsConn.Host() != host {
 				newHost := tlsConn.Host() + ":443"
-				proxyCtx.Warnf("SPOOF: Found new TLS host %v", newHost)
+				proxyCtx.Warnf("SPOOF: %v Found new TLS host %v", host, newHost)
 				_, _, _, targetSiteCon, err := proxyCtx.Proxy.getTargetSiteConnection(proxyCtx, src, newHost)
 				if err == nil && targetSiteCon != nil {
 					dst.Conn = targetSiteCon
-					proxyCtx.Warnf("SPOOF: Resetting dst socket to new conn")
+					proxyCtx.Warnf("SPOOF: Resetting dst %v socket to new conn %v", host, newHost)
 					buf = tlsConn.SharedConn.VhostBuf.Bytes()
 					nr = len(buf)
 				} else {
-					proxyCtx.Warnf("SPOOF: Error connecting to new target site %v", err)
+					proxyCtx.Warnf("SPOOF: Error %v connecting to new target %v site %v", host, newHost, err)
 					return
 				}
 			}
