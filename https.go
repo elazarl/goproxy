@@ -99,6 +99,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 			IdleConnTimeout:       idleTimeout,
+			DisableKeepAlives:     ctx.ForwardProxyDNSSpoofing,
 			Proxy: func(req *http.Request) (*url.URL, error) {
 				return url.Parse(ctx.ForwardProxyProto + "://" + ctx.ForwardProxy)
 			},
@@ -166,6 +167,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 			IdleConnTimeout:       idleTimeout,
+			DisableKeepAlives:     ctx.ForwardProxyDNSSpoofing,
 		}
 
 		targetSiteCon, err = tr.Dial("tcp", host)
