@@ -301,14 +301,19 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		Logger:               ctx.ProxyLogger,
 		ReadTimeout:          time.Second * 5,
 		WriteTimeout:         time.Second * 5,
-		IgnoreDeadlineErrors: true,
+		IgnoreDeadlineErrors: !ctx.ForwardProxyDNSSpoofing,
 	}
-	kaErr := clientConn.SetKeepaliveParameters(true, tcpKACount, tcpKAInterval, tcpKAPeriod)
-	if kaErr != nil {
-		ctx.Logf("clientConn KeepAlive error: %v", kaErr)
-		clientConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
-		clientConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
-		clientConn.IgnoreDeadlineErrors = false
+	// If DNS spoofing, dont set KeepAlives
+	if !ctx.ForwardProxyDNSSpoofing {
+		kaErr := clientConn.SetKeepaliveParameters(true, tcpKACount, tcpKAInterval, tcpKAPeriod)
+		if kaErr != nil {
+			ctx.Logf("clientConn KeepAlive error: %v", kaErr)
+			clientConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
+			clientConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
+			clientConn.IgnoreDeadlineErrors = false
+		}
+	} else {
+		setTargetKA = false
 	}
 
 	targetConn := &ProxyTCPConn{
@@ -316,12 +321,12 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		Logger:               ctx.ProxyLogger,
 		ReadTimeout:          time.Second * 5,
 		WriteTimeout:         time.Second * 5,
-		IgnoreDeadlineErrors: true,
+		IgnoreDeadlineErrors: !ctx.ForwardProxyDNSSpoofing,
 	}
 	// Since we dont have access to the *tls.Conn underlying connection, we have to set it
 	// during the connectDial to proxy
 	if setTargetKA {
-		kaErr = targetConn.SetKeepaliveParameters(false, tcpKACount, tcpKAInterval, tcpKAPeriod)
+		kaErr := targetConn.SetKeepaliveParameters(false, tcpKACount, tcpKAInterval, tcpKAPeriod)
 		if kaErr != nil {
 			ctx.Logf("targetConn KeepAlive error: %v", kaErr)
 			targetConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
