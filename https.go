@@ -91,7 +91,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 			setTargetKA = false
 		}
 
-		ctx.Logf("dial via forward proxy: %v %+v", ctx.ForwardProxyProto, ctx.ForwardProxy)
+		ctx.Logf("dial %v via forward proxy: %v %+v", host, ctx.ForwardProxyProto, ctx.ForwardProxy)
 
 		tr := &http.Transport{
 			MaxIdleConns:          ctx.MaxIdleConns,
@@ -118,7 +118,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 		}
 
 		if ctx.ForwardProxyFallbackTimeout > 0 {
-			ctx.Logf("forward proxt fallback timeout set %+v", ctx.ForwardProxyFallbackTimeout)
+			ctx.Logf("forward proxy fallback timeout set %+v", ctx.ForwardProxyFallbackTimeout)
 			tr.DialContext = (&net.Dialer{
 				Timeout:   time.Duration(int64(ctx.ForwardProxyFallbackTimeout)) * time.Second,
 				KeepAlive: 30 * time.Second,
@@ -145,7 +145,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 
 	} else if ctx.ForwardProxyDirect && ctx.ForwardProxySourceIP != "" {
 
-		ctx.Logf("dial locally from: %+v", ctx.ForwardProxySourceIP)
+		ctx.Logf("dial %v locally from: %+v", host, ctx.ForwardProxySourceIP)
 
 		// dont use a proxy and use specific source IP
 		tr := &http.Transport{
@@ -174,7 +174,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 
 	} else if ctx.ForwardProxyTProxy {
 
-		ctx.Logf("dialing via TPROXY from: %s -> %s", ctx.ForwardProxySourceIP, proxyClient.LocalAddr().String())
+		ctx.Logf("dialing %v via TPROXY from: %s -> %s", host, ctx.ForwardProxySourceIP, proxyClient.LocalAddr().String())
 
 		tcpLocal, errTCP := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:0", ctx.ForwardProxySourceIP))
 		if errTCP != nil {
@@ -333,7 +333,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	var wg sync.WaitGroup
 	wg.Add(2)
 	cancelCtx, cancel := context.WithCancel(context.Background())
-	ctx.Logf("Starting copy and close %v", host)
+	ctx.Logf("Starting copy and close %v = %v", host, targetConn.Conn.RemoteAddr())
 	go copyAndClose(cancelCtx, cancel, ctx, targetConn, clientConn, "sent", &wg)
 	go copyAndClose(cancelCtx, cancel, ctx, clientConn, targetConn, "recv", &wg)
 	wg.Wait()
