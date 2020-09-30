@@ -586,7 +586,7 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 
 		// If DNS Spoofing is enabled, we want to look for an SNI header
 		// If one is found, close the dst socket, establish a new socket to the new destination
-		if !firstRun && dir == "sent" && proxyCtx.ForwardProxyDNSSpoofing {
+		if dir == "sent" && proxyCtx.ForwardProxyDNSSpoofing {
 			//src.IgnoreDeadlineErrors = false
 			//src.ReadTimeout = time.Second * 1
 			proxyCtx.Warnf("SPOOF: Checking for TLS data")
