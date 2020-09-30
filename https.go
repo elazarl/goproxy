@@ -597,6 +597,7 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 				if tlsErr == io.EOF {
 					return
 				}
+				nr, er = src.Read(buf)
 			} else if tlsConn != nil && tlsConn.Host() != host {
 				newHost := tlsConn.Host() + ":443"
 				proxyCtx.Warnf("SPOOF: Found new TLS host %v", newHost)
