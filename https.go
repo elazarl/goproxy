@@ -19,8 +19,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/Windscribe/go-vhost"
 )
 
 type ConnectActionLiteral int
@@ -590,34 +588,7 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 		var nr int
 		var er error
 
-		if proxyCtx.ForwardProxyDNSSpoofing {
-			proxyCtx.Warnf("SPOOF: %v Checking for TLS data %v", dir, host)
-			src.ReadTimeout = time.Second * 1
-			tlsConn, tlsErr := vhost.TLS(src)
-			if tlsErr != nil {
-				proxyCtx.Warnf("SPOOF: %v %v TLS error %v", dir, host, tlsErr)
-				if tlsErr == io.EOF {
-					return
-				}
-				src.ReadTimeout = time.Second * 5
-				nr, er = src.Read(buf)
-			} else if tlsConn != nil && tlsConn.Host() != host {
-				newHost := tlsConn.Host() + ":443"
-				proxyCtx.Warnf("SPOOF: %v %v Found new TLS host %v", dir, host, newHost)
-				_, _, _, targetSiteCon, err := proxyCtx.Proxy.getTargetSiteConnection(proxyCtx, src, newHost)
-				if err == nil && targetSiteCon != nil {
-					dst.Conn = targetSiteCon
-					proxyCtx.Warnf("SPOOF: Resetting dst %v socket to new conn %v", host, newHost)
-					buf = tlsConn.SharedConn.VhostBuf.Bytes()
-					nr = len(buf)
-				} else {
-					proxyCtx.Warnf("SPOOF: Error %v connecting to new target %v site %v", host, newHost, err)
-					return
-				}
-			}
-		} else {
-			nr, er = src.Read(buf)
-		}
+		nr, er = src.Read(buf)
 
 		select {
 		case <-ctx.Done():
@@ -645,6 +616,9 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 			if er != io.EOF {
 				err = er
 			}
+			break
+		}
+		if proxyCtx.ForwardProxyDNSSpoofing {
 			break
 		}
 	}
