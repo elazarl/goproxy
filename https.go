@@ -333,6 +333,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	var wg sync.WaitGroup
 	wg.Add(2)
 	cancelCtx, cancel := context.WithCancel(context.Background())
+	ctx.Logf("Starting copy and close %v", host)
 	go copyAndClose(cancelCtx, cancel, ctx, targetConn, clientConn, "sent", &wg)
 	go copyAndClose(cancelCtx, cancel, ctx, clientConn, targetConn, "recv", &wg)
 	wg.Wait()
@@ -586,8 +587,8 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 
 		// If DNS Spoofing is enabled, we want to look for an SNI header
 		// If one is found, close the dst socket, establish a new socket to the new destination
-		if !firstRun && dir == "sent" && proxyCtx.ForwardProxyDNSSpoofing {
-			src.ReadTimeout = time.Millisecond * 500
+		if dir == "sent" && proxyCtx.ForwardProxyDNSSpoofing {
+			src.ReadTimeout = time.Millisecond * 1000
 			proxyCtx.Warnf("SPOOF: Checking for TLS data")
 			tlsConn, err := vhost.TLS(src)
 			if err != nil {
@@ -597,7 +598,7 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 				}
 				// reset the timeout
 				src.ReadTimeout = time.Second * 5
-			} else if tlsConn != nil && tlsConn.Host() != "" {
+			} else if tlsConn != nil && tlsConn.Host() != "" && !firstRun {
 				proxyCtx.Warnf("SPOOF: Found TLS host %v", tlsConn.Host())
 				// replace dst with new connection and write to it
 				newHost := tlsConn.Host() + ":443"
