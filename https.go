@@ -19,6 +19,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/Windscribe/go-vhost"
 )
 
 type ConnectActionLiteral int
@@ -339,8 +341,8 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	wg.Add(2)
 	cancelCtx, cancel := context.WithCancel(context.Background())
 	ctx.Logf("Starting copy and close %v = %v", host, targetConn.Conn.RemoteAddr())
-	go copyAndClose(cancelCtx, cancel, ctx, targetConn, clientConn, "sent", &wg)
-	go copyAndClose(cancelCtx, cancel, ctx, clientConn, targetConn, "recv", &wg)
+	go copyAndClose(cancelCtx, cancel, ctx, targetConn, clientConn, "sent", &wg, strings.Split(host, ":")[0])
+	go copyAndClose(cancelCtx, cancel, ctx, clientConn, targetConn, "recv", &wg, "")
 	wg.Wait()
 	if ctx.ForwardMetricsCounters.ProxyBandwidth != nil {
 		metric := *ctx.ForwardMetricsCounters.ProxyBandwidth
@@ -565,7 +567,7 @@ func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader, wg *sync.WaitGroup)
 	wg.Done()
 }
 
-func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *ProxyCtx, dst, src *ProxyTCPConn, dir string, wg *sync.WaitGroup) {
+func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *ProxyCtx, dst, src *ProxyTCPConn, dir string, wg *sync.WaitGroup, host string) {
 	defer cancel()
 	defer wg.Done()
 
@@ -585,7 +587,33 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 		default:
 		}
 
-		nr, er := src.Read(buf)
+		var nr int
+		var er error
+
+		if dir == "sent" && proxyCtx.ForwardProxyDNSSpoofing {
+			proxyCtx.Warnf("SPOOF: Checking for TLS data")
+			tlsConn, tlsErr := vhost.TLS(src)
+			if tlsErr != nil {
+				if err == io.EOF {
+					return
+				}
+			} else if tlsConn != nil && tlsConn.Host() != host {
+				newHost := tlsConn.Host() + ":443"
+				proxyCtx.Warnf("SPOOF: Found new TLS host %v", newHost)
+				_, _, _, targetSiteCon, err := proxyCtx.Proxy.getTargetSiteConnection(proxyCtx, src, newHost)
+				if err == nil && targetSiteCon != nil {
+					dst.Conn = targetSiteCon
+					proxyCtx.Warnf("SPOOF: Resetting dst socket to new conn")
+					buf = tlsConn.SharedConn.VhostBuf.Bytes()
+					nr = len(buf)
+				} else {
+					proxyCtx.Warnf("SPOOF: Error connecting to new target site %v", err)
+					return
+				}
+			}
+		} else {
+			nr, er = src.Read(buf)
+		}
 
 		select {
 		case <-ctx.Done():
