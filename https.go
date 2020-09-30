@@ -342,7 +342,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	cancelCtx, cancel := context.WithCancel(context.Background())
 	ctx.Logf("Starting copy and close %v = %v", host, targetConn.Conn.RemoteAddr())
 	go copyAndClose(cancelCtx, cancel, ctx, targetConn, clientConn, "sent", &wg, strings.Split(host, ":")[0])
-	go copyAndClose(cancelCtx, cancel, ctx, clientConn, targetConn, "recv", &wg, "")
+	go copyAndClose(cancelCtx, cancel, ctx, clientConn, targetConn, "recv", &wg, strings.Split(host, ":")[0])
 	wg.Wait()
 	if ctx.ForwardMetricsCounters.ProxyBandwidth != nil {
 		metric := *ctx.ForwardMetricsCounters.ProxyBandwidth
