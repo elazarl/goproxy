@@ -586,7 +586,7 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 
 		nr, er = src.Read(buf)
 
-		if proxyCtx.ForwardProxyDNSSpoofing {
+		if proxyCtx.ForwardProxyDNSSpoofing && strings.Contains(string(buf), "cnn.com") {
 			proxyCtx.Warnf("TESTING: %v %v |%v|", host, dst.Conn.RemoteAddr(), string(buf))
 		}
 
