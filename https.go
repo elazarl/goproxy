@@ -99,7 +99,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 			IdleConnTimeout:       idleTimeout,
-			DisableKeepAlives:     ctx.ForwardProxyDNSSpoofing,
+			DisableKeepAlives:     ctx.ForwardDisableHTTPKeepAlives,
 			Proxy: func(req *http.Request) (*url.URL, error) {
 				return url.Parse(ctx.ForwardProxyProto + "://" + ctx.ForwardProxy)
 			},
@@ -167,7 +167,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 			IdleConnTimeout:       idleTimeout,
-			DisableKeepAlives:     ctx.ForwardProxyDNSSpoofing,
+			DisableKeepAlives:     ctx.ForwardDisableHTTPKeepAlives,
 		}
 
 		targetSiteCon, err = tr.Dial("tcp", host)
@@ -334,9 +334,9 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	var wg sync.WaitGroup
 	wg.Add(2)
 	cancelCtx, cancel := context.WithCancel(context.Background())
-	ctx.Logf("Starting copy and close %v = %v", host, targetConn.Conn.RemoteAddr())
-	go copyAndClose(cancelCtx, cancel, ctx, targetConn, clientConn, "sent", &wg, strings.Split(host, ":")[0])
-	go copyAndClose(cancelCtx, cancel, ctx, clientConn, targetConn, "recv", &wg, strings.Split(host, ":")[0])
+
+	go copyAndClose(cancelCtx, cancel, ctx, targetConn, clientConn, "sent", &wg)
+	go copyAndClose(cancelCtx, cancel, ctx, clientConn, targetConn, "recv", &wg)
 	wg.Wait()
 	if ctx.ForwardMetricsCounters.ProxyBandwidth != nil {
 		metric := *ctx.ForwardMetricsCounters.ProxyBandwidth
@@ -561,7 +561,7 @@ func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader, wg *sync.WaitGroup)
 	wg.Done()
 }
 
-func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *ProxyCtx, dst, src *ProxyTCPConn, dir string, wg *sync.WaitGroup, host string) {
+func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *ProxyCtx, dst, src *ProxyTCPConn, dir string, wg *sync.WaitGroup) {
 	defer cancel()
 	defer wg.Done()
 
@@ -581,14 +581,7 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 		default:
 		}
 
-		var nr int
-		var er error
-
-		nr, er = src.Read(buf)
-
-		if proxyCtx.ForwardProxyDNSSpoofing && strings.Contains(string(buf), "cnn.com") {
-			proxyCtx.Warnf("TESTING: %v %v |%v|", host, dst.Conn.RemoteAddr(), string(buf))
-		}
+		nr, er := src.Read(buf)
 
 		select {
 		case <-ctx.Done():

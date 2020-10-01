@@ -48,7 +48,7 @@ type ProxyCtx struct {
 	ForwatdTProxyDropIP                  string
 	ForwardProxySourceIP                 string
 	ForwardProxyDirect                   bool
-	ForwardProxyDNSSpoofing              bool
+	ForwardDisableHTTPKeepAlives         bool
 	TCPKeepAlivePeriod                   int
 	TCPKeepAliveCount                    int
 	TCPKeepAliveInterval                 int
