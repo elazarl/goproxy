@@ -19,8 +19,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/Windscribe/go-vhost"
 )
 
 type ConnectActionLiteral int
@@ -303,19 +301,15 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		Logger:               ctx.ProxyLogger,
 		ReadTimeout:          time.Second * 5,
 		WriteTimeout:         time.Second * 5,
-		IgnoreDeadlineErrors: !ctx.ForwardProxyDNSSpoofing,
+		IgnoreDeadlineErrors: true,
 	}
 	// If DNS spoofing, dont set KeepAlives
-	if !ctx.ForwardProxyDNSSpoofing {
-		kaErr := clientConn.SetKeepaliveParameters(true, tcpKACount, tcpKAInterval, tcpKAPeriod)
-		if kaErr != nil {
-			ctx.Logf("clientConn KeepAlive error: %v", kaErr)
-			clientConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
-			clientConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
-			clientConn.IgnoreDeadlineErrors = false
-		}
-	} else {
-		setTargetKA = false
+	kaErr := clientConn.SetKeepaliveParameters(true, tcpKACount, tcpKAInterval, tcpKAPeriod)
+	if kaErr != nil {
+		ctx.Logf("clientConn KeepAlive error: %v", kaErr)
+		clientConn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
+		clientConn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
+		clientConn.IgnoreDeadlineErrors = false
 	}
 
 	targetConn := &ProxyTCPConn{
@@ -323,7 +317,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		Logger:               ctx.ProxyLogger,
 		ReadTimeout:          time.Second * 5,
 		WriteTimeout:         time.Second * 5,
-		IgnoreDeadlineErrors: !ctx.ForwardProxyDNSSpoofing,
+		IgnoreDeadlineErrors: true,
 	}
 	// Since we dont have access to the *tls.Conn underlying connection, we have to set it
 	// during the connectDial to proxy
@@ -590,32 +584,10 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 		var nr int
 		var er error
 
-		if proxyCtx.ForwardProxyDNSSpoofing {
-			proxyCtx.Warnf("SPOOF: %v Checking for TLS data %v", dir, host)
-			//src.ReadTimeout = time.Second * 1
-			tlsConn, tlsErr := vhost.TLS(src)
-			if tlsErr != nil {
-				proxyCtx.Warnf("SPOOF: %v %v TLS error %v", dir, host, tlsErr)
-				if tlsErr == io.EOF {
-					return
-				}
-			} else if tlsConn != nil && tlsConn.Host() != host {
-				newHost := tlsConn.Host() + ":443"
-				proxyCtx.Warnf("SPOOF: %v %v Found new TLS host %v", dir, host, newHost)
-				_, _, _, targetSiteCon, err := proxyCtx.Proxy.getTargetSiteConnection(proxyCtx, src, newHost)
-				if err == nil && targetSiteCon != nil {
-					dst.Conn = targetSiteCon
-					proxyCtx.Warnf("SPOOF: Resetting dst %v socket to new conn %v", host, newHost)
+		nr, er = src.Read(buf)
 
-				} else {
-					proxyCtx.Warnf("SPOOF: Error %v connecting to new target %v site %v", host, newHost, err)
-					return
-				}
-			}
-			buf = tlsConn.SharedConn.VhostBuf.Bytes()
-			nr = len(buf)
-		} else {
-			nr, er = src.Read(buf)
+		if proxyCtx.ForwardProxyDNSSpoofing {
+			proxyCtx.Warnf("TESTING: %v %v |%v|", host, dst.Conn.RemoteAddr(), string(buf))
 		}
 
 		select {
