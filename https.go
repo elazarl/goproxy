@@ -700,7 +700,23 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 			if connectReqHandler != nil {
 				connectReqHandler(connectReq)
 			}
-			c, err := proxy.dial(network, u.Host)
+
+			var c net.Conn
+			var err error
+
+			if ctx.ForwardProxySourceIP != "" {
+				d := net.Dialer{
+					Timeout: 15 * time.Second,
+				}
+				localAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:0", ctx.ForwardProxySourceIP))
+				if err == nil {
+					d.LocalAddr = localAddr
+				}
+				c, err = d.Dial(network, u.Host)
+			} else {
+				c, err = proxy.dial(network, u.Host)
+			}
+
 			if err != nil {
 				return nil, err
 			}
@@ -751,7 +767,23 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 		}
 
 		return func(network, addr string) (net.Conn, error) {
-			c, err := proxy.dial(network, u.Host)
+
+			var c net.Conn
+			var err error
+
+			if ctx.ForwardProxySourceIP != "" {
+				d := net.Dialer{
+					Timeout: 15 * time.Second,
+				}
+				localAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:0", ctx.ForwardProxySourceIP))
+				if err == nil {
+					d.LocalAddr = localAddr
+				}
+				c, err = d.Dial(network, u.Host)
+			} else {
+				c, err = proxy.dial(network, u.Host)
+			}
+
 			if err != nil {
 				return nil, err
 			}
