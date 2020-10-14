@@ -371,6 +371,9 @@ func (proxy *ProxyHttpServer) HandleHttps(w http.ResponseWriter, r *http.Request
 		ctx.Logf("using provided proxyClient: %v, type %v", proxyClient, reflect.TypeOf(proxyClient))
 	}
 
+	// when usiung tproxy, we want to save the target address for the handlers
+	ctx.ProxyTargetAddress = proxyClient.LocalAddr().String()
+
 	ctx.Logf("Running %d CONNECT handlers", len(proxy.httpsHandlers))
 	todo, host := OkConnect, r.URL.Host
 	for i, h := range proxy.httpsHandlers {

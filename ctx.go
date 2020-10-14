@@ -52,6 +52,7 @@ type ProxyCtx struct {
 	TCPKeepAlivePeriod                   int
 	TCPKeepAliveCount                    int
 	TCPKeepAliveInterval                 int
+	ProxyTargetAddress                   string
 	ProxyUser                            string
 	MaxIdleConns                         int
 	MaxIdleConnsPerHost                  int
