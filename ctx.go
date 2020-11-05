@@ -366,7 +366,11 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func (ctx *ProxyCtx) printf(msg string, argv ...interface{}) {
 	if ctx.Proxy.Verbose {
-		ctx.Proxy.Logger.Printf("[%03d] "+msg+"\n", append([]interface{}{ctx.Session & 0xFF}, argv...)...)
+		if ctx.LogRequestID != "" {
+			ctx.Proxy.Logger.Printf("[%s] "+msg+"\n", append([]interface{}{ctx.LogRequestID}, argv...)...)
+		} else {
+			ctx.Proxy.Logger.Printf("[%03d] "+msg+"\n", append([]interface{}{ctx.Session & 0xFF}, argv...)...)
+		}
 	}
 }
 
