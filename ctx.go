@@ -34,6 +34,7 @@ type ProxyCtx struct {
 	Proxy     *ProxyHttpServer
 
 	ProxyLogger                          *logex.Leveled
+	LogRequestID                         string
 	ForwardProxy                         string
 	ForwardProxyAuth                     string
 	ForwardProxyProto                    string
@@ -379,7 +380,11 @@ func (ctx *ProxyCtx) printf(msg string, argv ...interface{}) {
 //	})
 func (ctx *ProxyCtx) Logf(msg string, argv ...interface{}) {
 	if ctx.ProxyLogger != nil {
-		ctx.ProxyLogger.Info.Printf("[%03d] "+msg+"\n", append([]interface{}{ctx.Session & 0xFF}, argv...)...)
+		if ctx.LogRequestID != "" {
+			ctx.ProxyLogger.Info.Printf("[%s] "+msg+"\n", append([]interface{}{ctx.LogRequestID}, argv...)...)
+		} else {
+			ctx.ProxyLogger.Info.Printf("[%03d] "+msg+"\n", append([]interface{}{ctx.Session & 0xFF}, argv...)...)
+		}
 		return
 	}
 	ctx.printf("INFO: "+msg, argv...)
@@ -398,7 +403,11 @@ func (ctx *ProxyCtx) Logf(msg string, argv ...interface{}) {
 //	})
 func (ctx *ProxyCtx) Warnf(msg string, argv ...interface{}) {
 	if ctx.ProxyLogger != nil {
-		ctx.ProxyLogger.Debug.Printf("[%03d] "+msg+"\n", append([]interface{}{ctx.Session & 0xFF}, argv...)...)
+		if ctx.LogRequestID != "" {
+			ctx.ProxyLogger.Debug.Printf("[%s] "+msg+"\n", append([]interface{}{ctx.LogRequestID}, argv...)...)
+		} else {
+			ctx.ProxyLogger.Debug.Printf("[%03d] "+msg+"\n", append([]interface{}{ctx.Session & 0xFF}, argv...)...)
+		}
 		return
 	}
 	ctx.printf("WARN: "+msg, argv...)
