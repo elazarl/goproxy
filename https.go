@@ -139,7 +139,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 
 		tlsTime := float64(dialEnd/1000000) - float64(dialStart/1000000)
 
-		ctx.Logf("dialing to proxy %s completed in %fms", ctx.ForwardProxy, tlsTime)
+		ctx.Logf("dialing to proxy %s completed in %dms", ctx.ForwardProxy, int(tlsTime))
 
 		if ctx.ForwardMetricsCounters.TLSTimes != nil {
 			metric := *ctx.ForwardMetricsCounters.TLSTimes
@@ -182,7 +182,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 
 		tlsTime := float64(dialEnd/1000000) - float64(dialStart/1000000)
 
-		ctx.Logf("dialing to host %s completed in %fms", host, tlsTime)
+		ctx.Logf("dialing to host %s completed in %dms", host, int(tlsTime))
 
 	} else if ctx.ForwardProxyTProxy {
 
