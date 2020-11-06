@@ -293,7 +293,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	}
 
 	ctx.SetSuccessMetric()
-	ctx.Logf("Accepting CONNECT to %s", host)
+	ctx.Infof("Accepting CONNECT to %s", host)
 
 	//set tcp keep alives.
 	tcpKAPeriod := 5

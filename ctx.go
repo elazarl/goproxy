@@ -403,6 +403,18 @@ func (ctx *ProxyCtx) Logf(msg string, argv ...interface{}) {
 	ctx.printf(msg, argv...)
 }
 
+func (ctx *ProxyCtx) Infof(msg string, argv ...interface{}) {
+	if ctx.ProxyLogger != nil {
+		if ctx.LogRequestID != "" {
+			ctx.ProxyLogger.Infof("[%s] "+msg+"\n", append([]interface{}{ctx.LogRequestID}, argv...)...)
+		} else {
+			ctx.ProxyLogger.Infof("[%03d] "+msg+"\n", append([]interface{}{ctx.Session & 0xFF}, argv...)...)
+		}
+		return
+	}
+	ctx.printf(msg, argv...)
+}
+
 // Warnf prints a message to the proxy's log. Should be used in a ProxyHttpServer's filter
 // This message will always be printed.
 //
