@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/Windscribe/go-vhost"
-	"github.com/function61/gokit/log/logex"
 	"golang.org/x/sys/unix"
 )
 
@@ -20,7 +19,7 @@ type ProxyTCPConn struct {
 	BytesRead            int64
 	ReadTimeout          time.Duration
 	WriteTimeout         time.Duration
-	Logger               *logex.Leveled
+	Logger               *ProxyLeveledLogger
 	IgnoreDeadlineErrors bool
 }
 
@@ -97,17 +96,17 @@ func (conn *ProxyTCPConn) SetKeepaliveParameters(sharedConn bool, count, interva
 			//Number of probes.
 			err := syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPCNT, count)
 			if err != nil {
-				conn.Logger.Error.Printf("on setting keepalive probe count: %s", err.Error())
+				conn.Logger.Warningf("on setting keepalive probe count: %s", err.Error())
 			}
 			//Wait time after an unsuccessful probe.
 			err = syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPINTVL, interval)
 			if err != nil {
-				conn.Logger.Error.Printf("on setting keepalive retry interval: %s", err.Error())
+				conn.Logger.Warningf("on setting keepalive retry interval: %s", err.Error())
 			}
 			//Set the user timeout to make sure connections close
 			err = syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, unix.TCP_USER_TIMEOUT, int(tcpUserTimeout))
 			if err != nil {
-				conn.Logger.Error.Printf("on setting user timeout to %v: %s", tcpUserTimeout, err.Error())
+				conn.Logger.Warningf("on setting user timeout to %v: %s", tcpUserTimeout, err.Error())
 			}
 		})
 	if err != nil {

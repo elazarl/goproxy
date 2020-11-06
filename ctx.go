@@ -11,9 +11,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/function61/gokit/log/logex"
 	"github.com/prometheus/client_golang/prometheus"
 )
+
+// ProxyLeveledLogger is used to get leveled syslog logging
+type ProxyLeveledLogger struct {
+	Warningf func(format string, a ...interface{}) error
+	Debugf   func(format string, a ...interface{}) error
+	Infof    func(format string, a ...interface{}) error
+}
 
 // ProxyCtx is the Proxy context, contains useful information about every request. It is passed to
 // every user function. Also used as a logger.
@@ -33,7 +39,7 @@ type ProxyCtx struct {
 	certStore CertStorage
 	Proxy     *ProxyHttpServer
 
-	ProxyLogger                          *logex.Leveled
+	ProxyLogger                          *ProxyLeveledLogger
 	LogRequestID                         string
 	ForwardProxy                         string
 	ForwardProxyAuth                     string
@@ -388,13 +394,13 @@ func (ctx *ProxyCtx) printf(msg string, argv ...interface{}) {
 func (ctx *ProxyCtx) Logf(msg string, argv ...interface{}) {
 	if ctx.ProxyLogger != nil {
 		if ctx.LogRequestID != "" {
-			ctx.ProxyLogger.Debug.Printf("[%s] "+msg+"\n", append([]interface{}{ctx.LogRequestID}, argv...)...)
+			ctx.ProxyLogger.Debugf("[%s] "+msg+"\n", append([]interface{}{ctx.LogRequestID}, argv...)...)
 		} else {
-			ctx.ProxyLogger.Debug.Printf("[%03d] "+msg+"\n", append([]interface{}{ctx.Session & 0xFF}, argv...)...)
+			ctx.ProxyLogger.Debugf("[%03d] "+msg+"\n", append([]interface{}{ctx.Session & 0xFF}, argv...)...)
 		}
 		return
 	}
-	ctx.printf("INFO: "+msg, argv...)
+	ctx.printf(msg, argv...)
 }
 
 // Warnf prints a message to the proxy's log. Should be used in a ProxyHttpServer's filter
@@ -411,13 +417,13 @@ func (ctx *ProxyCtx) Logf(msg string, argv ...interface{}) {
 func (ctx *ProxyCtx) Warnf(msg string, argv ...interface{}) {
 	if ctx.ProxyLogger != nil {
 		if ctx.LogRequestID != "" {
-			ctx.ProxyLogger.Debug.Printf("[%s] "+msg+"\n", append([]interface{}{ctx.LogRequestID}, argv...)...)
+			ctx.ProxyLogger.Warningf("[%s] "+msg+"\n", append([]interface{}{ctx.LogRequestID}, argv...)...)
 		} else {
-			ctx.ProxyLogger.Debug.Printf("[%03d] "+msg+"\n", append([]interface{}{ctx.Session & 0xFF}, argv...)...)
+			ctx.ProxyLogger.Warningf("[%03d] "+msg+"\n", append([]interface{}{ctx.Session & 0xFF}, argv...)...)
 		}
 		return
 	}
-	ctx.printf("WARN: "+msg, argv...)
+	ctx.printf(msg, argv...)
 }
 
 var charsetFinder = regexp.MustCompile("charset=([^ ;]*)")
