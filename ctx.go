@@ -388,9 +388,9 @@ func (ctx *ProxyCtx) printf(msg string, argv ...interface{}) {
 func (ctx *ProxyCtx) Logf(msg string, argv ...interface{}) {
 	if ctx.ProxyLogger != nil {
 		if ctx.LogRequestID != "" {
-			ctx.ProxyLogger.Info.Printf("[%s] "+msg+"\n", append([]interface{}{ctx.LogRequestID}, argv...)...)
+			ctx.ProxyLogger.Debug.Printf("[%s] "+msg+"\n", append([]interface{}{ctx.LogRequestID}, argv...)...)
 		} else {
-			ctx.ProxyLogger.Info.Printf("[%03d] "+msg+"\n", append([]interface{}{ctx.Session & 0xFF}, argv...)...)
+			ctx.ProxyLogger.Debug.Printf("[%03d] "+msg+"\n", append([]interface{}{ctx.Session & 0xFF}, argv...)...)
 		}
 		return
 	}
