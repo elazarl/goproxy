@@ -50,6 +50,9 @@ type ProxyCtx struct {
 	ForwardProxySourceIP                 string
 	ForwardProxyDirect                   bool
 	ForwardDisableHTTPKeepAlives         bool
+	DNSResolver                          string
+	DNSLocalAddr                         string
+	DNSTimeout                           time.Duration
 	TCPKeepAlivePeriod                   int
 	TCPKeepAliveCount                    int
 	TCPKeepAliveInterval                 int

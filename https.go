@@ -162,6 +162,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 				d := net.Dialer{
 					Timeout:   15 * time.Second,
 					LocalAddr: localAddr,
+					Resolver:  proxy.getResolver(ctx, "udp"),
 				}
 				return d.Dial("tcp", address)
 			},
@@ -203,6 +204,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 				d := net.Dialer{
 					Timeout:   10 * time.Second,
 					LocalAddr: tcpLocal,
+					Resolver:  proxy.getResolver(ctx, "udp"),
 				}
 				targetSiteCon, err = d.Dial("tcp", proxyClient.LocalAddr().String())
 				// targetSiteCon, err = net.DialTCP("tcp", tcpLocal, tcpRemote)
@@ -687,6 +689,39 @@ func dialerFromEnv(proxy *ProxyHttpServer) func(network, addr string) (net.Conn,
 	return proxy.NewConnectDialToProxy(https_proxy)
 }
 
+func (proxy *ProxyHttpServer) getResolver(proxyCtx *ProxyCtx, proto string) *net.Resolver {
+	return &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+			d := net.Dialer{
+				Timeout: proxyCtx.DNSTimeout,
+			}
+			if strings.Contains(network, "tcp") {
+				proto = "tcp"
+			}
+			if proxyCtx.DNSLocalAddr != "" {
+				if proto == "udp" {
+					udpAddr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(proxyCtx.DNSLocalAddr, "0"))
+					if err != nil {
+						return nil, err
+					}
+					d.LocalAddr = udpAddr
+				} else if proto == "tcp" {
+					tcpAddr, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(proxyCtx.DNSLocalAddr, "0"))
+					if err != nil {
+						return nil, err
+					}
+					d.LocalAddr = tcpAddr
+				}
+			}
+			if proxyCtx.DNSResolver != "" {
+				address = proxyCtx.DNSResolver
+			}
+			return d.DialContext(ctx, proto, net.JoinHostPort(address, "53"))
+		},
+	}
+}
+
 func (proxy *ProxyHttpServer) NewConnectDialToProxy(https_proxy string) func(network, addr string) (net.Conn, error) {
 	return proxy.NewConnectDialToProxyWithHandler(https_proxy, nil)
 }
@@ -717,7 +752,8 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 
 			if ctx.ForwardProxySourceIP != "" {
 				d := net.Dialer{
-					Timeout: 15 * time.Second,
+					Timeout:  15 * time.Second,
+					Resolver: proxy.getResolver(ctx, "udp"),
 				}
 				localAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:0", ctx.ForwardProxySourceIP))
 				if err == nil {
@@ -784,7 +820,8 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 
 			if ctx.ForwardProxySourceIP != "" {
 				d := net.Dialer{
-					Timeout: 15 * time.Second,
+					Timeout:  15 * time.Second,
+					Resolver: proxy.getResolver(ctx, "udp"),
 				}
 				localAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:0", ctx.ForwardProxySourceIP))
 				if err == nil {
