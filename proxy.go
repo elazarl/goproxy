@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 )
 
-// The basic proxy type. Implements http.Handler.
+//ProxyHttpServer basic proxy type. Implements http.Handler.
 type ProxyHttpServer struct {
 	// session variable must be aligned in i386
 	// see http://golang.org/src/pkg/sync/atomic/doc.go#L41
