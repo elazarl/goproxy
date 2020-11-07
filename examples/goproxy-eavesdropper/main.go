@@ -19,7 +19,7 @@ func orPanic(err error) {
 
 func main() {
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.OnRequest(goproxy.ReqHostMatches(regexp.MustCompile("^.*baidu.com$"))).
+	proxy.OnRequest(goproxy.ReqHostMatches(regexp.MustCompile("baidu.*:443$"))).
 		HandleConnect(goproxy.AlwaysReject)
 	proxy.OnRequest(goproxy.ReqHostMatches(regexp.MustCompile("^.*$"))).
 		HandleConnect(goproxy.AlwaysMitm)
@@ -36,6 +36,7 @@ func main() {
 		clientBuf := bufio.NewReadWriter(bufio.NewReader(client), bufio.NewWriter(client))
 		remote, err := net.Dial("tcp", req.URL.Host)
 		orPanic(err)
+		client.Write([]byte("HTTP/1.1 200 Ok\r\n\r\n"))
 		remoteBuf := bufio.NewReadWriter(bufio.NewReader(remote), bufio.NewWriter(remote))
 		for {
 			req, err := http.ReadRequest(clientBuf.Reader)
