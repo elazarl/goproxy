@@ -30,7 +30,7 @@ func newProxyTCPConn(conn net.Conn) *ProxyTCPConn {
 }
 
 func (conn *ProxyTCPConn) Write(b []byte) (n int, err error) {
-	if conn.Conn == nil {
+	if conn == nil || conn.Conn == nil {
 		return
 	}
 	if conn.WriteTimeout > 0 {
@@ -46,7 +46,7 @@ func (conn *ProxyTCPConn) Write(b []byte) (n int, err error) {
 }
 
 func (conn *ProxyTCPConn) Read(b []byte) (n int, err error) {
-	if conn.Conn == nil {
+	if conn == nil || conn.Conn == nil {
 		return
 	}
 	if conn.ReadTimeout > 0 {
