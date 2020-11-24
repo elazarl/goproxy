@@ -494,7 +494,7 @@ func (proxy *ProxyHttpServer) connectDialProxyWithContext(ctx *ProxyCtx, proxyHo
 		return nil, err
 	}
 
-	c, err := proxy.connectDialContext(ctx, "tcp", proxyHost)
+	c, err := proxy.connectDialContext(ctx, "tcp", proxyURL.Host)
 	if err != nil {
 		return nil, err
 	}
@@ -555,8 +555,10 @@ func httpsProxyFromEnv(reqURL *url.URL) (string, error) {
 
 	service := proxyURL.Port()
 	if service == "" {
+		// TODO I am very confused by this line of code
+		// what does a URL of the form `proxy-example.com:http` mean??
 		service = proxyURL.Scheme
 	}
 
-	return fmt.Sprintf("%s:%s", proxyURL.Hostname(), service), nil
+	return fmt.Sprintf("//%s:%s", proxyURL.Hostname(), service), nil
 }
