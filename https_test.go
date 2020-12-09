@@ -12,13 +12,12 @@ var proxytests = map[string]struct {
 	url         string
 	expectProxy string
 }{
-	// TODO confused by the tests. Why is the scheme where the port number supposed to be?
 	"do not proxy without a proxy configured":   {"", "", "https://foo.bar/baz", ""},
-	"proxy with a proxy configured":             {"", "daproxy", "https://foo.bar/baz", "//daproxy:http"},
-	"proxy without a scheme":                    {"", "daproxy", "//foo.bar/baz", "//daproxy:http"},
-	"proxy with a proxy configured with a port": {"", "http://daproxy:123", "https://foo.bar/baz", "//daproxy:123"},
-	"proxy with an https proxy configured":      {"", "https://daproxy", "https://foo.bar/baz", "//daproxy:https"},
-	"proxy with a non-matching no_proxy":        {"other.bar", "daproxy", "https://foo.bar/baz", "//daproxy:http"},
+	"proxy with a proxy configured":             {"", "daproxy", "https://foo.bar/baz", "daproxy:http"},
+	"proxy without a scheme":                    {"", "daproxy", "//foo.bar/baz", "daproxy:http"},
+	"proxy with a proxy configured with a port": {"", "http://daproxy:123", "https://foo.bar/baz", "daproxy:123"},
+	"proxy with an https proxy configured":      {"", "https://daproxy", "https://foo.bar/baz", "daproxy:https"},
+	"proxy with a non-matching no_proxy":        {"other.bar", "daproxy", "https://foo.bar/baz", "daproxy:http"},
 	"do not proxy with a full no_proxy match":   {"foo.bar", "daproxy", "https://foo.bar/baz", ""},
 	"do not proxy with a suffix no_proxy match": {".bar", "daproxy", "https://foo.bar/baz", ""},
 }

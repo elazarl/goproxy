@@ -489,20 +489,10 @@ func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls
 }
 
 func (proxy *ProxyHttpServer) connectDialProxyWithContext(ctx *ProxyCtx, proxyHost, host string) (net.Conn, error) {
-	proxyURL, err := url.Parse(proxyHost)
+	c, err := proxy.connectDialContext(ctx, "tcp", proxyHost)
 	if err != nil {
 		return nil, err
 	}
-
-	c, err := proxy.connectDialContext(ctx, "tcp", proxyURL.Host)
-	if err != nil {
-		return nil, err
-	}
-
-	if proxyURL.Scheme == "https" {
-		c = tls.Client(c, proxy.Tr.TLSClientConfig)
-	}
-
 	connectReq := &http.Request{
 		Method: "CONNECT",
 		URL:    &url.URL{Opaque: host},
@@ -555,10 +545,8 @@ func httpsProxyFromEnv(reqURL *url.URL) (string, error) {
 
 	service := proxyURL.Port()
 	if service == "" {
-		// TODO I am very confused by this line of code
-		// what does a URL of the form `proxy-example.com:http` mean??
 		service = proxyURL.Scheme
 	}
 
-	return fmt.Sprintf("//%s:%s", proxyURL.Hostname(), service), nil
+	return fmt.Sprintf("%s:%s", proxyURL.Hostname(), service), nil
 }
