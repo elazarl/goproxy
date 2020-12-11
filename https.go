@@ -489,10 +489,20 @@ func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls
 }
 
 func (proxy *ProxyHttpServer) connectDialProxyWithContext(ctx *ProxyCtx, proxyHost, host string) (net.Conn, error) {
-	c, err := proxy.connectDialContext(ctx, "tcp", proxyHost)
+	proxyURL, err := url.Parse(proxyHost)
 	if err != nil {
 		return nil, err
 	}
+
+	c, err := proxy.connectDialContext(ctx, "tcp", proxyURL.Host)
+	if err != nil {
+		return nil, err
+	}
+
+	if proxyURL.Scheme == "https" {
+		c = tls.Client(c, proxy.Tr.TLSClientConfig)
+	}
+
 	connectReq := &http.Request{
 		Method: "CONNECT",
 		URL:    &url.URL{Opaque: host},
@@ -548,5 +558,5 @@ func httpsProxyFromEnv(reqURL *url.URL) (string, error) {
 		service = proxyURL.Scheme
 	}
 
-	return fmt.Sprintf("%s:%s", proxyURL.Hostname(), service), nil
+	return fmt.Sprintf("%s://%s:%s", proxyURL.Scheme, proxyURL.Hostname(), service), nil
 }
