@@ -494,7 +494,7 @@ func (proxy *ProxyHttpServer) connectDialProxyWithContext(ctx *ProxyCtx, proxyHo
 		return nil, err
 	}
 
-	c, err := proxy.connectDialContext(ctx, "tcp", proxyHost)
+	c, err := proxy.connectDialContext(ctx, "tcp", proxyURL.Host)
 	if err != nil {
 		return nil, err
 	}
@@ -558,5 +558,5 @@ func httpsProxyFromEnv(reqURL *url.URL) (string, error) {
 		service = proxyURL.Scheme
 	}
 
-	return fmt.Sprintf("%s:%s", proxyURL.Hostname(), service), nil
+	return fmt.Sprintf("%s://%s:%s", proxyURL.Scheme, proxyURL.Hostname(), service), nil
 }
