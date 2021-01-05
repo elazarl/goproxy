@@ -29,6 +29,13 @@ func newProxyTCPConn(conn net.Conn) *ProxyTCPConn {
 	return &ProxyTCPConn{Conn: conn}
 }
 
+func (conn *ProxyTCPConn) Close() error {
+	if conn == nil || conn.Conn == nil {
+		return nil
+	}
+	return conn.Conn.Close()
+}
+
 func (conn *ProxyTCPConn) Write(b []byte) (n int, err error) {
 	if conn == nil || conn.Conn == nil {
 		return 0, io.ErrUnexpectedEOF
