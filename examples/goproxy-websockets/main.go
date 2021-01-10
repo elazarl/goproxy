@@ -2,7 +2,7 @@ package main
 
 import (
 	"crypto/tls"
-	"github.com/ecordell/goproxy"
+	"github.com/elazarl/goproxy"
 	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
@@ -74,7 +74,7 @@ func main() {
 	StartProxy(wg)
 
 	endpointUrl := "wss://localhost:12345"
-	proxyUrl := "wss://localhost:54321"
+	proxyUrl := "http://localhost:54321"
 
 	surl, _ := url.Parse(proxyUrl)
 	dialer := websocket.Dialer{
