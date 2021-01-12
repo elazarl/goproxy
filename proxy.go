@@ -105,6 +105,7 @@ func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 		r.Close = false
 	}
 	r.Header.Del("Connection")
+	r.Close = false
 }
 
 // Standard net/http function. Shouldn't be used directly, http.Serve will use it.
