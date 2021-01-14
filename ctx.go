@@ -56,6 +56,7 @@ type ProxyCtx struct {
 	ForwardProxySourceIP                 string
 	ForwardProxyDirect                   bool
 	ForwardDisableHTTPKeepAlives         bool
+	CloseOnError                         bool
 	DNSResolver                          string
 	DNSLocalAddr                         string
 	DNSTimeout                           time.Duration

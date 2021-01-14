@@ -124,6 +124,10 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			removeProxyHeaders(ctx, r)
 			resp, err = ctx.RoundTrip(r)
 			if err != nil {
+				if ctx.CloseOnError {
+					r.Close = true
+					return
+				}
 				ctx.Error = err
 				resp = proxy.filterResponse(nil, ctx)
 
