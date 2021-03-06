@@ -23,6 +23,8 @@ type ProxyCtx struct {
 	Session   int64
 	certStore CertStorage
 	Proxy     *ProxyHttpServer
+	// Will prevent second authentication on the already authenticated requests
+	Authenticated bool
 }
 
 type RoundTripper interface {
