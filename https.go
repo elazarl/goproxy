@@ -842,11 +842,12 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 			var c net.Conn
 			var err error
 
+			dialTimeout := ctx.ForwardProxyDialTimeout
+			if dialTimeout == 0 {
+				dialTimeout = 5
+			}
+
 			if ctx.ForwardProxySourceIP != "" {
-				dialTimeout := ctx.ForwardProxyDialTimeout
-				if dialTimeout == 0 {
-					dialTimeout = 20
-				}
 				d := net.Dialer{
 					Timeout:  time.Duration(dialTimeout) * time.Second,
 					Resolver: proxy.getResolver(ctx, "udp"),
@@ -868,8 +869,8 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 			targetConn := &ProxyTCPConn{
 				Conn:                 c,
 				Logger:               ctx.ProxyLogger,
-				ReadTimeout:          time.Second * 10,
-				WriteTimeout:         time.Second * 10,
+				ReadTimeout:          time.Second * time.Duration(dialTimeout),
+				WriteTimeout:         time.Second * time.Duration(dialTimeout),
 				IgnoreDeadlineErrors: true,
 			}
 			kaErr := targetConn.SetKeepaliveParameters(false, tcpKACount, tcpKAInterval, tcpKAPeriod)
