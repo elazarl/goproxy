@@ -334,7 +334,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		WriteTimeout:         time.Second * 5,
 		IgnoreDeadlineErrors: true,
 	}
-	
+
 	if !ctx.ForwardDisableHTTPKeepAlives {
 		kaErr := clientConn.SetKeepaliveParameters(true, tcpKACount, tcpKAInterval, tcpKAPeriod)
 		if kaErr != nil {
@@ -344,7 +344,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 			clientConn.IgnoreDeadlineErrors = false
 		}
 	}
-	
+
 	targetConn := &ProxyTCPConn{
 		Conn:                 targetSiteCon,
 		Logger:               ctx.ProxyLogger,
@@ -712,7 +712,9 @@ func (proxy *ProxyHttpServer) getResolver(proxyCtx *ProxyCtx, proto string) *net
 		PreferGo: true,
 		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
 			d := net.Dialer{
-				Timeout: proxyCtx.DNSTimeout,
+				Timeout:       proxyCtx.DNSTimeout,
+				FallbackDelay: time.Duration(-1),
+				DualStack:     false,
 			}
 			if strings.Contains(network, "tcp") {
 				proto = "tcp"
@@ -774,7 +776,7 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 					dialTimeout = 20
 				}
 				d := net.Dialer{
-					Timeout:  time.Duration(dialTimeout)*time.Second,
+					Timeout:  time.Duration(dialTimeout) * time.Second,
 					Resolver: proxy.getResolver(ctx, "udp"),
 				}
 				localAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:0", ctx.ForwardProxySourceIP))
