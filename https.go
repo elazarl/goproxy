@@ -19,6 +19,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/miekg/dns"
 )
 
 type ConnectActionLiteral int
@@ -66,6 +68,60 @@ func (proxy *ProxyHttpServer) connectDial(network, addr string) (c net.Conn, err
 		return proxy.dial(network, addr)
 	}
 	return proxy.ConnectDial(network, addr)
+}
+
+func (proxy *ProxyHttpServer) resolveDomain(proxyCtx *ProxyCtx, proto, domain string) (ips []string, err error) {
+
+	resolver := proxyCtx.DNSResolver
+	if resolver == "" {
+		resolver = "127.0.0.1"
+	}
+
+	// resolve it manually and set the bootstrap ip
+	c := new(dns.Client)
+
+	c.Net = proto
+	c.DialTimeout = proxyCtx.DNSTimeout
+	c.ReadTimeout = proxyCtx.DNSTimeout
+	c.WriteTimeout = proxyCtx.DNSTimeout
+
+	if proxyCtx.DNSLocalAddr != "" {
+		if proto == "udp" {
+			udpAddr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(proxyCtx.DNSLocalAddr, "0"))
+			if err != nil {
+				return nil, err
+			}
+			c.Dialer.LocalAddr = udpAddr
+		} else if proto == "tcp" {
+			tcpAddr, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(proxyCtx.DNSLocalAddr, "0"))
+			if err != nil {
+				return nil, err
+			}
+			c.Dialer.LocalAddr = tcpAddr
+		}
+	}
+
+	m := new(dns.Msg)
+	m.SetQuestion(domain+".", dns.TypeA)
+	m.RecursionDesired = true
+	r, _, err := c.Exchange(m, resolver+":53")
+
+	if err != nil {
+		return ips, err
+	}
+
+	if err == nil {
+		if r.Rcode == dns.RcodeSuccess {
+			for _, a := range r.Answer {
+				if ar, ok := a.(*dns.A); ok {
+					ips = append(ips, ar.A.String())
+				}
+			}
+		}
+	}
+
+	return ips, nil
+
 }
 
 func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient net.Conn, host string) (sendHTTPOK bool, setTargetKA bool, logHeaders http.Header, targetSiteCon net.Conn, err error) {
@@ -138,7 +194,18 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 
 		dialStart := time.Now().UnixNano()
 
-		targetSiteCon, err = tr.Dial("tcp", host)
+		var dialHost string
+		ips, err := proxy.resolveDomain(ctx, "udp", host)
+		if err != nil {
+			ips, err = proxy.resolveDomain(ctx, "tcp", host)
+		}
+		if err != nil || len(ips) == 0 {
+			dialHost = host
+		} else {
+			dialHost = ips[0]
+		}
+
+		targetSiteCon, err = tr.Dial("tcp", dialHost)
 
 		dialEnd := time.Now().UnixNano()
 
@@ -190,7 +257,18 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 
 		dialStart := time.Now().UnixNano()
 
-		targetSiteCon, err = tr.Dial("tcp", host)
+		var dialHost string
+		ips, err := proxy.resolveDomain(ctx, "udp", host)
+		if err != nil {
+			ips, err = proxy.resolveDomain(ctx, "tcp", host)
+		}
+		if err != nil || len(ips) == 0 {
+			dialHost = host
+		} else {
+			dialHost = ips[0]
+		}
+
+		targetSiteCon, err = tr.Dial("tcp", dialHost)
 
 		dialEnd := time.Now().UnixNano()
 
@@ -783,7 +861,19 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 				if err == nil {
 					d.LocalAddr = localAddr
 				}
-				c, err = d.Dial(network, u.Host)
+
+				var dialHost string
+				ips, err := proxy.resolveDomain(ctx, "udp", u.Host)
+				if err != nil {
+					ips, err = proxy.resolveDomain(ctx, "tcp", u.Host)
+				}
+				if err != nil || len(ips) == 0 {
+					dialHost = u.Host
+				} else {
+					dialHost = ips[0]
+				}
+
+				c, err = d.Dial(network, dialHost)
 			} else {
 				c, err = proxy.dial(network, u.Host)
 			}
@@ -856,7 +946,19 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 				if err == nil {
 					d.LocalAddr = localAddr
 				}
-				c, err = d.Dial(network, u.Host)
+
+				var dialHost string
+				ips, err := proxy.resolveDomain(ctx, "udp", u.Host)
+				if err != nil {
+					ips, err = proxy.resolveDomain(ctx, "tcp", u.Host)
+				}
+				if err != nil || len(ips) == 0 {
+					dialHost = u.Host
+				} else {
+					dialHost = ips[0]
+				}
+
+				c, err = d.Dial(network, dialHost)
 			} else {
 				c, err = proxy.dial(network, u.Host)
 			}
