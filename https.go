@@ -195,7 +195,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 		dialStart := time.Now().UnixNano()
 
 		var dialHost string
-		domain := strings.Split(":", host)[0]
+		domain := strings.Split(host, ":")[0]
 		ips, err := proxy.resolveDomain(ctx, "udp", domain)
 		if err != nil {
 			ips, err = proxy.resolveDomain(ctx, "tcp", domain)
@@ -259,7 +259,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 		dialStart := time.Now().UnixNano()
 
 		var dialHost string
-		domain := strings.Split(":", host)[0]
+		domain := strings.Split(host, ":")[0]
 		ips, err := proxy.resolveDomain(ctx, "udp", domain)
 		if err != nil {
 			ips, err = proxy.resolveDomain(ctx, "tcp", domain)
@@ -865,7 +865,7 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 				}
 
 				var dialHost string
-				domain := strings.Split(":", u.Host)[0]
+				domain := strings.Split(u.Host, ":")[0]
 				ips, err := proxy.resolveDomain(ctx, "udp", domain)
 				if err != nil {
 					ips, err = proxy.resolveDomain(ctx, "tcp", domain)
@@ -951,7 +951,7 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 				}
 
 				var dialHost string
-				domain := strings.Split(":", u.Host)[0]
+				domain := strings.Split(u.Host, ":")[0]
 				ips, err := proxy.resolveDomain(ctx, "udp", domain)
 				if err != nil {
 					ips, err = proxy.resolveDomain(ctx, "tcp", domain)
