@@ -195,14 +195,15 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 		dialStart := time.Now().UnixNano()
 
 		var dialHost string
-		ips, err := proxy.resolveDomain(ctx, "udp4", host)
+		domain := strings.Split(":", host)[0]
+		ips, err := proxy.resolveDomain(ctx, "udp", domain)
 		if err != nil {
-			ips, err = proxy.resolveDomain(ctx, "tcp4", host)
+			ips, err = proxy.resolveDomain(ctx, "tcp", domain)
 		}
 		if err != nil || len(ips) == 0 {
 			dialHost = host
 		} else {
-			dialHost = ips[0]
+			dialHost = ips[0] + ":443"
 		}
 
 		targetSiteCon, err = tr.Dial("tcp", dialHost)
@@ -258,16 +259,15 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 		dialStart := time.Now().UnixNano()
 
 		var dialHost string
-		ips, err := proxy.resolveDomain(ctx, "udp4", host)
+		domain := strings.Split(":", host)[0]
+		ips, err := proxy.resolveDomain(ctx, "udp", domain)
 		if err != nil {
-			ctx.Logf("dns lookup for %s failed with err %v", host, err)
-			ips, err = proxy.resolveDomain(ctx, "tcp4", host)
+			ips, err = proxy.resolveDomain(ctx, "tcp", domain)
 		}
 		if err != nil || len(ips) == 0 {
-			ctx.Logf("dns lookup for %s failed %v, results $+v", host, err, ips)
 			dialHost = host
 		} else {
-			dialHost = ips[0]
+			dialHost = ips[0] + ":443"
 		}
 
 		targetSiteCon, err = tr.Dial("tcp", dialHost)
@@ -865,14 +865,15 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 				}
 
 				var dialHost string
-				ips, err := proxy.resolveDomain(ctx, "udp4", u.Host)
+				domain := strings.Split(":", u.Host)[0]
+				ips, err := proxy.resolveDomain(ctx, "udp", domain)
 				if err != nil {
-					ips, err = proxy.resolveDomain(ctx, "tcp4", u.Host)
+					ips, err = proxy.resolveDomain(ctx, "tcp", domain)
 				}
 				if err != nil || len(ips) == 0 {
 					dialHost = u.Host
 				} else {
-					dialHost = ips[0]
+					dialHost = ips[0] + ":80"
 				}
 
 				c, err = d.Dial(network, dialHost)
@@ -950,14 +951,15 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 				}
 
 				var dialHost string
-				ips, err := proxy.resolveDomain(ctx, "udp4", u.Host)
+				domain := strings.Split(":", u.Host)[0]
+				ips, err := proxy.resolveDomain(ctx, "udp", domain)
 				if err != nil {
-					ips, err = proxy.resolveDomain(ctx, "tcp4", u.Host)
+					ips, err = proxy.resolveDomain(ctx, "tcp", domain)
 				}
 				if err != nil || len(ips) == 0 {
 					dialHost = u.Host
 				} else {
-					dialHost = ips[0]
+					dialHost = ips[0] + ":443"
 				}
 
 				c, err = d.Dial(network, dialHost)
