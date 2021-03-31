@@ -86,13 +86,13 @@ func (proxy *ProxyHttpServer) resolveDomain(proxyCtx *ProxyCtx, proto, domain st
 	c.WriteTimeout = proxyCtx.DNSTimeout
 
 	if proxyCtx.DNSLocalAddr != "" {
-		if proto == "udp" {
+		if proto == "udp4" {
 			udpAddr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(proxyCtx.DNSLocalAddr, "0"))
 			if err != nil {
 				return nil, err
 			}
 			c.Dialer.LocalAddr = udpAddr
-		} else if proto == "tcp" {
+		} else if proto == "tcp4" {
 			tcpAddr, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(proxyCtx.DNSLocalAddr, "0"))
 			if err != nil {
 				return nil, err
@@ -195,9 +195,9 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 		dialStart := time.Now().UnixNano()
 
 		var dialHost string
-		ips, err := proxy.resolveDomain(ctx, "udp", host)
+		ips, err := proxy.resolveDomain(ctx, "udp4", host)
 		if err != nil {
-			ips, err = proxy.resolveDomain(ctx, "tcp", host)
+			ips, err = proxy.resolveDomain(ctx, "tcp4", host)
 		}
 		if err != nil || len(ips) == 0 {
 			dialHost = host
@@ -258,12 +258,13 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 		dialStart := time.Now().UnixNano()
 
 		var dialHost string
-		ips, err := proxy.resolveDomain(ctx, "udp", host)
+		ips, err := proxy.resolveDomain(ctx, "udp4", host)
 		if err != nil {
 			ctx.Logf("dns lookup for %s failed with err %v", host, err)
-			ips, err = proxy.resolveDomain(ctx, "tcp", host)
+			ips, err = proxy.resolveDomain(ctx, "tcp4", host)
 		}
 		if err != nil || len(ips) == 0 {
+			ctx.Logf("dns lookup for %s failed %v, results $+v", host, err, ips)
 			dialHost = host
 		} else {
 			dialHost = ips[0]
@@ -864,9 +865,9 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 				}
 
 				var dialHost string
-				ips, err := proxy.resolveDomain(ctx, "udp", u.Host)
+				ips, err := proxy.resolveDomain(ctx, "udp4", u.Host)
 				if err != nil {
-					ips, err = proxy.resolveDomain(ctx, "tcp", u.Host)
+					ips, err = proxy.resolveDomain(ctx, "tcp4", u.Host)
 				}
 				if err != nil || len(ips) == 0 {
 					dialHost = u.Host
@@ -949,9 +950,9 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 				}
 
 				var dialHost string
-				ips, err := proxy.resolveDomain(ctx, "udp", u.Host)
+				ips, err := proxy.resolveDomain(ctx, "udp4", u.Host)
 				if err != nil {
-					ips, err = proxy.resolveDomain(ctx, "tcp", u.Host)
+					ips, err = proxy.resolveDomain(ctx, "tcp4", u.Host)
 				}
 				if err != nil || len(ips) == 0 {
 					dialHost = u.Host
