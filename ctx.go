@@ -42,6 +42,8 @@ type ProxyCtx struct {
 	ProxyLogger                          *ProxyLeveledLogger
 	LogRequestID                         string
 	ForwardProxy                         string
+	ForwardProxyDialTimeout              int
+	ForwardProxyTLSTimeout               int
 	ForwardProxyAuth                     string
 	ForwardProxyProto                    string
 	ForwardProxyHeaders                  []ForwardProxyHeader
@@ -176,10 +178,15 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 			ctx.ForwardProxyProto = "http"
 		}
 
+		tlsTimeout := ctx.ForwardProxyTLSTimeout
+		if tlsTimeout == 0 {
+			tlsTimeout = 15
+		}
+
 		tr = &http.Transport{
 			MaxIdleConns:          maxConns,
 			MaxIdleConnsPerHost:   maxPerHostConns,
-			TLSHandshakeTimeout:   10 * time.Second,
+			TLSHandshakeTimeout:   time.Duration(tlsTimeout) * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 			IdleConnTimeout:       idleTimeout,
 			Proxy: func(req *http.Request) (*url.URL, error) {
@@ -247,6 +254,10 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 
 	} else {
+		tlsTimeout := ctx.ForwardProxyTLSTimeout
+		if tlsTimeout == 0 {
+			tlsTimeout = 15
+		}
 		// Dial with regular transport
 		tr = &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
@@ -254,7 +265,7 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 			MaxIdleConns:          maxConns,
 			MaxIdleConnsPerHost:   maxPerHostConns,
 			IdleConnTimeout:       idleTimeout,
-			TLSHandshakeTimeout:   10 * time.Second,
+			TLSHandshakeTimeout:   time.Duration(tlsTimeout) * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 		}
 

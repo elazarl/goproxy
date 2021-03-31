@@ -93,10 +93,15 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 
 		ctx.Logf("dial %v via forward proxy: %v %+v", host, ctx.ForwardProxyProto, ctx.ForwardProxy)
 
+		tlsTimeout := ctx.ForwardProxyTLSTimeout
+		if tlsTimeout == 0 {
+			tlsTimeout = 15
+		}
+
 		tr := &http.Transport{
 			MaxIdleConns:          ctx.MaxIdleConns,
 			MaxIdleConnsPerHost:   ctx.MaxIdleConnsPerHost,
-			TLSHandshakeTimeout:   10 * time.Second,
+			TLSHandshakeTimeout:   time.Duration(tlsTimeout) * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 			IdleConnTimeout:       idleTimeout,
 			DisableKeepAlives:     ctx.ForwardDisableHTTPKeepAlives,
@@ -150,6 +155,11 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 
 		ctx.Logf("dial %v locally from: %+v", host, ctx.ForwardProxySourceIP)
 
+		tlsTimeout := ctx.ForwardProxyTLSTimeout
+		if tlsTimeout == 0 {
+			tlsTimeout = 15
+		}
+
 		// dont use a proxy and use specific source IP
 		tr := &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
@@ -159,8 +169,12 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 					ctx.Logf("Failed to resolve local address: %s - err: %v", ctx.ForwardProxySourceIP, err)
 					return nil, err
 				}
+				dialTimeout := ctx.ForwardProxyDialTimeout
+				if dialTimeout == 0 {
+					dialTimeout = 20
+				}
 				d := net.Dialer{
-					Timeout:   15 * time.Second,
+					Timeout:   time.Duration(dialTimeout) * time.Second,
 					LocalAddr: localAddr,
 					Resolver:  proxy.getResolver(ctx, "udp"),
 				}
@@ -168,7 +182,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 			},
 			MaxIdleConns:          ctx.MaxIdleConns,
 			MaxIdleConnsPerHost:   ctx.MaxIdleConnsPerHost,
-			TLSHandshakeTimeout:   10 * time.Second,
+			TLSHandshakeTimeout:   time.Duration(tlsTimeout) * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 			IdleConnTimeout:       idleTimeout,
 			DisableKeepAlives:     ctx.ForwardDisableHTTPKeepAlives,
@@ -201,8 +215,12 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 			err = errors.New("cannot dial self")
 		} else {
 			if errTCP == nil && tcpRemote != nil {
+				dialTimeout := ctx.ForwardProxyDialTimeout
+				if dialTimeout == 0 {
+					dialTimeout = 20
+				}
 				d := net.Dialer{
-					Timeout:   10 * time.Second,
+					Timeout:   time.Duration(dialTimeout) * time.Second,
 					LocalAddr: tcpLocal,
 					Resolver:  proxy.getResolver(ctx, "udp"),
 				}
@@ -751,8 +769,12 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 			var err error
 
 			if ctx.ForwardProxySourceIP != "" {
+				dialTimeout := ctx.ForwardProxyDialTimeout
+				if dialTimeout == 0 {
+					dialTimeout = 20
+				}
 				d := net.Dialer{
-					Timeout:  15 * time.Second,
+					Timeout:  time.Duration(dialTimeout)*time.Second,
 					Resolver: proxy.getResolver(ctx, "udp"),
 				}
 				localAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:0", ctx.ForwardProxySourceIP))
@@ -819,8 +841,12 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 			var err error
 
 			if ctx.ForwardProxySourceIP != "" {
+				dialTimeout := ctx.ForwardProxyDialTimeout
+				if dialTimeout == 0 {
+					dialTimeout = 20
+				}
 				d := net.Dialer{
-					Timeout:  15 * time.Second,
+					Timeout:  time.Duration(dialTimeout) * time.Second,
 					Resolver: proxy.getResolver(ctx, "udp"),
 				}
 				localAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:0", ctx.ForwardProxySourceIP))
