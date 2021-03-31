@@ -260,6 +260,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 		var dialHost string
 		ips, err := proxy.resolveDomain(ctx, "udp", host)
 		if err != nil {
+			ctx.Logf("dns lookup for %s failed with err %v", host, err)
 			ips, err = proxy.resolveDomain(ctx, "tcp", host)
 		}
 		if err != nil || len(ips) == 0 {
@@ -274,7 +275,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 
 		tlsTime := float64(dialEnd/1000000) - float64(dialStart/1000000)
 
-		ctx.Logf("dialing to host %s completed in %dms", host, int(tlsTime))
+		ctx.Logf("dialing to host %s completed in %dms", dialHost, int(tlsTime))
 
 	} else if ctx.ForwardProxyTProxy {
 
