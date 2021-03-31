@@ -866,8 +866,8 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 			targetConn := &ProxyTCPConn{
 				Conn:                 c,
 				Logger:               ctx.ProxyLogger,
-				ReadTimeout:          time.Second * 5,
-				WriteTimeout:         time.Second * 5,
+				ReadTimeout:          time.Second * 10,
+				WriteTimeout:         time.Second * 10,
 				IgnoreDeadlineErrors: true,
 			}
 			kaErr := targetConn.SetKeepaliveParameters(false, tcpKACount, tcpKAInterval, tcpKAPeriod)
