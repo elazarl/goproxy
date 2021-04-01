@@ -86,13 +86,13 @@ func (proxy *ProxyHttpServer) resolveDomain(proxyCtx *ProxyCtx, proto, domain st
 	c.WriteTimeout = proxyCtx.DNSTimeout
 
 	if proxyCtx.DNSLocalAddr != "" {
-		if proto == "udp4" {
+		if proto == "udp" {
 			udpAddr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(proxyCtx.DNSLocalAddr, "0"))
 			if err != nil {
 				return nil, err
 			}
 			c.Dialer.LocalAddr = udpAddr
-		} else if proto == "tcp4" {
+		} else if proto == "tcp" {
 			tcpAddr, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(proxyCtx.DNSLocalAddr, "0"))
 			if err != nil {
 				return nil, err
