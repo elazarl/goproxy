@@ -195,19 +195,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 
 		dialStart := time.Now().UnixNano()
 
-		var dialHost string
-		domain := strings.Split(host, ":")[0]
-		ips, err := proxy.resolveDomain(ctx, "udp", domain)
-		if err != nil {
-			ips, err = proxy.resolveDomain(ctx, "tcp", domain)
-		}
-		if err != nil || len(ips) == 0 {
-			dialHost = host
-		} else {
-			dialHost = ips[0] + ":443"
-		}
-
-		targetSiteCon, err = tr.Dial("tcp", dialHost)
+		targetSiteCon, err = tr.Dial("tcp", host)
 
 		dialEnd := time.Now().UnixNano()
 
