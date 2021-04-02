@@ -325,7 +325,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	// init target connection
 	sendHTTPOK, setTargetKA, logHeaders, targetSiteCon, err = proxy.getTargetSiteConnection(ctx, proxyClient, host)
 
-	if err != nil {
+	if err != nil || targetSiteCon == nil {
 
 		//handle tproxy errors
 		if ctx.ForwardProxy == "" && ctx.ForwardProxyTProxy {
