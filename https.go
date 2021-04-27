@@ -454,28 +454,26 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy strin
 
 func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls.Config, error) {
 	return func(host string, ctx *ProxyCtx) (*tls.Config, error) {
-		var err error
-		var cert *tls.Certificate
-
 		hostname := stripPort(host)
 		config := defaultTLSConfig.Clone()
-		ctx.Logf("signing for %s", stripPort(host))
+		config.GetCertificate = func(hello *tls.ClientHelloInfo) (cert *tls.Certificate, err error) {
 
-		genCert := func() (*tls.Certificate, error) {
-			return signHost(*ca, []string{hostname})
-		}
-		if ctx.certStore != nil {
-			cert, err = ctx.certStore.Fetch(hostname, genCert)
-		} else {
-			cert, err = genCert()
-		}
+			if hello.ServerName != "" {
+				hostname = hello.ServerName
+			}
 
-		if err != nil {
-			ctx.Warnf("Cannot sign host certificate with provided CA: %s", err)
-			return nil, err
-		}
+			ctx.Logf("signing for %s", hostname)
 
-		config.Certificates = append(config.Certificates, *cert)
+			genCert := func() (*tls.Certificate, error) {
+				return signHost(*ca, []string{hostname})
+			}
+			if ctx.certStore != nil {
+				cert, err = ctx.certStore.Fetch(hostname, genCert)
+			} else {
+				cert, err = genCert()
+			}
+			return
+		}
 		return config, nil
 	}
 }
