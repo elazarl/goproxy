@@ -883,7 +883,11 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 				c.Close()
 				return nil, err
 			}
-			defer resp.Body.Close()
+			
+			// We can safely not close this, sincethe underlying connection is closed later anyway
+			// defering this actually stalls the return of the dialed connection
+			//defer resp.Body.Close()
+			
 			if resp.StatusCode != 200 {
 				ctx.Logf("dialing target with url: %+v  and req: %+v", u, connectReq)
 				ctx.Logf("connect dial got error reponse: %+v", resp)
@@ -995,7 +999,11 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 				c.Close()
 				return nil, err
 			}
-			defer resp.Body.Close()
+			
+			// We can safely not close this, sincethe underlying connection is closed later anyway
+			// defering this actually stalls the return of the dialed connection
+			//defer resp.Body.Close()
+
 			if resp.StatusCode != 200 {
 				ctx.Logf("dialing target with url: %+v  and req: %+v", u, connectReq)
 				ctx.Logf("connect dial got error reponse: %+v", resp)
