@@ -173,6 +173,8 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 	var rawConn net.Conn
 	var err error
 
+	setTargetKA := false
+
 	if ctx.ForwardProxy != "" {
 
 		if ctx.ForwardProxyProto == "" {
@@ -193,7 +195,7 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 			Proxy: func(req *http.Request) (*url.URL, error) {
 				return url.Parse(ctx.ForwardProxyProto + "://" + ctx.ForwardProxy)
 			},
-			Dial: ctx.Proxy.NewConnectDialToProxyWithHandler(ctx.ForwardProxyProto+"://"+ctx.ForwardProxy, func(req *http.Request) {
+			Dial: ctx.Proxy.NewConnectDialWithKeepAlives(ctx, ctx.ForwardProxyProto+"://"+ctx.ForwardProxy, func(req *http.Request) {
 				if ctx.ForwardProxyAuth != "" {
 					req.Header.Set("Proxy-Authorization", fmt.Sprintf("Basic %s", ctx.ForwardProxyAuth))
 				}
@@ -255,6 +257,9 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 
 	} else {
+
+		setTargetKA = true
+
 		tlsTimeout := ctx.ForwardProxyTLSTimeout
 		if tlsTimeout == 0 {
 			tlsTimeout = 15
@@ -297,20 +302,15 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 	if ctx.TCPKeepAliveInterval > 0 {
 		tcpKAInterval = ctx.TCPKeepAliveInterval
 	}
-	kaErr := conn.SetKeepaliveParameters(false, tcpKACount, tcpKAInterval, tcpKAPeriod)
-	if kaErr != nil {
-		ctx.Logf("HTTP conn KeepAlive error: %v", kaErr)
-		conn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
-		conn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
-		conn.IgnoreDeadlineErrors = false
+	if setTargetKA {
+		kaErr := conn.SetKeepaliveParameters(false, tcpKACount, tcpKAInterval, tcpKAPeriod)
+		if kaErr != nil {
+			ctx.Logf("HTTP conn KeepAlive error: %v", kaErr)
+			conn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
+			conn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
+			conn.IgnoreDeadlineErrors = false
+		}
 	}
-
-	// if ctx.ProxyReadDeadline > 0 {
-	// 	conn.ReadTimeout = time.Second * time.Duration(ctx.ProxyReadDeadline)
-	// }
-	// if ctx.ProxyWriteDeadline > 0 {
-	// 	conn.WriteTimeout = time.Second * time.Duration(ctx.ProxyWriteDeadline)
-	// }
 
 	bufferSize := 32
 
