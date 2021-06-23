@@ -70,7 +70,7 @@ func (proxy *ProxyHttpServer) connectDial(network, addr string) (c net.Conn, err
 	return proxy.ConnectDial(network, addr)
 }
 
-func (proxy *ProxyHttpServer) resolveDomain(proxyCtx *ProxyCtx, proto, domain string) (ips []string, err error) {
+func (proxy *ProxyHttpServer) resolveDomain(proxyCtx *ProxyCtx, proto, domain string) (ips []string, ips6 []string, err error) {
 
 	resolver := proxyCtx.DNSResolver
 	if resolver == "" {
@@ -90,13 +90,13 @@ func (proxy *ProxyHttpServer) resolveDomain(proxyCtx *ProxyCtx, proto, domain st
 		if proto == "udp" {
 			udpAddr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(proxyCtx.DNSLocalAddr, "0"))
 			if err != nil {
-				return nil, err
+				return ips, ips6, err
 			}
 			c.Dialer.LocalAddr = udpAddr
 		} else if proto == "tcp" {
 			tcpAddr, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(proxyCtx.DNSLocalAddr, "0"))
 			if err != nil {
-				return nil, err
+				return ips, nil, err
 			}
 			c.Dialer.LocalAddr = tcpAddr
 		}
@@ -108,7 +108,7 @@ func (proxy *ProxyHttpServer) resolveDomain(proxyCtx *ProxyCtx, proto, domain st
 	r, _, err := c.Exchange(m, resolver+":53")
 
 	if err != nil {
-		return ips, err
+		return ips, ips6, err
 	}
 
 	if err == nil {
@@ -117,11 +117,14 @@ func (proxy *ProxyHttpServer) resolveDomain(proxyCtx *ProxyCtx, proto, domain st
 				if ar, ok := a.(*dns.A); ok {
 					ips = append(ips, ar.A.String())
 				}
+				if ar, ok := a.(*dns.AAAA); ok {
+					ips6 = append(ips, ar.AAAA.String())
+				}
 			}
 		}
 	}
 
-	return ips, nil
+	return ips, ips6, nil
 
 }
 
@@ -217,6 +220,25 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 			tlsTimeout = 15
 		}
 
+		var dialHost string
+		domain := strings.Split(host, ":")[0]
+		ips, ips6, err := proxy.resolveDomain(ctx, "udp", domain)
+		if err != nil {
+			ips, ips6, err = proxy.resolveDomain(ctx, "tcp", domain)
+		}
+
+		//handle ipv6
+		if len(ips6) > 0 && ctx.ForwardProxySourceIPv6 != "" {
+			ips = ips6
+			ctx.ForwardProxySourceIP = fmt.Sprintf("[%s]", ctx.ForwardProxySourceIPv6)
+		}
+
+		if err != nil || len(ips) == 0 {
+			dialHost = host
+		} else {
+			dialHost = ips[0] + ":443"
+		}
+
 		// dont use a proxy and use specific source IP
 		tr := &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
@@ -246,18 +268,6 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 		}
 
 		dialStart := time.Now().UnixNano()
-
-		var dialHost string
-		domain := strings.Split(host, ":")[0]
-		ips, err := proxy.resolveDomain(ctx, "udp", domain)
-		if err != nil {
-			ips, err = proxy.resolveDomain(ctx, "tcp", domain)
-		}
-		if err != nil || len(ips) == 0 {
-			dialHost = host
-		} else {
-			dialHost = ips[0] + ":443"
-		}
 
 		targetSiteCon, err = tr.Dial("tcp", dialHost)
 
@@ -855,9 +865,9 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 
 				var dialHost string
 				domain := strings.Split(u.Host, ":")[0]
-				ips, err := proxy.resolveDomain(ctx, "udp", domain)
+				ips, _, err := proxy.resolveDomain(ctx, "udp", domain)
 				if err != nil {
-					ips, err = proxy.resolveDomain(ctx, "tcp", domain)
+					ips, _, err = proxy.resolveDomain(ctx, "tcp", domain)
 				}
 				if err != nil || len(ips) == 0 {
 					dialHost = u.Host
@@ -883,11 +893,11 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 				c.Close()
 				return nil, err
 			}
-			
+
 			// We can safely not close this, sincethe underlying connection is closed later anyway
 			// defering this actually stalls the return of the dialed connection
 			//defer resp.Body.Close()
-			
+
 			if resp.StatusCode != 200 {
 				ctx.Logf("dialing target with url: %+v  and req: %+v", u, connectReq)
 				ctx.Logf("connect dial got error reponse: %+v", resp)
@@ -945,9 +955,9 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 
 				var dialHost string
 				domain := strings.Split(u.Host, ":")[0]
-				ips, err := proxy.resolveDomain(ctx, "udp", domain)
+				ips, _, err := proxy.resolveDomain(ctx, "udp", domain)
 				if err != nil {
-					ips, err = proxy.resolveDomain(ctx, "tcp", domain)
+					ips, _, err = proxy.resolveDomain(ctx, "tcp", domain)
 				}
 				if err != nil || len(ips) == 0 {
 					dialHost = u.Host
@@ -999,7 +1009,7 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 				c.Close()
 				return nil, err
 			}
-			
+
 			// We can safely not close this, sincethe underlying connection is closed later anyway
 			// defering this actually stalls the return of the dialed connection
 			//defer resp.Body.Close()

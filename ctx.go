@@ -56,6 +56,7 @@ type ProxyCtx struct {
 	ForwardProxyTProxy                   bool
 	ForwatdTProxyDropIP                  string
 	ForwardProxySourceIP                 string
+	ForwardProxySourceIPv6               string
 	ForwardProxyDirect                   bool
 	ForwardDisableHTTPKeepAlives         bool
 	CloseOnError                         bool
