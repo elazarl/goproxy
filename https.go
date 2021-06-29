@@ -102,9 +102,10 @@ func (proxy *ProxyHttpServer) resolveDomain(proxyCtx *ProxyCtx, proto, domain st
 		}
 	}
 
+	// TODO: make these requests in parallel
+
 	m := new(dns.Msg)
 	m.SetQuestion(domain+".", dns.TypeA)
-	m.RecursionDesired = true
 	r, _, err := c.Exchange(m, resolver+":53")
 
 	if err != nil {
@@ -117,6 +118,20 @@ func (proxy *ProxyHttpServer) resolveDomain(proxyCtx *ProxyCtx, proto, domain st
 				if ar, ok := a.(*dns.A); ok {
 					ips = append(ips, ar.A.String())
 				}
+			}
+		}
+	}
+
+	m.SetQuestion(domain+".", dns.TypeAAAA)
+	r, _, err = c.Exchange(m, resolver+":53")
+
+	if err != nil {
+		return ips, ips6, err
+	}
+
+	if err == nil {
+		if r.Rcode == dns.RcodeSuccess {
+			for _, a := range r.Answer {
 				if ar, ok := a.(*dns.AAAA); ok {
 					ips6 = append(ips, ar.AAAA.String())
 				}
