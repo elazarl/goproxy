@@ -244,13 +244,13 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 		//handle ipv6
 		if len(ips6) > 0 && ctx.ForwardProxySourceIPv6 != "" {
 			ips = ips6
-			ctx.ForwardProxySourceIP = fmt.Sprintf("[%s]", ctx.ForwardProxySourceIPv6)
+			ctx.ForwardProxySourceIP = ctx.ForwardProxySourceIPv6
 		}
 
 		if err != nil || len(ips) == 0 {
 			dialHost = host
 		} else {
-			dialHost = ips[0] + ":443"
+			dialHost = net.JoinHostPort(ips[0], "443")
 		}
 
 		ctx.Logf("dial %v (%s) locally from: %+v", host, dialHost, ctx.ForwardProxySourceIP)
@@ -259,7 +259,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 		tr := &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
 			Dial: func(network, address string) (net.Conn, error) {
-				localAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:0", ctx.ForwardProxySourceIP))
+				localAddr, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(ctx.ForwardProxySourceIP, "0"))
 				if err != nil {
 					ctx.Logf("Failed to resolve local address: %s - err: %v", ctx.ForwardProxySourceIP, err)
 					return nil, err
