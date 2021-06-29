@@ -228,8 +228,6 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 
 	} else if ctx.ForwardProxyDirect && ctx.ForwardProxySourceIP != "" {
 
-		ctx.Logf("dial %v locally from: %+v", host, ctx.ForwardProxySourceIP)
-
 		tlsTimeout := ctx.ForwardProxyTLSTimeout
 		if tlsTimeout == 0 {
 			tlsTimeout = 15
@@ -253,6 +251,8 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 		} else {
 			dialHost = ips[0] + ":443"
 		}
+
+		ctx.Logf("dial %v (%s) locally from: %+v", host, dialHost, ctx.ForwardProxySourceIP)
 
 		// dont use a proxy and use specific source IP
 		tr := &http.Transport{
