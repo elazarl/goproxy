@@ -4,6 +4,7 @@ go 1.12
 
 require (
 	github.com/LiamHaworth/go-tproxy v0.0.0-20190726054950-ef7efd7f24ed
+	github.com/Windscribe/go-tproxy v0.0.0-20210625021014-c992248a46c2
 	github.com/Windscribe/go-vhost v0.0.0-20200515224728-512271e17f30
 	github.com/elazarl/goproxy v0.0.0-20191011121108-aa519ddbe484
 	github.com/elazarl/goproxy/ext v0.0.0-20190911111923-ecfe977594f1

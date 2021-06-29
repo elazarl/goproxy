@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	tproxy "github.com/Windscribe/go-tproxy"
 	"github.com/Windscribe/go-vhost"
 	"golang.org/x/sys/unix"
 )
@@ -72,9 +73,17 @@ func (conn *ProxyTCPConn) SetKeepaliveParameters(sharedConn bool, count, interva
 	var tcpConn *net.TCPConn
 	var ok bool
 	if sharedConn {
-		tlsConn := conn.Conn.(*vhost.TLSConn)
-		sConn := tlsConn.SharedConn.Conn
-		tcpConn, ok = sConn.(*net.TCPConn)
+
+		if nConn, ok := conn.Conn.(*vhost.TLSConn); ok {
+			sConn := nConn.SharedConn.Conn
+			tcpConn, ok = sConn.(*net.TCPConn)
+		} else if nConn, ok := conn.Conn.(*tproxy.Conn); ok {
+			tcpConn = nConn.TCPConn
+			ok = true
+		} else {
+			return fmt.Errorf("unable to set keep alives, conn is unkown type: %v", reflect.TypeOf(conn.Conn))
+		}
+
 	} else {
 		tcpConn, ok = conn.Conn.(*net.TCPConn)
 	}

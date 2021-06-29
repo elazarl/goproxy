@@ -1,6 +1,8 @@
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/LiamHaworth/go-tproxy v0.0.0-20190726054950-ef7efd7f24ed h1:eqa6queieK8SvoszxCu0WwH7lSVeL4/N/f1JwOMw1G4=
 github.com/LiamHaworth/go-tproxy v0.0.0-20190726054950-ef7efd7f24ed/go.mod h1:rA52xkgZwql9LRZXWb2arHEFP6qSR48KY2xOfWzEciQ=
+github.com/Windscribe/go-tproxy v0.0.0-20210625021014-c992248a46c2 h1:b1owickS9rwQC0WxMy58LLxxcqhnIv+Odba/lY2lKPQ=
+github.com/Windscribe/go-tproxy v0.0.0-20210625021014-c992248a46c2/go.mod h1:Nqt5rTomhm9KYhb+8mlApFQxkbpQllm46eWo9aFRw4c=
 github.com/Windscribe/go-vhost v0.0.0-20200515224728-512271e17f30 h1:kt/n47TbYRF6GCkP9+LsIxz0gr6BJrcn4KrYZLrS/4g=
 github.com/Windscribe/go-vhost v0.0.0-20200515224728-512271e17f30/go.mod h1:tHa9KOlVZ17d4ZuaNxzdpOKgJszEa6/onY+3QeMt5XM=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
