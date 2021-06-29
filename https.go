@@ -122,6 +122,7 @@ func (proxy *ProxyHttpServer) resolveDomain(proxyCtx *ProxyCtx, proto, domain st
 		}
 	}
 
+	m = new(dns.Msg)
 	m.SetQuestion(domain+".", dns.TypeAAAA)
 	r, _, err = c.Exchange(m, resolver+":53")
 
@@ -133,7 +134,7 @@ func (proxy *ProxyHttpServer) resolveDomain(proxyCtx *ProxyCtx, proto, domain st
 		if r.Rcode == dns.RcodeSuccess {
 			for _, a := range r.Answer {
 				if ar, ok := a.(*dns.AAAA); ok {
-					ips6 = append(ips, ar.AAAA.String())
+					ips6 = append(ips6, ar.AAAA.String())
 				}
 			}
 		}
