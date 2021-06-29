@@ -106,13 +106,9 @@ func (proxy *ProxyHttpServer) resolveDomain(proxyCtx *ProxyCtx, proto, domain st
 
 	m := new(dns.Msg)
 	m.SetQuestion(domain+".", dns.TypeA)
-	r, _, err := c.Exchange(m, resolver+":53")
+	r, _, err4 := c.Exchange(m, resolver+":53")
 
-	if err != nil {
-		return ips, ips6, err
-	}
-
-	if err == nil {
+	if err4 == nil {
 		if r.Rcode == dns.RcodeSuccess {
 			for _, a := range r.Answer {
 				if ar, ok := a.(*dns.A); ok {
@@ -124,13 +120,9 @@ func (proxy *ProxyHttpServer) resolveDomain(proxyCtx *ProxyCtx, proto, domain st
 
 	m = new(dns.Msg)
 	m.SetQuestion(domain+".", dns.TypeAAAA)
-	r, _, err = c.Exchange(m, resolver+":53")
+	r, _, err6 := c.Exchange(m, resolver+":53")
 
-	if err != nil {
-		return ips, ips6, err
-	}
-
-	if err == nil {
+	if err6 == nil {
 		if r.Rcode == dns.RcodeSuccess {
 			for _, a := range r.Answer {
 				if ar, ok := a.(*dns.AAAA); ok {
@@ -138,6 +130,11 @@ func (proxy *ProxyHttpServer) resolveDomain(proxyCtx *ProxyCtx, proto, domain st
 				}
 			}
 		}
+	}
+
+	if len(ips) == 0 && len(ips6) == 0 {
+		err := fmt.Errorf("v4: %+v - v6: %+v", err4, err6)
+		return ips, ips6, err
 	}
 
 	return ips, ips6, nil
