@@ -500,12 +500,12 @@ func (proxy *ProxyHttpServer) HandleHttps(w http.ResponseWriter, r *http.Request
 	ctx.ProxyTargetAddress = proxyClient.LocalAddr().String()
 
 	todo, host := OkConnect, r.URL.Host
-	for i, h := range proxy.httpsHandlers {
+	for _, h := range proxy.httpsHandlers {
 		newtodo, newhost := h.HandleConnect(host, ctx)
 		// If found a result, break the loop immediately
 		if newtodo != nil {
 			todo, host = newtodo, newhost
-			ctx.Logf("on %dth handler: %v %s", i, todo, host)
+			//ctx.Logf("on %dth handler: %v %s", i, todo, host)
 			break
 		}
 	}
