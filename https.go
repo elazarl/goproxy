@@ -154,6 +154,21 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 		idleTimeout = 90 * time.Second
 	}
 
+	var dialHost string
+	domain := strings.Split(host, ":")[0]
+	ips, ips6, err := proxy.resolveDomain(ctx, "udp", domain)
+	if err != nil {
+		ips, ips6, err = proxy.resolveDomain(ctx, "tcp", domain)
+	}
+
+	// if this is an ipv6 only endpoint, and we have a forward proxy, exit locally instead
+	// this is because the proxy does not support ipv6 yet
+	if len(ips6) > 0 && len(ips) == 0 && ctx.ForwardProxySourceIPv6 != "" {
+		ctx.ForwardProxy = ""
+		ctx.ForwardProxyDirect = true
+		ctx.Logf("destination is ipv6 only, exiting locally")
+	}
+
 	if ctx.ForwardProxy != "" {
 
 		if ctx.ForwardProxyProto == "" {
@@ -229,13 +244,6 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 		tlsTimeout := ctx.ForwardProxyTLSTimeout
 		if tlsTimeout == 0 {
 			tlsTimeout = 15
-		}
-
-		var dialHost string
-		domain := strings.Split(host, ":")[0]
-		ips, ips6, err := proxy.resolveDomain(ctx, "udp", domain)
-		if err != nil {
-			ips, ips6, err = proxy.resolveDomain(ctx, "tcp", domain)
 		}
 
 		//handle ipv6
