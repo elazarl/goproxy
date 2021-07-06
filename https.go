@@ -200,7 +200,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 			tr.DialContext = (&net.Dialer{
 				Timeout:   time.Duration(int64(ctx.ForwardProxyFallbackTimeout)) * time.Second,
 				KeepAlive: 30 * time.Second,
-				DualStack: true,
+				DualStack: false,
 			}).DialContext
 			if ctx.ForwardProxyFallbackSecondaryTimeout > 0 {
 				ctx.ForwardProxyFallbackTimeout = ctx.ForwardProxyFallbackSecondaryTimeout
@@ -211,7 +211,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 
 		dialStart := time.Now().UnixNano()
 
-		targetSiteCon, err = tr.Dial("tcp", host)
+		targetSiteCon, err = tr.Dial("tcp4", host)
 
 		dialEnd := time.Now().UnixNano()
 
