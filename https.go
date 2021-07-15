@@ -89,9 +89,9 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		panic("Cannot hijack connection " + e.Error())
 	}
 
-	ctx.Logf("Running %d CONNECT handlers", len(proxy.httpsHandlers))
+	ctx.Logf("Running %d CONNECT handlers", len(proxy.HandlerStore.HttpsHandlers))
 	todo, host := OkConnect, r.URL.Host
-	for i, h := range proxy.httpsHandlers {
+	for i, h := range proxy.HandlerStore.HttpsHandlers {
 		newtodo, newhost := h.HandleConnect(host, ctx)
 
 		// If found a result, break the loop immediately
