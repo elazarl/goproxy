@@ -369,7 +369,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 		}
 
 		c4, c6, err := proxy.resolveDomain(ctx, "udp", strings.Split(host, ":")[0])
-		if len(c4) > 0 || len(c6) > 0 {
+		if len(c4) > 0 && len(c6) > 0 {
 			ctx.Logf("error-metric: https to host: %s failed: %v - headers %+v", host, err, logHeaders)
 			ctx.SetErrorMetric()
 			// if a fallback func was provided, retry.
@@ -1032,7 +1032,7 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 				return nil, err
 			}
 
-			// We can safely not close this, sincethe underlying connection is closed later anyway
+			// We can safely not close this, since the underlying connection is closed later anyway
 			// defering this actually stalls the return of the dialed connection
 			//defer resp.Body.Close()
 

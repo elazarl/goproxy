@@ -232,14 +232,14 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 
 		if err != nil {
 			c4, c6, err := ctx.Proxy.resolveDomain(ctx, "udp", strings.Split(host, ":")[0])
-			if len(c4) > 0 || len(c6) > 0 {
+			if len(c4) > 0 && len(c6) > 0 {
 				ctx.Logf("error-metric: http dial to %s failed: %v", host, err)
 				ctx.SetErrorMetric()
 			}
 			// if a fallback func was provided, retry
 			if ctx.ForwardProxyErrorFallback != nil {
-				ctx.ForwardProxyErrorFallback = nil
 				newForwardProxy, extra := ctx.ForwardProxyErrorFallback()
+				ctx.ForwardProxyErrorFallback = nil
 				if newForwardProxy != "" {
 					ctx.ForwardProxy = newForwardProxy
 					if ctx.ForwardProxyErrorFallbackAuth {
