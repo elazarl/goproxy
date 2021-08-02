@@ -216,6 +216,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 				Timeout:   time.Duration(int64(ctx.ForwardProxyFallbackTimeout)) * time.Second,
 				KeepAlive: 30 * time.Second,
 				DualStack: false,
+				Resolver:  ctx.Proxy.getResolver(ctx, "udp"),
 			}).DialContext
 			if ctx.ForwardProxyFallbackSecondaryTimeout > 0 {
 				ctx.ForwardProxyFallbackTimeout = ctx.ForwardProxyFallbackSecondaryTimeout

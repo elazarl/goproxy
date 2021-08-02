@@ -215,6 +215,7 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 				Timeout:   time.Duration(int64(ctx.ForwardProxyFallbackTimeout)) * time.Second,
 				KeepAlive: 30 * time.Second,
 				DualStack: true,
+				Resolver:  ctx.Proxy.getResolver(ctx, "udp"),
 			}).DialContext
 			if ctx.ForwardProxyFallbackSecondaryTimeout > 0 {
 				ctx.ForwardProxyFallbackTimeout = ctx.ForwardProxyFallbackSecondaryTimeout
