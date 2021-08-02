@@ -367,8 +367,8 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 			return
 		}
 
-		dnsCheck, _ := net.LookupHost(strings.Split(host, ":")[0])
-		if len(dnsCheck) > 0 {
+		c4, c6, err := proxy.resolveDomain(ctx, "udp", strings.Split(host, ":")[0])
+		if len(c4) > 0 || len(c6) > 0 {
 			ctx.Logf("error-metric: https to host: %s failed: %v - headers %+v", host, err, logHeaders)
 			ctx.SetErrorMetric()
 			// if a fallback func was provided, retry.
