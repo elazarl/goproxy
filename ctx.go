@@ -138,7 +138,9 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 		return ctx.RoundTripper.RoundTrip(req, ctx)
 	}
 	var tr *http.Transport
-	d := net.Dialer{}
+	d := net.Dialer{
+		Resolver: ctx.Proxy.getResolver(ctx, "udp"),
+	}
 
 	host := req.URL.Host
 	if !strings.Contains(req.URL.Host, ":") {
@@ -229,7 +231,7 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 
 		if err != nil {
 			c4, c6, err := ctx.Proxy.resolveDomain(ctx, "udp", strings.Split(host, ":")[0])
-			if len(c4) > 0 || len(c6) > 0{
+			if len(c4) > 0 || len(c6) > 0 {
 				ctx.Logf("error-metric: http dial to %s failed: %v", host, err)
 				ctx.SetErrorMetric()
 			}
