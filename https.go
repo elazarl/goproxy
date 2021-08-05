@@ -249,10 +249,16 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 			tlsTimeout = 15
 		}
 
+		//save v4 addresses for reference
+		ips4 := ips
+		v4SourceAddress := ctx.ForwardProxySourceIP
+		ipv6Dial := false
+
 		//handle ipv6
 		if len(ips6) > 0 && ctx.ForwardProxySourceIPv6 != "" {
 			ips = ips6
 			ctx.ForwardProxySourceIP = ctx.ForwardProxySourceIPv6
+			ipv6Dial = true
 		}
 
 		if err != nil || len(ips) == 0 {
@@ -300,6 +306,13 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 		tlsTime := float64(dialEnd/1000000) - float64(dialStart/1000000)
 
 		ctx.Logf("dialing to host %s completed in %dms", dialHost, int(tlsTime))
+
+		if ipv6Dial && err != nil && len(ips4) > 0 {
+			ctx.Logf("retrying via ipv4 %s", v4SourceAddress)
+			ctx.ForwardProxySourceIP = v4SourceAddress
+			ctx.ForwardProxySourceIPv6 = ""
+			return ctx.Proxy.getTargetSiteConnection(ctx, proxyClient, host)
+		}
 
 	} else if ctx.ForwardProxyTProxy {
 
