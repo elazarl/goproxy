@@ -333,6 +333,11 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Write the request.
 	go func() {
 		var err error
+
+		if req.Header.Get("User-Agent") == "" {
+			req.Header.Set("User-Agent", "")
+		}
+
 		// Use writeproxy so as to not strip RequestURI if we
 		// are forwarding to another proxy
 		if ctx.ForwardProxy != "" && ctx.ForwardProxyRegWrite == false {
