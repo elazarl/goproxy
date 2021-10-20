@@ -274,6 +274,7 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 			MaxIdleConns:          maxConns,
 			MaxIdleConnsPerHost:   maxPerHostConns,
 			IdleConnTimeout:       idleTimeout,
+			DisableKeepAlives:     ctx.ForwardDisableHTTPKeepAlives,
 			TLSHandshakeTimeout:   time.Duration(tlsTimeout) * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 		}
