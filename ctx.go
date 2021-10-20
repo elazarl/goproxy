@@ -331,7 +331,7 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 	ctx.ForwardProxyHeaders = nil
 
 	// Write the request.
-	go func() {
+	go func(pconn *ProxyTCPConn) {
 		var err error
 
 		if req.Header.Get("User-Agent") == "" {
@@ -348,10 +348,12 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 
 		if err == nil {
 			writer.Flush()
+		} else {
+			ctx.Logf("req.Write failed: %v - conn read %v, conn written %v", err, pconn.BytesRead, pconn.BytesWrote)
 		}
 
 		writeDone <- err
-	}()
+	}(conn)
 
 	// And read the response.
 	go func() {
