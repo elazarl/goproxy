@@ -935,6 +935,8 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 				return nil, err
 			}
 
+			c.SetReadDeadline(time.Time{})
+
 			// We can safely not close this, sincethe underlying connection is closed later anyway
 			// defering this actually stalls the return of the dialed connection
 			//defer resp.Body.Close()
