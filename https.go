@@ -374,6 +374,8 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 
 	if err != nil || targetSiteCon == nil {
 
+		ctx.Logf("getTargetSiteConnection to %+v returned error %+v", host, err)
+
 		//handle tproxy errors
 		if ctx.ForwardProxy == "" && ctx.ForwardProxyTProxy {
 			ctx.Logf("error-metric: https (tproxy dial) to host: %s failed: %v - headers %+v", host, err, logHeaders)
