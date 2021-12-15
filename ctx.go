@@ -138,7 +138,13 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 		return ctx.RoundTripper.RoundTrip(req, ctx)
 	}
 	var tr *http.Transport
+
+	dialTimeout := ctx.ForwardProxyDialTimeout
+	if dialTimeout == 0 {
+		dialTimeout = 20
+	}
 	d := net.Dialer{
+		Timeout:  time.Duration(dialTimeout) * time.Second,
 		Resolver: ctx.Proxy.getResolver(ctx, "udp"),
 	}
 
