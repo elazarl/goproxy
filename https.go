@@ -872,7 +872,9 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 		if strings.IndexRune(u.Host, ':') == -1 {
 			u.Host += ":80"
 		}
+		ctx.Logf("NewConnectDialWithKeepAlives called for http proxy: %+v", u.Host)
 		return func(network, addr string) (net.Conn, error) {
+			ctx.Logf("dial called for http proxy: %+v", addr)
 			connectReq := &http.Request{
 				Method: "CONNECT",
 				URL:    &url.URL{Opaque: addr},
@@ -914,13 +916,17 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 
 				c, err = d.Dial(network, dialHost)
 			} else {
+				ctx.Logf("starting proxy.dial: %+v", u.Host)
 				c, err = proxy.dial(network, u.Host)
 			}
 
 			if err != nil {
+				ctx.Logf("error proxy.dial: %+v", err)
 				return nil, err
 			}
+			ctx.Logf("starting connectReq.Write(c):")
 			connectReq.Write(c)
+			ctx.Logf("done connectReq.Write(c):")
 			// Read response.
 			// Okay to use and discard buffered reader here, because
 			// TLS server will not speak until spoken to.
