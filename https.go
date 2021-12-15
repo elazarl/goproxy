@@ -886,39 +886,36 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 			var c net.Conn
 			var err error
 
-			dialTimeout := ctx.ForwardProxyDialTimeout
-			if dialTimeout == 0 {
-				dialTimeout = 20
-			}
-			d := net.Dialer{
-				Timeout:  time.Duration(dialTimeout) * time.Second,
-				Resolver: proxy.getResolver(ctx, "udp"),
-			}
+			if ctx.ForwardProxySourceIP != "" {
+				dialTimeout := ctx.ForwardProxyDialTimeout
+				if dialTimeout == 0 {
+					dialTimeout = 20
+				}
+				d := net.Dialer{
+					Timeout:  time.Duration(dialTimeout) * time.Second,
+					Resolver: proxy.getResolver(ctx, "udp"),
+				}
+				localAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:0", ctx.ForwardProxySourceIP))
+				if err == nil {
+					d.LocalAddr = localAddr
+				}
 
-			localAddrString := ctx.ForwardProxySourceIP
+				var dialHost string
+				domain := strings.Split(u.Host, ":")[0]
+				ips, _, err := proxy.resolveDomain(ctx, "udp", domain)
+				if err != nil {
+					ips, _, err = proxy.resolveDomain(ctx, "tcp", domain)
+				}
+				if err != nil || len(ips) == 0 {
+					dialHost = u.Host
+				} else {
+					dialHost = ips[0] + ":80"
+				}
 
-			if localAddrString == "" {
-				localAddrString = "127.0.0.1"
-			}
-
-			localAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:0", localAddrString))
-			if err == nil {
-				d.LocalAddr = localAddr
-			}
-
-			var dialHost string
-			domain := strings.Split(u.Host, ":")[0]
-			ips, _, err := proxy.resolveDomain(ctx, "udp", domain)
-			if err != nil {
-				ips, _, err = proxy.resolveDomain(ctx, "tcp", domain)
-			}
-			if err != nil || len(ips) == 0 {
-				dialHost = u.Host
+				c, err = d.Dial(network, dialHost)
 			} else {
-				dialHost = ips[0] + ":80"
+				c, err = proxy.dial(network, u.Host)
 			}
-
-			c, err = d.Dial(network, dialHost)
 
 			if err != nil {
 				return nil, err
