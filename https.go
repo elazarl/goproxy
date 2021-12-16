@@ -385,31 +385,32 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 			return
 		}
 
-		c4, c6, err := proxy.resolveDomain(ctx, "udp", strings.Split(host, ":")[0])
-		if len(c4) > 0 && len(c6) > 0 {
-			ctx.Logf("error-metric: https to host: %s failed: %v - headers %+v", host, err, logHeaders)
-			ctx.SetErrorMetric()
-			// if a fallback func was provided, retry.
-			// Since the ctx is created in this method, we just rerun handleHttps,
-			// which will call any handlers again and setup the context with a new forward proxy
-			if ctx.ForwardProxyErrorFallback != nil {
-				todo := OkConnect
-				for i, h := range proxy.httpsHandlers {
-					newtodo, newhost := h.HandleConnect(host, ctx)
-					// If found a result, break the loop immediately
-					if newtodo != nil {
-						todo, host = newtodo, newhost
-						ctx.Logf("RETRY on %dth handler: %v %s", i, todo, host)
-						break
-					}
-				}
-				ctx.ForwardProxyErrorFallback = nil
-				if todo.Action == ConnectAccept {
-					ctx.Logf("RETRY forward proxy: ", ctx.ForwardProxy)
-					proxy.handleHttpsConnectAccept(ctx, host, proxyClient)
-					return
+		// if a fallback func was provided, retry.
+		// Since the ctx is created in this method, we just rerun handleHttps,
+		// which will call any handlers again and setup the context with a new forward proxy
+		if ctx.ForwardProxyErrorFallback != nil {
+			todo := OkConnect
+			for i, h := range proxy.httpsHandlers {
+				newtodo, newhost := h.HandleConnect(host, ctx)
+				// If found a result, break the loop immediately
+				if newtodo != nil {
+					todo, host = newtodo, newhost
+					ctx.Logf("RETRY on %dth handler: %v %s", i, todo, host)
+					break
 				}
 			}
+			ctx.ForwardProxyErrorFallback = nil
+			if todo.Action == ConnectAccept {
+				ctx.Logf("RETRY forward proxy: ", ctx.ForwardProxy)
+				proxy.handleHttpsConnectAccept(ctx, host, proxyClient)
+				return
+			}
+		}
+
+		c4, c6, err := proxy.resolveDomain(ctx, "udp", strings.Split(host, ":")[0])
+		if len(c4) > 0 || len(c6) > 0 {
+			ctx.Logf("error-metric: https to host: %s failed: %v - headers %+v", host, err, logHeaders)
+			ctx.SetErrorMetric()
 		}
 		httpError(proxyClient, ctx, err)
 		return
