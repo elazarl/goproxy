@@ -921,12 +921,13 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 				c, err = proxy.dial(network, u.Host)
 			}
 
-			c.SetReadDeadline(time.Now().Add(time.Duration(ctx.ForwardProxyDialTimeout) * time.Second))
-
-			if err != nil {
+			if err != nil || c == nil {
 				ctx.Logf("error proxy.dial: %+v", err)
 				return nil, err
 			}
+
+			c.SetReadDeadline(time.Now().Add(time.Duration(ctx.ForwardProxyDialTimeout) * time.Second))
+
 			connectReq.Write(c)
 			// Read response.
 			// Okay to use and discard buffered reader here, because
