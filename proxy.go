@@ -77,7 +77,7 @@ func (proxy *ProxyHttpServer) filterResponse(respOrig *http.Response, ctx *Proxy
 	return
 }
 
-	// RemoveProxyHeaders removes all proxy headers which should not propagate to the next hop
+// RemoveProxyHeaders removes all proxy headers which should not propagate to the next hop
 func RemoveProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 	r.RequestURI = "" // this must be reset when serving a request with the client
 	ctx.Logf("Sending request %v %v", r.Method, r.URL.String())
