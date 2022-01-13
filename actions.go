@@ -55,3 +55,24 @@ type FuncHttpsHandler func(host string, ctx *ProxyCtx) (*ConnectAction, string)
 func (f FuncHttpsHandler) HandleConnect(host string, ctx *ProxyCtx) (*ConnectAction, string) {
 	return f(host, ctx)
 }
+
+// WebSocketHandler allows "tampering" with the websocket data traversing the proxy server
+// The handler should return the data which should be forwarded
+type WebsocketHandler interface {
+	Handle(packet []byte, direction WebsocketDirection, ctx *ProxyCtx) []byte
+}
+
+type WebsocketDirection int
+
+const (
+	ServerToClient WebsocketDirection = 0
+	ClientToServer WebsocketDirection = 1
+)
+
+// A wrapper that would convert a function to a WebsocketHandler interface type
+type FuncWebsocketHandler func(packet []byte, direction WebsocketDirection, ctx *ProxyCtx) []byte
+
+// FuncWebsocketHandler.Handle(packet,direction, ctx) <=> FuncWebsocketHandler(packet,direction,ctx)
+func (f FuncWebsocketHandler) Handle(packet []byte, direction WebsocketDirection, ctx *ProxyCtx) []byte {
+	return f(packet, direction, ctx)
+}

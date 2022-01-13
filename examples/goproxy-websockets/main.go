@@ -2,8 +2,8 @@ package main
 
 import (
 	"crypto/tls"
-	"github.com/elazarl/goproxy"
-	"github.com/gorilla/websocket"
+	"encoding/hex"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -11,6 +11,9 @@ import (
 	"os/signal"
 	"sync"
 	"time"
+
+	"github.com/elazarl/goproxy"
+	"github.com/gorilla/websocket"
 )
 
 var upgrader = websocket.Upgrader{} // use default options
@@ -28,7 +31,7 @@ func echo(w http.ResponseWriter, r *http.Request) {
 			log.Println("read:", err)
 			break
 		}
-		log.Printf("recv: %s", message)
+		log.Printf("server recv: %s", message)
 		err = c.WriteMessage(mt, message)
 		if err != nil {
 			log.Println("write:", err)
@@ -50,12 +53,26 @@ func StartEchoServer(wg *sync.WaitGroup) {
 	}()
 }
 
+func interceptWebSocket(data []byte, direction goproxy.WebsocketDirection, ctx *goproxy.ProxyCtx) []byte {
+	if direction == goproxy.ClientToServer {
+		fmt.Printf("Intercepted websocket, client to server\n")
+	} else {
+		fmt.Printf("Intercepted websocket, server to client\n")
+	}
+
+	data = append(data, 'A')
+
+	fmt.Printf("%s\n", hex.Dump(data))
+	return data
+}
+
 func StartProxy(wg *sync.WaitGroup) {
 	log.Println("Starting proxy server")
 	wg.Add(1)
 	go func() {
 		proxy := goproxy.NewProxyHttpServer()
 		proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+		proxy.AddWebsocketHandler(interceptWebSocket)
 		proxy.Verbose = true
 
 		err := http.ListenAndServe(":54321", proxy)
@@ -75,6 +92,9 @@ func main() {
 
 	endpointUrl := "wss://localhost:12345"
 	proxyUrl := "http://localhost:54321"
+
+	// it can take a second for the servers to start
+	time.Sleep(10000)
 
 	surl, _ := url.Parse(proxyUrl)
 	dialer := websocket.Dialer{
@@ -100,7 +120,7 @@ func main() {
 				log.Println("read:", err)
 				return
 			}
-			log.Printf("recv: %s", message)
+			log.Printf("client recv: %s", message)
 		}
 	}()
 
