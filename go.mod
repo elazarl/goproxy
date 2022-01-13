@@ -1,4 +1,4 @@
-module github.com/elazarl/goproxy
+module github.com/pipeline/goproxy
 
 go 1.17
 
