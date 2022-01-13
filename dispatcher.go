@@ -340,6 +340,6 @@ func HandleBytes(f func(b []byte, ctx *ProxyCtx) []byte) RespHandler {
 	})
 }
 
-func (proxy *ProxyHttpServer) AddWebsocketHandler(f func(data []byte, direction WebsocketDirection, ctx *ProxyCtx) []byte) {
+func (proxy *ProxyHttpServer) AddWebsocketHandler(f func(data []byte, direction WebsocketDirection, opcode string, ctx *ProxyCtx) []byte) {
 	proxy.websocketHandlers = append(proxy.websocketHandlers, FuncWebsocketHandler(f))
 }

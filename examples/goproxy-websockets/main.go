@@ -53,11 +53,11 @@ func StartEchoServer(wg *sync.WaitGroup) {
 	}()
 }
 
-func interceptWebSocket(data []byte, direction goproxy.WebsocketDirection, ctx *goproxy.ProxyCtx) []byte {
+func interceptWebSocket(data []byte, direction goproxy.WebsocketDirection, opcode string, ctx *goproxy.ProxyCtx) []byte {
 	if direction == goproxy.ClientToServer {
-		fmt.Printf("Intercepted websocket, client to server\n")
+		fmt.Printf("Intercepted websocket, client to server. Opcode: %s\n", opcode)
 	} else {
-		fmt.Printf("Intercepted websocket, server to client\n")
+		fmt.Printf("Intercepted websocket, server to client. Opcode: %s\n", opcode)
 	}
 
 	data = append(data, 'A')

@@ -112,6 +112,7 @@ type websocketPacket struct {
 	valid         bool
 	flags         byte
 	opcode        int
+	opcode_str    string
 	mask          bool
 	payloadLength int
 	maskingKey    []byte
@@ -130,24 +131,44 @@ func newWebsocketPacket(packet []byte) *websocketPacket {
 	if p.payloadLength == 126 {
 		p.payloadLength = int(packet[2])<<8 | int(packet[3])
 		packetStart += 2
-		p.maskingKey = packet[4:8]
+		if p.mask {
+			p.maskingKey = packet[4:8]
+		}
 	} else if p.payloadLength == 127 {
 		p.payloadLength = int(packet[2])<<56 | int(packet[3])<<48 | int(packet[4])<<40 | int(packet[5])<<32 | int(packet[6])<<24 | int(packet[7])<<16 | int(packet[8])<<8 | int(packet[9])
 		packetStart += 8
-		p.maskingKey = packet[10:14]
+		if p.mask {
+			p.maskingKey = packet[10:14]
+		}
 	} else {
-		p.maskingKey = packet[2:6]
+		if p.mask {
+			p.maskingKey = packet[2:6]
+		}
 	}
 
-	if !p.mask {
-		p.maskingKey = nil
-	} else {
+	if p.mask {
 		packetStart += 4
 	}
 
 	p.packetSize = packetStart + p.payloadLength
 	p.payload = packet[packetStart:p.packetSize]
 	p.valid = (len(p.payload) == p.payloadLength)
+
+	if p.opcode == 0x00 {
+		p.opcode_str = "Continuation"
+	} else if p.opcode == 0x01 {
+		p.opcode_str = "Text"
+	} else if p.opcode == 0x02 {
+		p.opcode_str = "Binary"
+	} else if p.opcode == 0x08 {
+		p.opcode_str = "Close"
+	} else if p.opcode == 0x09 {
+		p.opcode_str = "Ping"
+	} else if p.opcode == 0x0A {
+		p.opcode_str = "Pong"
+	} else {
+		p.opcode_str = "Unknown"
+	}
 
 	if p.valid && p.maskingKey != nil {
 		for i := 0; i < p.payloadLength; i++ {
@@ -232,7 +253,7 @@ func (proxy *ProxyHttpServer) copyWebsocketData(dst io.Writer, src io.Reader, di
 				continue
 			}
 
-			websocketPacket.payload = proxy.filterWebsocketPacket(websocketPacket.payload, direction, ctx)
+			websocketPacket.payload = proxy.filterWebsocketPacket(websocketPacket.payload, direction, websocketPacket.opcode_str, ctx)
 			encodedPacket := websocketPacket.encode()
 			nw, ew := dst.Write(encodedPacket)
 			fullPacket = fullPacket[websocketPacket.packetSize:]

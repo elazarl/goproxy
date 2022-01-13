@@ -77,9 +77,9 @@ func (proxy *ProxyHttpServer) filterResponse(respOrig *http.Response, ctx *Proxy
 	}
 	return
 }
-func (proxy *ProxyHttpServer) filterWebsocketPacket(data []byte, direction WebsocketDirection, ctx *ProxyCtx) []byte {
+func (proxy *ProxyHttpServer) filterWebsocketPacket(data []byte, direction WebsocketDirection, opcode string, ctx *ProxyCtx) []byte {
 	for _, h := range proxy.websocketHandlers {
-		data = h.Handle(data, direction, ctx)
+		data = h.Handle(data, direction, opcode, ctx)
 	}
 	return data
 }
