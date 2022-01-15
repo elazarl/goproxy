@@ -116,7 +116,8 @@ func dial(ctx context.Context, proxy *goproxy.ProxyHttpServer, network, addr str
 	if proxy.Tr.DialContext != nil {
 		return proxy.Tr.DialContext(ctx, network, addr)
 	}
-	return net.Dial(network, addr)
+	var d net.Dialer
+	return d.DialContext(ctx, network, addr)
 }
 
 // copied/converted from https.go
