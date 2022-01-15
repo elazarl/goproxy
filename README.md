@@ -97,7 +97,7 @@ a `ReqCondition` accepting only requests directed to "www.reddit.com".
 
 `DoFunc` will receive a function that will preprocess the request. We can change the request, or
 return a response. If the time is between 8:00am and 17:00pm, we will reject the request, and
-return a precanned text response saying "do not waste your time".
+return a pre-canned text response saying "do not waste your time".
 
 See additional examples in the examples directory.
 
