@@ -22,10 +22,12 @@ type ProxyHttpServer struct {
 	Verbose         bool
 	Logger          Logger
 	NonproxyHandler http.Handler
-	reqHandlers     []ReqHandler
-	respHandlers    []RespHandler
-	httpsHandlers   []HttpsHandler
-	Tr              *http.Transport
+	// act as a front proxy applying filters to arbitrary http requests.
+	FrontProxyMode bool
+	reqHandlers    []ReqHandler
+	respHandlers   []RespHandler
+	httpsHandlers  []HttpsHandler
+	Tr             *http.Transport
 	// ConnectDial will be used to create TCP connections for CONNECT requests
 	// if nil Tr.Dial will be used
 	ConnectDial func(network string, addr string) (net.Conn, error)
@@ -117,9 +119,11 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 		var err error
 		ctx.Logf("Got request %v %v %v %v", r.URL.Path, r.Host, r.Method, r.URL.String())
-		if !r.URL.IsAbs() {
-			proxy.NonproxyHandler.ServeHTTP(w, r)
-			return
+		if !proxy.FrontProxyMode {
+			if !r.URL.IsAbs() {
+				proxy.NonproxyHandler.ServeHTTP(w, r)
+				return
+			}
 		}
 		r, resp := proxy.filterRequest(r, ctx)
 

@@ -94,6 +94,28 @@ func TestSimpleHttpReqWithProxy(t *testing.T) {
 	}
 }
 
+func TestSimpleHttpReqFrontProxy(t *testing.T) {
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.FrontProxyMode = true
+	s := httptest.NewServer(proxy)
+	client := &http.Client{
+		Transport: &http.Transport{TLSClientConfig: acceptAllCerts},
+	}
+
+	defer s.Close()
+
+	if r := string(getOrFail(srv.URL+"/bobo", client, t)); r != "bobo" {
+		t.Error("proxy server does not serve constant handlers", r)
+	}
+	if r := string(getOrFail(srv.URL+"/bobo", client, t)); r != "bobo" {
+		t.Error("proxy server does not serve constant handlers", r)
+	}
+
+	if string(getOrFail(https.URL+"/bobo", client, t)) != "bobo" {
+		t.Error("TLS server does not serve constant handlers, when proxy is used")
+	}
+}
+
 func oneShotProxy(proxy *goproxy.ProxyHttpServer, t *testing.T) (client *http.Client, s *httptest.Server) {
 	s = httptest.NewServer(proxy)
 
