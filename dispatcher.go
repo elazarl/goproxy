@@ -206,7 +206,7 @@ func (pcond *ReqProxyConds) DoFunc(f func(req *http.Request, ctx *ProxyCtx) (*ht
 //	// given request to the proxy, will test if cond1.HandleReq(req,ctx) && cond2.HandleReq(req,ctx) are true
 //	// if they are, will call handler.Handle(req,ctx)
 func (pcond *ReqProxyConds) Do(h ReqHandler) {
-	pcond.proxy.ReqHandlers = append(pcond.proxy.ReqHandlers,
+	*pcond.proxy.ReqHandlers = append(*pcond.proxy.ReqHandlers,
 		FuncReqHandler(func(r *http.Request, ctx *ProxyCtx) (*http.Request, *http.Response) {
 			for _, cond := range pcond.reqConds {
 				if !cond.HandleReq(r, ctx) {
@@ -229,7 +229,7 @@ func (pcond *ReqProxyConds) Do(h ReqHandler) {
 // will use the default tls configuration.
 //	proxy.OnRequest().HandleConnect(goproxy.AlwaysReject) // rejects all CONNECT requests
 func (pcond *ReqProxyConds) HandleConnect(h HttpsHandler) {
-	pcond.proxy.HttpsHandlers = append(pcond.proxy.HttpsHandlers,
+	*pcond.proxy.HttpsHandlers = append(*pcond.proxy.HttpsHandlers,
 		FuncHttpsHandler(func(host string, ctx *ProxyCtx) (*ConnectAction, string) {
 			for _, cond := range pcond.reqConds {
 				if !cond.HandleReq(ctx.Req, ctx) {
@@ -257,7 +257,7 @@ func (pcond *ReqProxyConds) HandleConnectFunc(f func(host string, ctx *ProxyCtx)
 }
 
 func (pcond *ReqProxyConds) HijackConnect(f func(req *http.Request, client net.Conn, ctx *ProxyCtx)) {
-	pcond.proxy.HttpsHandlers = append(pcond.proxy.HttpsHandlers,
+	*pcond.proxy.HttpsHandlers = append(*pcond.proxy.HttpsHandlers,
 		FuncHttpsHandler(func(host string, ctx *ProxyCtx) (*ConnectAction, string) {
 			for _, cond := range pcond.reqConds {
 				if !cond.HandleReq(ctx.Req, ctx) {
@@ -285,7 +285,7 @@ func (pcond *ProxyConds) DoFunc(f func(resp *http.Response, ctx *ProxyCtx) *http
 // ProxyConds.Do will register the RespHandler on the proxy, h.Handle(resp,ctx) will be called on every
 // request that matches the conditions aggregated in pcond.
 func (pcond *ProxyConds) Do(h RespHandler) {
-	pcond.proxy.RespHandlers = append(pcond.proxy.RespHandlers,
+	*pcond.proxy.RespHandlers = append(*pcond.proxy.RespHandlers,
 		FuncRespHandler(func(resp *http.Response, ctx *ProxyCtx) *http.Response {
 			for _, cond := range pcond.reqConds {
 				if !cond.HandleReq(ctx.Req, ctx) {

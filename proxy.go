@@ -22,9 +22,9 @@ type ProxyHttpServer struct {
 	Verbose         bool
 	Logger          Logger
 	NonproxyHandler http.Handler
-	ReqHandlers     []ReqHandler
-	RespHandlers    []RespHandler
-	HttpsHandlers   []HttpsHandler
+	ReqHandlers     *[]ReqHandler
+	RespHandlers    *[]RespHandler
+	HttpsHandlers   *[]HttpsHandler
 	Tr              *http.Transport
 	// ConnectDial will be used to create TCP connections for CONNECT requests
 	// if nil Tr.Dial will be used
@@ -58,7 +58,7 @@ func isEof(r *bufio.Reader) bool {
 
 func (proxy *ProxyHttpServer) filterRequest(r *http.Request, ctx *ProxyCtx) (req *http.Request, resp *http.Response) {
 	req = r
-	for _, h := range proxy.ReqHandlers {
+	for _, h := range *proxy.ReqHandlers {
 		req, resp = h.Handle(r, ctx)
 		// non-nil resp means the handler decided to skip sending the request
 		// and return canned response instead.
@@ -70,7 +70,7 @@ func (proxy *ProxyHttpServer) filterRequest(r *http.Request, ctx *ProxyCtx) (req
 }
 func (proxy *ProxyHttpServer) filterResponse(respOrig *http.Response, ctx *ProxyCtx) (resp *http.Response) {
 	resp = respOrig
-	for _, h := range proxy.RespHandlers {
+	for _, h := range *proxy.RespHandlers {
 		ctx.Resp = resp
 		resp = h.Handle(resp, ctx)
 	}
@@ -189,9 +189,9 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 func NewProxyHttpServer() *ProxyHttpServer {
 	proxy := ProxyHttpServer{
 		Logger:        log.New(os.Stderr, "", log.LstdFlags),
-		ReqHandlers:   []ReqHandler{},
-		RespHandlers:  []RespHandler{},
-		HttpsHandlers: []HttpsHandler{},
+		ReqHandlers:   &[]ReqHandler{},
+		RespHandlers:  &[]RespHandler{},
+		HttpsHandlers: &[]HttpsHandler{},
 		NonproxyHandler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, "This is a proxy server. Does not respond to non-proxy requests.", 500)
 		}),
