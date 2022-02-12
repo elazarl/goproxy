@@ -71,23 +71,25 @@ func (conn *ProxyTCPConn) Read(b []byte) (n int, err error) {
 
 func (conn *ProxyTCPConn) SetKeepaliveParameters(sharedConn bool, count, interval, period int) error {
 	var tcpConn *net.TCPConn
-	var ok bool
+	var converted bool
 	if sharedConn {
 
 		if nConn, ok := conn.Conn.(*vhost.TLSConn); ok {
-			sConn := nConn.SharedConn.Conn
-			tcpConn, ok = sConn.(*net.TCPConn)
+			tcpConn, ok = nConn.SharedConn.Conn.(*net.TCPConn)
+			if ok {
+				converted = true
+			}
 		} else if nConn, ok := conn.Conn.(*tproxy.Conn); ok {
 			tcpConn = nConn.TCPConn
-			ok = true
+			converted = true
 		} else {
 			return fmt.Errorf("unable to set keep alives, conn is unkown type: %v", reflect.TypeOf(conn.Conn))
 		}
 
 	} else {
-		tcpConn, ok = conn.Conn.(*net.TCPConn)
+		tcpConn, converted = conn.Conn.(*net.TCPConn)
 	}
-	if !ok {
+	if !converted {
 		return fmt.Errorf("Could not convert proxy conn from %v to net.TCPConn", reflect.TypeOf(conn.Conn))
 	}
 	setErr := tcpConn.SetKeepAlive(true)
