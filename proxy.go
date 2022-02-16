@@ -32,6 +32,13 @@ type ProxyHttpServer struct {
 	ConnectDial func(network string, addr string) (net.Conn, error)
 	CertStore   CertStorage
 	KeepHeader  bool
+	Dec         DialErrorCallback
+}
+
+type DialErrorCallback func(err error)
+
+func DialErrorCallbackDefault(err error) {
+	//noop
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
@@ -152,6 +159,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 			if resp == nil {
 				resp, err = ctx.RoundTrip(r)
+				proxy.Dec(err)
 				if err != nil {
 					ctx.Error = err
 					resp = proxy.filterResponse(nil, ctx)
@@ -216,7 +224,8 @@ func NewProxyHttpServer() *ProxyHttpServer {
 		NonproxyHandler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, "This is a proxy server. Does not respond to non-proxy requests.", 500)
 		}),
-		Tr: &http.Transport{TLSClientConfig: tlsClientSkipVerify, Proxy: http.ProxyFromEnvironment},
+		Tr:  &http.Transport{TLSClientConfig: tlsClientSkipVerify, Proxy: http.ProxyFromEnvironment},
+		Dec: DialErrorCallbackDefault,
 	}
 
 	proxy.ConnectDial = dialerFromEnv(&proxy)
