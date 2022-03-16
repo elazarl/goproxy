@@ -47,9 +47,25 @@ type ConnectAction struct {
 }
 
 func stripPort(s string) string {
-	ix := strings.IndexRune(s, ':')
-	if ix == -1 {
-		return s
+	var ix int
+	if strings.Contains(s,"[") && strings.Contains(s,"]") {
+		//ipv6 : for example : [2606:4700:4700::1111]:443
+
+		//strip '[' and ']'
+		s = strings.ReplaceAll(s,"[","")
+		s = strings.ReplaceAll(s,"]","")
+
+		ix = strings.LastIndexAny(s,":")
+		if ix == -1 {
+			return s
+		}
+	} else {
+		//ipv4
+		ix = strings.IndexRune(s, ':')
+		if ix == -1 {
+			return s
+		}
+
 	}
 	return s[:ix]
 }
