@@ -147,7 +147,7 @@ func TestWithBrowser(t *testing.T) {
 	// to test, run with
 	// $ go test -run TestWithBrowser -- server
 	// configure a browser to use the printed proxy address, use the proxy
-	// and exit with Ctrl-C. It will throw error if your haven't acutally used the proxy
+	// and exit with Ctrl-C. It will throw error if your haven't actually used the proxy
 	if os.Args[len(os.Args)-1] != "server" {
 		return
 	}
