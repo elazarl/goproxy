@@ -27,7 +27,7 @@ doc:
 ifndef HAS_GODOC
 	$(error You must install godoc, run "go get golang.org/x/tools/cmd/godoc")
 endif
-	@echo "open http://localhost:6060/pkg/github.com/elazarl/goproxy in your browser\n"
+	@echo "open http://localhost:6060/pkg/github.com/waggledans/goproxy in your browser\n"
 	@godoc -http :6060
 
 ci-integration: lint coverage
