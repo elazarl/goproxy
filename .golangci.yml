@@ -1,0 +1,89 @@
+---
+run:
+  timeout: 1m
+  skip-files:
+    - internal/*
+
+linters:
+  enable-all: true
+  disable:
+    - wrapcheck
+    - testpackage
+    - gochecknoglobals
+    - exhaustivestruct
+    - exhaustruct
+    - paralleltest
+    - godox
+    - cyclop
+    - tagliatelle
+    - goerr113
+    - varnamelen
+    - errcheck
+    - ifshort
+    - wsl
+    - nestif
+    - nonamedreturns
+    - forcetypeassert
+    - errorlint
+    - gomnd
+  fast: false
+
+# Settings for specific linters
+linters-settings:
+  gocognit:
+    min-complexity: 40
+
+  funlen:
+    lines: 200
+    statements: 75
+
+  nestif:
+    min-complexity: 8
+
+issues:
+  exclude-rules:
+    - path: examples/
+      linters:
+        - gochecknoinits
+        - gomnd
+        - forbidigo
+        - lll
+
+    - path: example_test.go
+      linters:
+        - lll
+
+    - path: \.go
+      linters:
+        - unparam
+        - nlreturn
+
+    - path: _test\.go
+      linters:
+        - scopelint
+        - wsl
+        - nlreturn
+        - funlen
+        - dupl
+        - gocognit
+        - thelper
+        - noctx
+        - gosec
+        - lll
+
+    - path: doc.go
+      linters:
+        - lll
+
+    - linters:
+        - lll
+      source: "Err"
+
+    - linters:
+        - lll
+      source: "json:"
+
+    - linters:
+        - gocritic
+        - godot
+      source: "//////"
