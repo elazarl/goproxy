@@ -2,11 +2,12 @@ package regretable_test
 
 import (
 	"bytes"
-	. "github.com/elazarl/goproxy/regretable"
 	"io"
 	"io/ioutil"
 	"strings"
 	"testing"
+
+	. "github.com/waggledans/goproxy/regretable"
 )
 
 func TestRegretableReader(t *testing.T) {
