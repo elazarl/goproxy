@@ -124,6 +124,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		}
 		targetSiteCon, err := proxy.connectDial("tcp", host)
 		if err != nil {
+			proxy.Dec(err)
 			httpError(proxyClient, ctx, err)
 			return
 		}

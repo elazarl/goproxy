@@ -217,6 +217,26 @@ func (pcond *ReqProxyConds) Do(h ReqHandler) {
 		}))
 }
 
+// ReqProxyConds.DoLate will register late ReqHandler on the proxy that are run after resetting request headers
+// the ReqHandler will handle the HTTP request if all the conditions
+// aggregated in the ReqProxyConds are met. Typical usage:
+//	proxy.OnRequest().Do(handler) // will call handler.Handle(req,ctx) on every request to the proxy
+//	proxy.OnRequest(cond1,cond2).Do(handler)
+//	// given request to the proxy, will test if cond1.HandleReq(req,ctx) && cond2.HandleReq(req,ctx) are true
+//	// if they are, will call handler.Handle(req,ctx)
+func (pcond *ReqProxyConds) DoLate(h ReqHandler) {
+	pcond.proxy.lateReqHandlers = append(pcond.proxy.reqHandlers,
+		FuncReqHandler(func(r *http.Request, ctx *ProxyCtx) (*http.Request, *http.Response) {
+			for _, cond := range pcond.reqConds {
+				if !cond.HandleReq(r, ctx) {
+					return r, nil
+				}
+			}
+			return h.Handle(r, ctx)
+		}))
+}
+
+
 // HandleConnect is used when proxy receives an HTTP CONNECT request,
 // it'll then use the HttpsHandler to determine what should it
 // do with this request. The handler returns a ConnectAction struct, the Action field in the ConnectAction
