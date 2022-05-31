@@ -74,7 +74,7 @@ func (proxy *ProxyHttpServer) resolveDomain(proxyCtx *ProxyCtx, proto, domain st
 
 	resolver := proxyCtx.DNSResolver
 	if resolver == "" {
-		resolver = "127.0.0.1"
+		resolver = "127.0.0.1:53"
 	}
 
 	// resolve it manually and set the bootstrap ip
@@ -108,7 +108,7 @@ func (proxy *ProxyHttpServer) resolveDomain(proxyCtx *ProxyCtx, proto, domain st
 
 	m := new(dns.Msg)
 	m.SetQuestion(domain+".", dns.TypeA)
-	r, _, err4 := c.Exchange(m, resolver+":53")
+	r, _, err4 := c.Exchange(m, resolver)
 
 	if err4 == nil {
 		if r.Rcode == dns.RcodeSuccess {
@@ -122,7 +122,7 @@ func (proxy *ProxyHttpServer) resolveDomain(proxyCtx *ProxyCtx, proto, domain st
 
 	m = new(dns.Msg)
 	m.SetQuestion(domain+".", dns.TypeAAAA)
-	r, _, err6 := c.Exchange(m, resolver+":53")
+	r, _, err6 := c.Exchange(m, resolver)
 
 	if err6 == nil {
 		if r.Rcode == dns.RcodeSuccess {
@@ -853,10 +853,13 @@ func (proxy *ProxyHttpServer) getResolver(proxyCtx *ProxyCtx, proto string) *net
 					d.LocalAddr = tcpAddr
 				}
 			}
+			if !strings.Contains(address, ":"){
+				address = net.JoinHostPort(address, "53")
+			}
 			if proxyCtx.DNSResolver != "" {
 				address = proxyCtx.DNSResolver
 			}
-			return d.DialContext(ctx, proto, net.JoinHostPort(address, "53"))
+			return d.DialContext(ctx, proto, address)
 		},
 	}
 }
