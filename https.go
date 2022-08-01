@@ -108,6 +108,22 @@ func (proxy *ProxyHttpServer) resolveDomain(proxyCtx *ProxyCtx, proto, domain st
 
 	m := new(dns.Msg)
 	m.SetQuestion(domain+".", dns.TypeA)
+
+	if ip, ipNet, err := net.ParseCIDR(proxyCtx.EDNSClientSubnetV4); err == nil {
+
+		eDNS0Subnet := new(dns.EDNS0_SUBNET)
+		eDNS0Subnet.Code = dns.EDNS0SUBNET
+		eDNS0Subnet.SourceScope = 0
+		eDNS0Subnet.Address = ip
+		eDNS0Subnet.Family = 1
+		ones, _ := ipNet.Mask.Size()
+		eDNS0Subnet.SourceNetmask = uint8(ones)
+		m.SetEdns0(dns.DefaultMsgSize, false)
+		opt := m.IsEdns0()
+		opt.Option = append(opt.Option, eDNS0Subnet)
+
+	}
+
 	r, _, err4 := c.Exchange(m, resolver)
 
 	if err4 == nil {
@@ -122,6 +138,22 @@ func (proxy *ProxyHttpServer) resolveDomain(proxyCtx *ProxyCtx, proto, domain st
 
 	m = new(dns.Msg)
 	m.SetQuestion(domain+".", dns.TypeAAAA)
+
+	if ip, ipNet, err := net.ParseCIDR(proxyCtx.EDNSClientSubnetV6); err == nil {
+
+		eDNS0Subnet := new(dns.EDNS0_SUBNET)
+		eDNS0Subnet.Code = dns.EDNS0SUBNET
+		eDNS0Subnet.SourceScope = 0
+		eDNS0Subnet.Address = ip
+		eDNS0Subnet.Family = 2
+		ones, _ := ipNet.Mask.Size()
+		eDNS0Subnet.SourceNetmask = uint8(ones)
+		m.SetEdns0(dns.DefaultMsgSize, false)
+		opt := m.IsEdns0()
+		opt.Option = append(opt.Option, eDNS0Subnet)
+
+	}
+
 	r, _, err6 := c.Exchange(m, resolver)
 
 	if err6 == nil {
@@ -853,7 +885,7 @@ func (proxy *ProxyHttpServer) getResolver(proxyCtx *ProxyCtx, proto string) *net
 					d.LocalAddr = tcpAddr
 				}
 			}
-			if !strings.Contains(address, ":"){
+			if !strings.Contains(address, ":") {
 				address = net.JoinHostPort(address, "53")
 			}
 			if proxyCtx.DNSResolver != "" {

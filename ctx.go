@@ -41,6 +41,8 @@ type ProxyCtx struct {
 
 	ProxyLogger                          *ProxyLeveledLogger
 	LogRequestID                         string
+	EDNSClientSubnetV4                   string
+	EDNSClientSubnetV6                   string
 	ForwardProxy                         string
 	ForwardProxyDialTimeout              int
 	ForwardProxyTLSTimeout               int
