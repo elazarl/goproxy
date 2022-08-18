@@ -150,6 +150,15 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 		Resolver: ctx.Proxy.getResolver(ctx, "udp"),
 	}
 
+	if ctx.ForwardProxySourceIP != "" {
+		localAddr, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(ctx.ForwardProxySourceIP, "0"))
+		if err != nil {
+			ctx.Logf("Failed to resolve local address: %s - err: %v", ctx.ForwardProxySourceIP, err)
+		} else {
+			d.LocalAddr = localAddr
+		}
+	}
+
 	host := req.URL.Host
 	if !strings.Contains(req.URL.Host, ":") {
 		host = req.URL.Host + ":80"
