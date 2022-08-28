@@ -28,9 +28,10 @@ type ProxyHttpServer struct {
 	Tr              *http.Transport
 	// ConnectDial will be used to create TCP connections for CONNECT requests
 	// if nil Tr.Dial will be used
-	ConnectDial func(network string, addr string) (net.Conn, error)
-	CertStore   CertStorage
-	KeepHeader  bool
+	ConnectDial        func(network string, addr string) (net.Conn, error)
+	ConnectDialWithReq func(req *http.Request, network string, addr string) (net.Conn, error)
+	CertStore          CertStorage
+	KeepHeader         bool
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
