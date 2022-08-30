@@ -63,6 +63,7 @@ type ProxyCtx struct {
 	ForwardDisableHTTPKeepAlives         bool
 	CloseOnError                         bool
 	DNSResolver                          string
+	BackupDNSResolver                    string
 	DNSLocalAddr                         string
 	DNSTimeout                           time.Duration
 	TCPKeepAlivePeriod                   int
@@ -250,7 +251,10 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 		dialEnd := time.Now().UnixNano()
 
 		if err != nil {
-			c4, c6, err := ctx.Proxy.resolveDomain(ctx, "udp", strings.Split(host, ":")[0])
+			c4, c6, err := ctx.Proxy.resolveDomain(ctx, "udp", strings.Split(host, ":")[0], ctx.DNSResolver)
+			if err != nil && ctx.BackupDNSResolver != "" {
+				c4, c6, err = ctx.Proxy.resolveDomain(ctx, "udp", strings.Split(host, ":")[0], ctx.BackupDNSResolver)
+			}
 			if len(c4) > 0 && len(c6) > 0 {
 				ctx.Logf("error-metric: http dial to %s failed: %v", host, err)
 				ctx.SetErrorMetric()
