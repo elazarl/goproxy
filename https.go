@@ -251,7 +251,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 				Timeout:   time.Duration(int64(ctx.ForwardProxyFallbackTimeout)) * time.Second,
 				KeepAlive: 30 * time.Second,
 				DualStack: false,
-				Resolver:  ctx.Proxy.getResolver(ctx, "udp"),
+				Resolver:  ctx.Proxy.getResolver(ctx, "udp", ""),
 			}).DialContext
 			if ctx.ForwardProxyFallbackSecondaryTimeout > 0 {
 				ctx.ForwardProxyFallbackTimeout = ctx.ForwardProxyFallbackSecondaryTimeout
@@ -318,7 +318,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 				d := net.Dialer{
 					Timeout:   time.Duration(dialTimeout) * time.Second,
 					LocalAddr: localAddr,
-					Resolver:  proxy.getResolver(ctx, "udp"),
+					Resolver:  proxy.getResolver(ctx, "udp", ""),
 				}
 				return d.Dial("tcp", address)
 			},
@@ -371,7 +371,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 				d := net.Dialer{
 					Timeout:   time.Duration(dialTimeout) * time.Second,
 					LocalAddr: tcpLocal,
-					Resolver:  proxy.getResolver(ctx, "udp"),
+					Resolver:  proxy.getResolver(ctx, "udp", ""),
 				}
 				targetSiteCon, err = d.Dial("tcp", proxyClient.LocalAddr().String())
 				// targetSiteCon, err = net.DialTCP("tcp", tcpLocal, tcpRemote)
@@ -935,7 +935,7 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 				}
 				d := net.Dialer{
 					Timeout:  time.Duration(dialTimeout) * time.Second,
-					Resolver: proxy.getResolver(ctx, "udp"),
+					Resolver: proxy.getResolver(ctx, "udp", ""),
 				}
 				localAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:0", ctx.ForwardProxySourceIP))
 				if err == nil {
@@ -1032,7 +1032,7 @@ func (proxy *ProxyHttpServer) NewConnectDialWithKeepAlives(ctx *ProxyCtx, https_
 			if ctx.ForwardProxySourceIP != "" {
 				d := net.Dialer{
 					Timeout:  time.Duration(dialTimeout) * time.Second,
-					Resolver: proxy.getResolver(ctx, "udp"),
+					Resolver: proxy.getResolver(ctx, "udp", ""),
 				}
 				localAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:0", ctx.ForwardProxySourceIP))
 				if err == nil {
