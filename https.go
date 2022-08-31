@@ -859,7 +859,7 @@ func dialerFromEnv(proxy *ProxyHttpServer) func(network, addr string) (net.Conn,
 	return proxy.NewConnectDialToProxy(https_proxy)
 }
 
-func (proxy *ProxyHttpServer) getResolver(proxyCtx *ProxyCtx, proto string) *net.Resolver {
+func (proxy *ProxyHttpServer) getResolver(proxyCtx *ProxyCtx, proto, resolver string) *net.Resolver {
 	return &net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
@@ -891,6 +891,9 @@ func (proxy *ProxyHttpServer) getResolver(proxyCtx *ProxyCtx, proto string) *net
 			}
 			if proxyCtx.DNSResolver != "" {
 				address = proxyCtx.DNSResolver
+			}
+			if resolver != "" {
+				address = resolver
 			}
 			return d.DialContext(ctx, proto, address)
 		},

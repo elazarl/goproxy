@@ -148,7 +148,7 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	d := net.Dialer{
 		Timeout:  time.Duration(dialTimeout) * time.Second,
-		Resolver: ctx.Proxy.getResolver(ctx, "udp"),
+		Resolver: ctx.Proxy.getResolver(ctx, "udp", ""),
 	}
 
 	if ctx.ForwardProxySourceIP != "" {

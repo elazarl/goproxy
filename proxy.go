@@ -111,7 +111,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy}
 
 		var err error
-		//ctx.Logf("Got request %v %v %v %v", r.URL.Path, r.Host, r.Method, r.URL.String())
+		ctx.Logf("Got request %v %v %v %v", r.URL.Path, r.Host, r.Method, r.URL.String())
 
 		if !r.URL.IsAbs() {
 			proxy.NonproxyHandler.ServeHTTP(w, r)
@@ -123,11 +123,23 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		if resp == nil {
 			removeProxyHeaders(ctx, r)
 			resp, err = ctx.RoundTrip(r)
+
+			if err != nil {
+				ctx.Logf("http roundtrip error %+v", err)
+				if ctx.BackupDNSResolver != "" {
+					ctx.DNSResolver = ctx.BackupDNSResolver
+					ctx.Logf("http retrying with backup resolver %s", ctx.DNSResolver)
+					resp, err = ctx.RoundTrip(r)
+				}
+			}
+
 			if err != nil {
 				if ctx.CloseOnError {
+					ctx.Logf("http roundtrip error, closing: %+v", err)
 					r.Close = true
 					return
 				}
+				ctx.Logf("http roundtrip error %+v", err)
 				ctx.Error = err
 				resp = proxy.filterResponse(nil, ctx)
 
