@@ -363,6 +363,16 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxy(https_proxy string) func(net
 	return proxy.NewConnectDialToProxyWithHandler(https_proxy, nil)
 }
 
+func (proxy *ProxyHttpServer) useNonProxy(addr string) bool {
+	u, err := url.Parse(addr)
+	if err != nil {
+		return false
+	}
+	proxyUrl, err := proxy.Tr.Proxy(&http.Request{URL: u})
+
+	return proxyUrl == nil && err == nil
+}
+
 func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy string, connectReqHandler func(req *http.Request)) func(network, addr string) (net.Conn, error) {
 	u, err := url.Parse(https_proxy)
 	if err != nil {
@@ -373,6 +383,10 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy strin
 			u.Host += ":80"
 		}
 		return func(network, addr string) (net.Conn, error) {
+			if proxy.useNonProxy(addr) {
+				// if this request require non-proxy, simply direct forward, not send to http proxy
+				return proxy.dial(network, addr)
+			}
 			connectReq := &http.Request{
 				Method: "CONNECT",
 				URL:    &url.URL{Opaque: addr},
@@ -413,6 +427,10 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy strin
 			u.Host += ":443"
 		}
 		return func(network, addr string) (net.Conn, error) {
+			if proxy.useNonProxy(addr) {
+				// if this request require non-proxy, simply direct forward, not send to http proxy
+				return proxy.dial(network, addr)
+			}
 			c, err := proxy.dial(network, u.Host)
 			if err != nil {
 				return nil, err
