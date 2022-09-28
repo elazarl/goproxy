@@ -110,6 +110,10 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 		ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy}
 
+		if r == nil || r.URL == nil {
+			return
+		}
+
 		var err error
 
 		if !r.URL.IsAbs() {
