@@ -123,6 +123,10 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 		r, resp := proxy.filterRequest(r, ctx)
 
+		if r == nil || r.URL == nil {
+			return
+		}
+
 		ctx.Logf("Got request %v %v %v %v", r.URL.Path, r.Host, r.Method, r.URL.String())
 
 		if resp == nil {
