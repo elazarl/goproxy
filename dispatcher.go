@@ -97,15 +97,22 @@ func ReqHostIs(hosts ...string) ReqConditionFunc {
 	}
 }
 
-var localHostIpv4 = regexp.MustCompile(`127\.0\.0\.\d+`)
-
-// IsLocalHost checks whether the destination host is explicitly local host
-// (buggy, there can be IPv6 addresses it doesn't catch)
+// IsLocalHost checks whether the destination host is localhost.
 var IsLocalHost ReqConditionFunc = func(req *http.Request, ctx *ProxyCtx) bool {
-	return req.URL.Host == "::1" ||
-		req.URL.Host == "0:0:0:0:0:0:0:1" ||
-		localHostIpv4.MatchString(req.URL.Host) ||
-		req.URL.Host == "localhost"
+	h := req.URL.Hostname()
+	if h == "localhost" {
+		return true
+	}
+	if ip := net.ParseIP(h); ip != nil {
+		return ip.IsLoopback()
+	}
+
+	// In case of IPv6 without a port number Hostname() sometimes returns the invalid value.
+	if ip := net.ParseIP(req.URL.Host); ip != nil {
+		return ip.IsLoopback()
+	}
+
+	return false
 }
 
 // UrlMatches returns a ReqCondition testing whether the destination URL
