@@ -168,16 +168,29 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		resp = proxy.filterResponse(resp, ctx)
 
 		if resp == nil {
-			var errorString string
-			if ctx.Error != nil {
-				errorString = "error read response " + r.URL.Host + " : " + ctx.Error.Error()
-				ctx.Logf(errorString)
-				http.Error(w, ctx.Error.Error(), 502)
+			var (
+				errorString string
+				code        int
+			)
+
+			if e, ok := ctx.Error.(net.Error); ok {
+				if e.Timeout() {
+					errorString = "timed out connecting to remote host: " + e.Error()
+					code = http.StatusGatewayTimeout
+				} else {
+					errorString = "failed to connect to remote host: " + e.Error()
+					code = http.StatusBadGateway
+				}
+			} else if ctx.Error != nil {
+				errorString = "failed to read response from remote host: " + e.Error()
+				code = http.StatusInternalServerError
 			} else {
-				errorString = "error read response " + r.URL.Host
-				ctx.Logf(errorString)
-				http.Error(w, errorString, 502)
+				errorString = "failed to read response from remote host: " + r.URL.Host
+				code = http.StatusInternalServerError
 			}
+
+			ctx.Logf(errorString)
+			http.Error(w, errorString, code)
 			return
 		}
 		ctx.Logf("Copying response to client %v [%d]", resp.Status, resp.StatusCode)
