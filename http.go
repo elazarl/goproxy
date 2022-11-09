@@ -47,18 +47,19 @@ func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request)
 	resp = proxy.filterResponse(resp, ctx)
 
 	if resp == nil {
-		var errorString string
-		if ctx.Error != nil {
-			errorString = "error read response " + r.URL.Host + " : " + ctx.Error.Error()
-			ctx.Logf(errorString)
-			http.Error(w, ctx.Error.Error(), 500)
-		} else {
-			errorString = "error read response " + r.URL.Host
-			ctx.Logf(errorString)
-			http.Error(w, errorString, 500)
+		hij, ok := w.(http.Hijacker)
+		if !ok {
+			panic("httpserver does not support hijacking")
 		}
+
+		proxyClient, _, e := hij.Hijack()
+		if e != nil {
+			panic("Cannot hijack connection " + e.Error())
+		}
+		httpError(proxyClient, ctx, ctx.Error)
 		return
 	}
+
 	ctx.Logf("Copying response to client %v [%d]", resp.Status, resp.StatusCode)
 	// http.ResponseWriter will take care of filling the correct response length
 	// Setting it now, might impose wrong value, contradicting the actual new
