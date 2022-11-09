@@ -25,6 +25,8 @@ type ProxyHttpServer struct {
 	respHandlers    []RespHandler
 	httpsHandlers   []HttpsHandler
 	Tr              *http.Transport
+	// Will be invoked to return a custom response to clients when goproxy fails to connect to a proxy target
+	HTTPErrorHandler func(io.WriteCloser, *ProxyCtx, error)
 	// ConnectDial will be used to create TCP connections for CONNECT requests
 	// if nil Tr.Dial will be used
 	ConnectDial        func(network string, addr string) (net.Conn, error)
