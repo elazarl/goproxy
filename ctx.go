@@ -441,9 +441,9 @@ func (ctx *ProxyCtx) printf(msg string, argv ...interface{}) {
 func (ctx *ProxyCtx) Logf(msg string, argv ...interface{}) {
 	if ctx.ProxyLogger != nil {
 		if ctx.LogRequestID != "" {
-			ctx.ProxyLogger.Debugf("[%s] "+msg+"\n", append([]interface{}{ctx.LogRequestID}, argv...)...)
+			ctx.ProxyLogger.Debugf("[%s] "+msg, append([]interface{}{ctx.LogRequestID}, argv...)...)
 		} else {
-			ctx.ProxyLogger.Debugf("[%03d] "+msg+"\n", append([]interface{}{ctx.Session & 0xFF}, argv...)...)
+			ctx.ProxyLogger.Debugf("[%03d] "+msg, append([]interface{}{ctx.Session & 0xFF}, argv...)...)
 		}
 		return
 	}
@@ -453,9 +453,9 @@ func (ctx *ProxyCtx) Logf(msg string, argv ...interface{}) {
 func (ctx *ProxyCtx) Infof(msg string, argv ...interface{}) {
 	if ctx.ProxyLogger != nil {
 		if ctx.LogRequestID != "" {
-			ctx.ProxyLogger.Infof("[%s] "+msg+"\n", append([]interface{}{ctx.LogRequestID}, argv...)...)
+			ctx.ProxyLogger.Infof("[%s] "+msg, append([]interface{}{ctx.LogRequestID}, argv...)...)
 		} else {
-			ctx.ProxyLogger.Infof("[%03d] "+msg+"\n", append([]interface{}{ctx.Session & 0xFF}, argv...)...)
+			ctx.ProxyLogger.Infof("[%03d] "+msg, append([]interface{}{ctx.Session & 0xFF}, argv...)...)
 		}
 		return
 	}
@@ -476,9 +476,9 @@ func (ctx *ProxyCtx) Infof(msg string, argv ...interface{}) {
 func (ctx *ProxyCtx) Warnf(msg string, argv ...interface{}) {
 	if ctx.ProxyLogger != nil {
 		if ctx.LogRequestID != "" {
-			ctx.ProxyLogger.Warningf("[%s] "+msg+"\n", append([]interface{}{ctx.LogRequestID}, argv...)...)
+			ctx.ProxyLogger.Warningf("[%s] "+msg, append([]interface{}{ctx.LogRequestID}, argv...)...)
 		} else {
-			ctx.ProxyLogger.Warningf("[%03d] "+msg+"\n", append([]interface{}{ctx.Session & 0xFF}, argv...)...)
+			ctx.ProxyLogger.Warningf("[%03d] "+msg, append([]interface{}{ctx.Session & 0xFF}, argv...)...)
 		}
 		return
 	}
