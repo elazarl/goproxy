@@ -178,7 +178,7 @@ func (proxy *ProxyHttpServer) resolveDomain(proxyCtx *ProxyCtx, proto, domain, r
 
 func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient net.Conn, host string) (sendHTTPOK bool, setTargetKA bool, logHeaders http.Header, targetSiteCon net.Conn, err error) {
 
-	sendHTTPOK = false
+	sendHTTPOK = ctx.ForwardProxyDirectSendOK
 	setTargetKA = true
 
 	//check for idle override
