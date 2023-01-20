@@ -74,6 +74,7 @@ type ProxyCtx struct {
 	ProxyUser                            string
 	MaxIdleConns                         int
 	MaxIdleConnsPerHost                  int
+	MaxConnsPerHost                      int
 	IdleConnTimeout                      time.Duration
 	ProxyReadDeadline                    int
 	ProxyWriteDeadline                   int

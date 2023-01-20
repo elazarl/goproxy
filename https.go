@@ -224,6 +224,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 		tr := &http.Transport{
 			MaxIdleConns:          ctx.MaxIdleConns,
 			MaxIdleConnsPerHost:   ctx.MaxIdleConnsPerHost,
+			MaxConnsPerHost:       ctx.MaxConnsPerHost,
 			TLSHandshakeTimeout:   time.Duration(tlsTimeout) * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 			IdleConnTimeout:       idleTimeout,
@@ -286,12 +287,14 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 		ips4 := ips
 		v4SourceAddress := ctx.ForwardProxySourceIP
 		ipv6Dial := false
+		ipProto := "tcp4"
 
 		//handle ipv6
 		if len(ips6) > 0 && ctx.ForwardProxySourceIPv6 != "" {
 			ips = ips6
 			ctx.ForwardProxySourceIP = ctx.ForwardProxySourceIPv6
 			ipv6Dial = true
+			ipProto = "tcp6"
 		}
 
 		if err != nil || len(ips) == 0 {
@@ -320,10 +323,12 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 					LocalAddr: localAddr,
 					Resolver:  proxy.getResolver(ctx, "udp", ""),
 				}
-				return d.Dial("tcp", address)
+				ctx.Logf("dial debug network: %v host: %v address: %s localAddr: %s", network, host, address, localAddr.String())
+				return d.Dial(network, address)
 			},
 			MaxIdleConns:          ctx.MaxIdleConns,
 			MaxIdleConnsPerHost:   ctx.MaxIdleConnsPerHost,
+			MaxConnsPerHost:       ctx.MaxConnsPerHost,
 			TLSHandshakeTimeout:   time.Duration(tlsTimeout) * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 			IdleConnTimeout:       idleTimeout,
@@ -332,7 +337,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 
 		dialStart := time.Now().UnixNano()
 
-		targetSiteCon, err = tr.Dial("tcp", dialHost)
+		targetSiteCon, err = tr.Dial(ipProto, dialHost)
 
 		dialEnd := time.Now().UnixNano()
 
