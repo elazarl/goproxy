@@ -198,7 +198,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 
 	// if this is an ipv6 only endpoint, and we have a forward proxy, exit locally instead
 	// this is because the proxy does not support ipv6 yet
-	if len(ips6) > 0 && len(ips) == 0 && ctx.ForwardProxySourceIPv6 != "" {
+	if len(ips6) > 0 && len(ips) == 0 && ctx.ForwardProxyIPv6OnlyExitLocal {
 		ctx.ForwardProxy = ""
 		ctx.ForwardProxyDirect = true
 		ctx.Logf("destination is ipv6 only, exiting locally")
@@ -309,7 +309,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 		tr := &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
 			Dial: func(network, address string) (net.Conn, error) {
-				localAddr, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(ctx.ForwardProxySourceIP, "0"))
+				localAddr, err := net.ResolveTCPAddr(network, net.JoinHostPort(ctx.ForwardProxySourceIP, "0"))
 				if err != nil {
 					ctx.Logf("Failed to resolve local address: %s - err: %v", ctx.ForwardProxySourceIP, err)
 					return nil, err
