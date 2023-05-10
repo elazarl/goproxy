@@ -133,7 +133,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			return
 		}
 		ctx.Logf("Accepting CONNECT to %s", host)
-		proxyClient.Write([]byte("HTTP/1.0 200 Connection established\r\n\r\n"))
+		if todo.Hijack != nil {
+			todo.Hijack(r, proxyClient, ctx)
+		} else {
+			proxyClient.Write([]byte("HTTP/1.0 200 Connection established\r\n\r\n"))
+		}
 
 		targetTCP, targetOK := targetSiteCon.(halfClosable)
 		proxyClientTCP, clientOK := proxyClient.(halfClosable)
@@ -156,7 +160,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 	case ConnectHijack:
 		todo.Hijack(r, proxyClient, ctx)
 	case ConnectHTTPMitm:
-		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+		if todo.Hijack != nil {
+			todo.Hijack(r, proxyClient, ctx)
+		} else {
+			proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+		}
 		ctx.Logf("Assuming CONNECT is plain HTTP tunneling, mitm proxying it")
 		targetSiteCon, err := proxy.connectDial(ctx, "tcp", host)
 		if err != nil {
@@ -193,7 +201,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			}
 		}
 	case ConnectMitm:
-		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+		if todo.Hijack != nil {
+			todo.Hijack(r, proxyClient, ctx)
+		} else {
+			proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+		}
 		ctx.Logf("Assuming CONNECT is TLS, mitm proxying it")
 		// this goes in a separate goroutine, so that the net/http server won't think we're
 		// still handling the request even after hijacking the connection. Those HTTP CONNECT
