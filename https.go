@@ -246,7 +246,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						return
 					}
 					if err != nil {
-						ctx.Warnf("Illegal URL %s", "https://"+r.Host+req.URL.Path)
+						if req != nil {
+							ctx.Warnf("Illegal URL %s", "https://"+r.Host+req.URL.Path)
+						}else {
+							ctx.Warnf("Illegal URL %s", "https://"+r.Host)
+						}
 						return
 					}
 					removeProxyHeaders(ctx, req)
