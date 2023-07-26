@@ -254,7 +254,12 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						return
 					}
 					removeProxyHeaders(ctx, req)
-					resp, err = ctx.RoundTrip(req)
+					resp, err = func() (*http.Response, error) {
+						// explicitly discard request body to avoid data races in certain RoundTripper implementations
+						// see https://github.com/golang/go/issues/61596#issuecomment-1652345131
+						defer req.Body.Close()
+						return ctx.RoundTrip(req)
+					}()
 					if err != nil {
 						ctx.Warnf("Cannot read TLS response from mitm'd server %v", err)
 						return
