@@ -246,7 +246,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						return
 					}
 					if err != nil {
-						if req != nil {
+						if req.URL != nil {
 							ctx.Warnf("Illegal URL %s", "https://"+r.Host+req.URL.Path)
 						} else {
 							ctx.Warnf("Illegal URL %s", "https://"+r.Host)
