@@ -2,6 +2,7 @@ package goproxy
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -134,7 +135,18 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		}
 
 		ctx.Logf("Accepting CONNECT to %s", host)
-		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+		respBytes, err := createCustomConnectResponse(ctx)
+		if respBytes != nil {
+			// Write the custom response, if one was created
+			proxyClient.Write(respBytes)
+		} else {
+			// Otherwise, log any errors and fallback to the default response
+			if err != nil {
+				ctx.Warnf("Error writing custom CONNECT response: %s", err.Error())
+				return
+			}
+			proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+		}
 
 		if proxy.ConnectCopyHandler != nil {
 			go proxy.ConnectCopyHandler(ctx, proxyClient, targetSiteCon)
@@ -332,6 +344,22 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		}
 		proxyClient.Close()
 	}
+}
+
+func createCustomConnectResponse(ctx *ProxyCtx) ([]byte, error) {
+	if ctx.proxy.ConnectRespHandler == nil {
+		return nil, nil
+	}
+	resp := &http.Response{Status: "200 OK", StatusCode: 200, Proto: "HTTP/1.0", Header: http.Header{}}
+	err := ctx.proxy.ConnectRespHandler(ctx, resp)
+	if err != nil {
+		return nil, err
+	}
+	buf := &bytes.Buffer{}
+	if err := resp.Write(buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {

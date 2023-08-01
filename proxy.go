@@ -50,6 +50,10 @@ type ProxyHttpServer struct {
 	// the hijacked proxy client net.Conn. This is useful for wrapping the connection
 	// to implement timeouts or additional tracing.
 	ConnectClientConnHandler func(net.Conn) net.Conn
+
+	// ConnectRespHandler allows users to mutate the response to the CONNECT request before it
+	// is returned to the client.
+	ConnectRespHandler func(ctx *ProxyCtx, resp *http.Response) error
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
