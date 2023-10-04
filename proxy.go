@@ -150,8 +150,6 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			resp, err = ctx.RoundTrip(r)
 			if err != nil {
 				ctx.Error = err
-				resp = proxy.filterResponse(nil, ctx)
-
 			}
 			if resp != nil {
 				ctx.Logf("Received response %v", resp.Status)
