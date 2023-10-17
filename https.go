@@ -378,7 +378,7 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy strin
 		return nil
 	}
 	if u.Scheme == "" || u.Scheme == "http" {
-		if strings.IndexRune(u.Host, ':') == -1 {
+		if !strings.ContainsRune(u.Host, ':') {
 			u.Host += ":80"
 		}
 		return func(network, addr string) (net.Conn, error) {
@@ -418,7 +418,7 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy strin
 		}
 	}
 	if u.Scheme == "https" || u.Scheme == "wss" {
-		if strings.IndexRune(u.Host, ':') == -1 {
+		if !strings.ContainsRune(u.Host, ':') {
 			u.Host += ":443"
 		}
 		return func(network, addr string) (net.Conn, error) {
