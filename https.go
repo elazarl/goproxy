@@ -234,6 +234,9 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					req.URL, err = url.Parse("https://" + r.Host + req.URL.String())
 				}
 
+				// Take the original value before filtering the request
+				closeConn := req.Close
+
 				// Bug fix which goproxy fails to provide request
 				// information URL in the context when does HTTPS MITM
 				ctx.Req = req
@@ -288,8 +291,14 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					resp.Header.Del("Content-Length")
 					resp.Header.Set("Transfer-Encoding", "chunked")
 				}
-				// Force connection close otherwise chrome will keep CONNECT tunnel open forever
-				resp.Header.Set("Connection", "close")
+				if resp.Close {
+					// The remote server requested the connection be closed.
+					closeConn = true
+				}
+				if closeConn {
+					// Tell the client to close the connection after reading.
+					resp.Header.Set("Connection", "close")
+				}
 				if err := resp.Header.Write(rawClientTls); err != nil {
 					ctx.Warnf("Cannot write TLS response header from mitm'd client: %v", err)
 					return
@@ -315,6 +324,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						ctx.Warnf("Cannot write TLS response chunked trailer from mitm'd client: %v", err)
 						return
 					}
+				}
+
+				if closeConn {
+					ctx.Logf("Non-persistent connection; closing")
+					return
 				}
 			}
 			ctx.Logf("Exiting on EOF")

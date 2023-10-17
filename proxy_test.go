@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httptrace"
 	"net/url"
 	"os"
 	"os/exec"
@@ -438,6 +439,65 @@ func TestSimpleMitm(t *testing.T) {
 	}
 }
 
+func TestMitmConnectionReuse(t *testing.T) {
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.OnRequest(goproxy.ReqHostIs(https.Listener.Addr().String())).HandleConnect(goproxy.AlwaysMitm)
+	proxy.OnRequest(goproxy.ReqHostIs("no such host exists")).HandleConnect(goproxy.AlwaysMitm)
+
+	client, l := oneShotProxy(proxy, t)
+	defer l.Close()
+
+	var dials int
+	clientTrace := &httptrace.ClientTrace{
+		ConnectDone: func(network, addr string, err error) {
+			dials++
+		},
+	}
+	traceCtx := httptrace.WithClientTrace(context.Background(), clientTrace)
+
+	doRequest := func(headers http.Header) {
+		req, err := http.NewRequestWithContext(traceCtx, "GET", https.URL+"/bobo", nil)
+		if err != nil {
+			t.Fatal("create new request", err)
+		}
+		req.Header = headers
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal("do request", err)
+		}
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal("read body", err)
+		}
+		if string(body) != "bobo" {
+			t.Fatal("wrong body", string(body))
+		}
+		if err = resp.Body.Close(); err != nil {
+			t.Fatal("close body", err)
+		}
+	}
+
+	closeHeader := http.Header{"Connection": []string{"close"}}
+	doRequest(closeHeader)
+	doRequest(closeHeader)
+	doRequest(closeHeader)
+	doRequest(closeHeader)
+
+	if dials != 4 {
+		t.Errorf("expected 4 dials, got %d", dials)
+	}
+
+	dials = 0
+	doRequest(nil)
+	doRequest(nil)
+	doRequest(nil)
+	doRequest(nil)
+
+	if dials != 1 {
+		t.Errorf("expected connection reuse, got %d dials", dials)
+	}
+}
+
 func TestConnectHandler(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
 	althttps := httptest.NewTLSServer(ConstantHanlder("althttps"))
@@ -825,7 +885,7 @@ func TestProxyWithCertStorage(t *testing.T) {
 	goproxyCA := x509.NewCertPool()
 	goproxyCA.AddCert(goproxy.GoproxyCa.Leaf)
 
-	tr := &http.Transport{TLSClientConfig: &tls.Config{RootCAs: goproxyCA}, Proxy: http.ProxyURL(proxyUrl)}
+	tr := &http.Transport{TLSClientConfig: &tls.Config{RootCAs: goproxyCA}, Proxy: http.ProxyURL(proxyUrl), DisableKeepAlives: true}
 	client := &http.Client{Transport: tr}
 
 	if resp := string(getOrFail(https.URL+"/bobo", client, t)); resp != "bobo" {
