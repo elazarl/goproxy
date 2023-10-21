@@ -333,6 +333,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 }
 
 func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
+	if ctx.Proxy.HTTPErrorHandler != nil {
+		ctx.Proxy.HTTPErrorHandler(w, ctx, err)
+		return
+	}
+
 	if _, err := io.WriteString(w, "HTTP/1.1 502 Bad Gateway\r\n\r\n"); err != nil {
 		ctx.Warnf("Error responding to client: %s", err)
 	}
