@@ -703,7 +703,57 @@ func TestGoproxyThroughProxy(t *testing.T) {
 	if r := string(getOrFail(https.URL+"/bobo", client, t)); r != "bobo bobo" {
 		t.Error("Expected bobo doubled twice, got", r)
 	}
+}
 
+func TestHttpProxyAddrsFromEnv(t *testing.T) {
+	proxy := goproxy.NewProxyHttpServer()
+	doubleString := func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		b, err := ioutil.ReadAll(resp.Body)
+		panicOnErr(err, "readAll resp")
+		resp.Body = ioutil.NopCloser(bytes.NewBufferString(string(b) + " " + string(b)))
+		return resp
+	}
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	proxy.OnResponse().DoFunc(doubleString)
+
+	_, l := oneShotProxy(proxy, t)
+	defer l.Close()
+
+	os.Setenv("http_proxy", l.URL)
+	os.Setenv("https_proxy", l.URL)
+	proxy2 := goproxy.NewProxyHttpServer()
+	
+	client, l2 := oneShotProxy(proxy2, t)
+	defer l2.Close()
+	if r := string(getOrFail(https.URL+"/bobo", client, t)); r != "bobo bobo" {
+		t.Error("Expected bobo doubled twice, got", r)
+	}
+
+	os.Unsetenv("http_proxy")
+	os.Unsetenv("https_proxy")
+}
+
+func TestCustomHttpProxyAddrs(t *testing.T) {
+	proxy := goproxy.NewProxyHttpServer()
+	doubleString := func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		b, err := ioutil.ReadAll(resp.Body)
+		panicOnErr(err, "readAll resp")
+		resp.Body = ioutil.NopCloser(bytes.NewBufferString(string(b) + " " + string(b)))
+		return resp
+	}
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	proxy.OnResponse().DoFunc(doubleString)
+
+	_, l := oneShotProxy(proxy, t)
+	defer l.Close()
+
+	proxy2 := goproxy.NewProxyHttpServer(goproxy.WithHttpProxyAddr(l.URL), goproxy.WithHttpsProxyAddr(l.URL))
+	
+	client, l2 := oneShotProxy(proxy2, t)
+	defer l2.Close()
+	if r := string(getOrFail(https.URL+"/bobo", client, t)); r != "bobo bobo" {
+		t.Error("Expected bobo doubled twice, got", r)
+	}
 }
 
 func TestGoproxyHijackConnect(t *testing.T) {

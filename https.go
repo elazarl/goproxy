@@ -118,7 +118,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			host += ":80"
 		}
 
-		httpsProxy, err := httpsProxyFromEnv(r.URL)
+		httpsProxy, err := httpsProxy(r.URL, proxy.HttpsProxyAddr)
 		if err != nil {
 			ctx.Warnf("Error configuring HTTPS proxy err=%q url=%q", err, r.URL.String())
 		}
@@ -559,10 +559,15 @@ func (proxy *ProxyHttpServer) connectDialProxyWithContext(ctx *ProxyCtx, proxyHo
 	return c, nil
 }
 
-// httpsProxyFromEnv allows goproxy to respect no_proxy env vars
+// httpsProxy allows goproxy to respect no_proxy env vars
 // https://github.com/stripe/goproxy/pull/5
-func httpsProxyFromEnv(reqURL *url.URL) (string, error) {
+func httpsProxy(reqURL *url.URL, httpProxyAddr string) (string, error) {
 	cfg := httpproxy.FromEnvironment()
+
+	if httpProxyAddr != "" {
+		cfg.HTTPSProxy = httpProxyAddr
+	}
+
 	// We only use this codepath for HTTPS CONNECT proxies so we shouldn't
 	// return anything from HTTPProxy
 	cfg.HTTPProxy = ""
