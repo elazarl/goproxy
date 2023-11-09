@@ -26,7 +26,7 @@ var proxytests = map[string]struct {
 
 var envKeys = []string{"no_proxy", "http_proxy", "https_proxy", "NO_PROXY", "HTTP_PROXY", "HTTPS_PROXY"}
 
-func TestHttpsProxy(t *testing.T) {
+func TestHttpsProxyAddr(t *testing.T) {
 	for _, k := range envKeys {
 		v, ok := os.LookupEnv(k)
 		if ok {
@@ -52,7 +52,7 @@ func TestHttpsProxy(t *testing.T) {
 				t.Fatalf("bad test input URL %s: %v", spec.url, err)
 			}
 
-			actual, err := httpsProxy(url, spec.customHttpsProxy)
+			actual, err := httpsProxyAddr(url, spec.customHttpsProxy)
 			if err != nil {
 				t.Fatalf("unexpected error parsing proxy from env: %#v", err)
 			}

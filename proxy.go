@@ -231,23 +231,24 @@ func NewProxyHttpServer(opts ...ProxyHttpServerOptions) *ProxyHttpServer {
 		Tr: &http.Transport{TLSClientConfig: tlsClientSkipVerify, Proxy: http.ProxyFromEnvironment},
 	}
 
-	cfg := httpproxy.FromEnvironment()
+	// httpProxyCfg holds configuration for HTTP proxy settings. See FromEnvironment for details.
+	httpProxyCfg := httpproxy.FromEnvironment()
+
 	if appliedOpts.httpProxyAddr != "" {
 		proxy.HttpProxyAddr = appliedOpts.httpProxyAddr
-		cfg.HTTPProxy = appliedOpts.httpProxyAddr
+		httpProxyCfg.HTTPProxy = appliedOpts.httpProxyAddr
 	}
 
 	if appliedOpts.httpsProxyAddr != "" {
 		proxy.HttpsProxyAddr = appliedOpts.httpsProxyAddr
-		cfg.HTTPSProxy = appliedOpts.httpsProxyAddr
-		proxy.ConnectDial = proxy.NewConnectDialToProxy(appliedOpts.httpsProxyAddr)
-	} else {
-		proxy.ConnectDial = dialerFromEnv(&proxy)
+		httpProxyCfg.HTTPSProxy = appliedOpts.httpsProxyAddr
 	}
 
+	proxy.ConnectDial = dialerFromProxy(&proxy)
+	
 	if appliedOpts.httpProxyAddr != "" || appliedOpts.httpsProxyAddr != "" {
 		proxy.Tr.Proxy = func(req *http.Request) (*url.URL, error) {
-			return cfg.ProxyFunc()(req.URL)
+			return httpProxyCfg.ProxyFunc()(req.URL)
 		}
 	}
 
