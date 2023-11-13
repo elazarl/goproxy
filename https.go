@@ -118,7 +118,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			host += ":80"
 		}
 
-		httpsProxy, err := httpsProxyFromEnv(r.URL)
+		httpsProxy, err := httpsProxyAddr(r.URL, proxy.HttpsProxyAddr)
 		if err != nil {
 			ctx.Warnf("Error configuring HTTPS proxy err=%q url=%q", err, r.URL.String())
 		}
@@ -398,14 +398,20 @@ func copyAndClose(ctx *ProxyCtx, dst, src *net.TCPConn) {
 	src.CloseRead()
 }
 
-func dialerFromEnv(proxy *ProxyHttpServer) func(network, addr string) (net.Conn, error) {
-	https_proxy := os.Getenv("HTTPS_PROXY")
+// dialerFromProxy gets the HttpsProxyAddr from proxy to create a dialer.
+// When the HttpsProxyAddr from proxy is empty, use the HTTPS_PROXY, https_proxy from environment variables.
+func dialerFromProxy(proxy *ProxyHttpServer) func(network, addr string) (net.Conn, error) {
+	https_proxy := proxy.HttpsProxyAddr
 	if https_proxy == "" {
-		https_proxy = os.Getenv("https_proxy")
+		https_proxy = os.Getenv("HTTPS_PROXY")
+		if https_proxy == "" {
+			https_proxy = os.Getenv("https_proxy")
+		}
+		if https_proxy == "" {
+			return nil
+		}
 	}
-	if https_proxy == "" {
-		return nil
-	}
+
 	return proxy.NewConnectDialToProxy(https_proxy)
 }
 
@@ -559,10 +565,17 @@ func (proxy *ProxyHttpServer) connectDialProxyWithContext(ctx *ProxyCtx, proxyHo
 	return c, nil
 }
 
-// httpsProxyFromEnv allows goproxy to respect no_proxy env vars
+// httpsProxyAddr function uses the address in httpsProxy parameter. 
+// When the httpProxyAddr parameter is empty, uses the HTTPS_PROXY, https_proxy from environment variables.
+// httpsProxyAddr function allows goproxy to respect no_proxy env vars
 // https://github.com/stripe/goproxy/pull/5
-func httpsProxyFromEnv(reqURL *url.URL) (string, error) {
+func httpsProxyAddr(reqURL *url.URL, httpsProxy string) (string, error) {
 	cfg := httpproxy.FromEnvironment()
+
+	if httpsProxy != "" {
+		cfg.HTTPSProxy = httpsProxy
+	}
+
 	// We only use this codepath for HTTPS CONNECT proxies so we shouldn't
 	// return anything from HTTPProxy
 	cfg.HTTPProxy = ""

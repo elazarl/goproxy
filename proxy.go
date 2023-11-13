@@ -6,9 +6,12 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"sync/atomic"
+
+	"golang.org/x/net/http/httpproxy"
 )
 
 // The basic proxy type. Implements http.Handler.
@@ -54,6 +57,10 @@ type ProxyHttpServer struct {
 	// ConnectRespHandler allows users to mutate the response to the CONNECT request before it
 	// is returned to the client.
 	ConnectRespHandler func(ctx *ProxyCtx, resp *http.Response) error
+
+	// HTTP and HTTPS proxy addresses
+	HttpProxyAddr  string
+	HttpsProxyAddr string
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
@@ -179,8 +186,40 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+type options struct {
+	httpProxyAddr  string
+	httpsProxyAddr string
+}
+type fnOption func(*options)
+
+func (fn fnOption) apply(opts *options) { fn(opts) }
+
+type ProxyHttpServerOptions interface {
+	apply(*options)
+}
+
+func WithHttpProxyAddr(httpProxyAddr string) ProxyHttpServerOptions {
+	return fnOption(func(opts *options) {
+		opts.httpProxyAddr = httpProxyAddr
+	})
+}
+
+func WithHttpsProxyAddr(httpsProxyAddr string) ProxyHttpServerOptions {
+	return fnOption(func(opts *options) {
+		opts.httpsProxyAddr = httpsProxyAddr
+	})
+}
+
 // NewProxyHttpServer creates and returns a proxy server, logging to stderr by default
-func NewProxyHttpServer() *ProxyHttpServer {
+func NewProxyHttpServer(opts ...ProxyHttpServerOptions) *ProxyHttpServer {
+	appliedOpts := &options{
+		httpProxyAddr: "",
+		httpsProxyAddr:  "",
+	}
+	for _, opt := range opts {
+		opt.apply(appliedOpts)
+	}
+
 	proxy := ProxyHttpServer{
 		Logger:        log.New(os.Stderr, "", log.LstdFlags),
 		reqHandlers:   []ReqHandler{},
@@ -191,7 +230,27 @@ func NewProxyHttpServer() *ProxyHttpServer {
 		}),
 		Tr: &http.Transport{TLSClientConfig: tlsClientSkipVerify, Proxy: http.ProxyFromEnvironment},
 	}
-	proxy.ConnectDial = dialerFromEnv(&proxy)
+
+	// httpProxyCfg holds configuration for HTTP proxy settings. See FromEnvironment for details.
+	httpProxyCfg := httpproxy.FromEnvironment()
+
+	if appliedOpts.httpProxyAddr != "" {
+		proxy.HttpProxyAddr = appliedOpts.httpProxyAddr
+		httpProxyCfg.HTTPProxy = appliedOpts.httpProxyAddr
+	}
+
+	if appliedOpts.httpsProxyAddr != "" {
+		proxy.HttpsProxyAddr = appliedOpts.httpsProxyAddr
+		httpProxyCfg.HTTPSProxy = appliedOpts.httpsProxyAddr
+	}
+
+	proxy.ConnectDial = dialerFromProxy(&proxy)
+	
+	if appliedOpts.httpProxyAddr != "" || appliedOpts.httpsProxyAddr != "" {
+		proxy.Tr.Proxy = func(req *http.Request) (*url.URL, error) {
+			return httpProxyCfg.ProxyFunc()(req.URL)
+		}
+	}
 
 	return &proxy
 }
