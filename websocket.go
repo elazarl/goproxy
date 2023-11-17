@@ -46,6 +46,27 @@ func (proxy *ProxyHttpServer) serveWebsocketTLS(ctx *ProxyCtx, w http.ResponseWr
 	proxy.proxyWebsocket(ctx, targetConn, clientConn)
 }
 
+func (proxy *ProxyHttpServer) serveWebsocketHttpOverTLS(ctx *ProxyCtx, w http.ResponseWriter, req *http.Request, clientConn *tls.Conn) {
+	targetURL := url.URL{Scheme: "ws", Host: req.URL.Host, Path: req.URL.Path}
+
+	// Connect to upstream
+	targetConn, err := proxy.connectDial(ctx, "tcp", targetURL.Host)
+	if err != nil {
+		ctx.Warnf("Error dialing target site: %v", err)
+		return
+	}
+	defer targetConn.Close()
+
+	// Perform handshake
+	if err := proxy.websocketHandshake(ctx, req, targetConn, clientConn); err != nil {
+		ctx.Warnf("Websocket handshake error: %v", err)
+		return
+	}
+
+	// Proxy wss connection
+	proxy.proxyWebsocket(ctx, targetConn, clientConn)
+}
+
 func (proxy *ProxyHttpServer) serveWebsocket(ctx *ProxyCtx, w http.ResponseWriter, req *http.Request) {
 	targetURL := url.URL{Scheme: "ws", Host: req.URL.Host, Path: req.URL.Path}
 
