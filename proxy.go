@@ -106,6 +106,8 @@ func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 		r.Close = false
 	}
 	r.Header.Del("Connection")
+	// If request.Close is not set to false, the transfer.writeHeader function will still write the "Connection: close" header
+	r.Close = false
 }
 
 type flushWriter struct {
