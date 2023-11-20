@@ -5,11 +5,15 @@ import (
 	"sync"
 )
 
-type CertStorage struct {
+type SimpleCertStorage struct {
 	certs sync.Map
 }
 
-func (tcs *CertStorage) Fetch(hostname string, gen func() (*tls.Certificate, error)) (*tls.Certificate, error) {
+func NewSimpleCertStorage() *SimpleCertStorage {
+	return &SimpleCertStorage{}
+}
+
+func (tcs *SimpleCertStorage) Fetch(hostname string, gen func() (*tls.Certificate, error)) (*tls.Certificate, error) {
 	var cert tls.Certificate
 	icert, ok := tcs.certs.Load(hostname)
 	if ok {
@@ -24,11 +28,4 @@ func (tcs *CertStorage) Fetch(hostname string, gen func() (*tls.Certificate, err
 		tcs.certs.Store(hostname, cert)
 	}
 	return &cert, nil
-}
-
-func NewCertStorage() *CertStorage {
-	tcs := &CertStorage{}
-	tcs.certs = sync.Map{}
-
-	return tcs
 }
