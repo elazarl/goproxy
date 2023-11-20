@@ -318,6 +318,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						return
 					}
 				}
+
+				if req.Close {
+					ctx.Logf("Non-persistent connection; closing")
+					return
+				}
 			}
 			ctx.Logf("Exiting on EOF")
 		}()
