@@ -722,7 +722,7 @@ func TestHttpProxyAddrsFromEnv(t *testing.T) {
 	os.Setenv("http_proxy", l.URL)
 	os.Setenv("https_proxy", l.URL)
 	proxy2 := goproxy.NewProxyHttpServer()
-	
+
 	client, l2 := oneShotProxy(proxy2, t)
 	defer l2.Close()
 	if r := string(getOrFail(https.URL+"/bobo", client, t)); r != "bobo bobo" {
@@ -731,6 +731,50 @@ func TestHttpProxyAddrsFromEnv(t *testing.T) {
 
 	os.Unsetenv("http_proxy")
 	os.Unsetenv("https_proxy")
+}
+
+func TestOverrideHttpsProxyAddrsFromEnvWithRequest(t *testing.T) {
+	// The request essentially does:
+	// Client -> FakeStripeEgressProxy -> FakeExternalProxy -> FinalDestination
+	finalDestinationUrl := https.URL + "/bobo"
+
+	// TODO: figure out why this doesn't work
+	// We set the env vars here to ensure that our per-request config overrides these
+	// os.Setenv("http_proxy", "http://incorrectproxy.com")
+	// os.Setenv("https_proxy", "http://incorrectproxy.com")
+
+	fakeExternalProxy := goproxy.NewProxyHttpServer()
+	fakeExternalProxyTestStruct := httptest.NewServer(fakeExternalProxy)
+	fakeExternalProxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	tagExternalProxyPassthrough := func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		b, err := ioutil.ReadAll(resp.Body)
+		panicOnErr(err, "readAll resp")
+		resp.Body = ioutil.NopCloser(bytes.NewBufferString(string(b) + " " + string(b)))
+		return resp
+	}
+	fakeExternalProxy.OnResponse().DoFunc(tagExternalProxyPassthrough)
+
+	fakeStripeEgressProxy := goproxy.NewProxyHttpServer()
+	fakeStripeEgressProxyTestStruct := httptest.NewServer(fakeStripeEgressProxy)
+
+	// Next, we construct the client that we'll be using to talk to our 2 proxies
+	egressProxyUrl, _ := url.Parse(fakeStripeEgressProxyTestStruct.URL)
+	tr := &http.Transport{
+		TLSClientConfig: acceptAllCerts,
+		Proxy:           http.ProxyURL(egressProxyUrl),
+		ProxyConnectHeader: map[string][]string{
+			"X-Https-Proxy": {fakeExternalProxyTestStruct.URL},
+		},
+	}
+	client := &http.Client{Transport: tr}
+
+	r := string(getOrFail(finalDestinationUrl, client, t))
+	if r != "bobo bobo" {
+		t.Error("Expected bobo doubled twice, got", r)
+	}
+
+	// os.Unsetenv("http_proxy")
+	// os.Unsetenv("https_proxy")
 }
 
 func TestCustomHttpProxyAddrs(t *testing.T) {
@@ -748,7 +792,7 @@ func TestCustomHttpProxyAddrs(t *testing.T) {
 	defer l.Close()
 
 	proxy2 := goproxy.NewProxyHttpServer(goproxy.WithHttpProxyAddr(l.URL), goproxy.WithHttpsProxyAddr(l.URL))
-	
+
 	client, l2 := oneShotProxy(proxy2, t)
 	defer l2.Close()
 	if r := string(getOrFail(https.URL+"/bobo", client, t)); r != "bobo bobo" {
