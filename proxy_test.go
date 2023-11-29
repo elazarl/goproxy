@@ -777,6 +777,7 @@ func TestOverrideHttpsProxyAddrsFromEnvWithRequest(t *testing.T) {
 	// os.Unsetenv("https_proxy")
 }
 
+// THIS TEST MIGHT BE BROKEN
 func TestCustomHttpProxyAddrs(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
 	doubleString := func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
