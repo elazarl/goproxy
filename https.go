@@ -593,27 +593,9 @@ func httpsProxyAddr(reqURL *url.URL, httpsProxy string) (string, error) {
 	reqSchemeURL := reqURL
 	reqSchemeURL.Scheme = "https"
 
-	parsedUrl, err := url.Parse(httpsProxy)
+	proxyURL, err := cfg.ProxyFunc()(reqSchemeURL)
 	if err != nil {
 		return "", err
-	}
-
-	proxyHost, _, err := net.SplitHostPort(parsedUrl.Host)
-	ip := net.ParseIP(proxyHost)
-
-	var proxyURL *url.URL
-	// We do this because of the golang issue here:
-	// https://go-review.googlesource.com/c/net/+/239164?tab=comments
-	if parsedUrl.Host == "localhost" || (err == nil && ip != nil && ip.IsLoopback()) {
-		proxyURL, err = url.Parse(httpsProxy)
-		if err != nil {
-			return "", err
-		}
-	} else {
-		proxyURL, err = cfg.ProxyFunc()(reqSchemeURL)
-		if err != nil {
-			return "", err
-		}
 	}
 
 	if err != nil {
