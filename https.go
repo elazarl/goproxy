@@ -118,13 +118,12 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		if !hasPort.MatchString(host) {
 			host += ":80"
 		}
-		var httpsProxyURL string
-		if r.Header[PerRequestHTTPSProxyHeaderKey] != nil && r.Header[PerRequestHTTPSProxyHeaderKey][0] != "" {
-			httpsProxyURL = r.Header[PerRequestHTTPSProxyHeaderKey][0]
-		} else {
-			httpsProxyURL = proxy.HttpsProxyAddr
+
+		var httpsProxyURL string = proxy.HttpsProxyAddr
+		if r.Header.Get(PerRequestHTTPSProxyHeaderKey) != "" {
+			httpsProxyURL = r.Header.Get(PerRequestHTTPSProxyHeaderKey)
 		}
-		// runtime.Breakpoint()
+
 		httpsProxy, err := httpsProxyAddr(r.URL, httpsProxyURL)
 		if err != nil {
 			ctx.Warnf("Error configuring HTTPS proxy err=%q url=%q", err, r.URL.String())

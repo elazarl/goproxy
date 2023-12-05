@@ -738,18 +738,13 @@ func TestOverrideHttpsProxyAddrsFromEnvWithRequest(t *testing.T) {
 	// Client -> FakeStripeEgressProxy -> FakeExternalProxy -> FinalDestination
 	finalDestinationUrl := "https://httpbin.org/get"
 
-	// Set ConnectRespHandler within goproxy.ProxyHTTPServer such that
-	// ConnectRespHandler allows users to mutate the response to the CONNECT request before it
-	// is returned to the client.
-	// ConnectRespHandler func(ctx *ProxyCtx, resp *http.Response) error
-
-	// sychronication might be an issue; use sync.WaitGroup
-
+	// We'll use this counter to mark whether FakeStripeEgressProxy has been called
 	c := 0
 
 	// TODO(pspieker): figure out why this doesn't work - for now, this is fine,
 	// but we should fix this in the medium term before a wider launch
-	// We set the env vars here to ensure that our per-request config overrides these
+	//
+	// We should set the env vars here to ensure that our per-request config overrides these
 	// os.Setenv("http_proxy", "http://incorrectproxy.com")
 	// os.Setenv("https_proxy", "http://incorrectproxy.com")
 
@@ -765,12 +760,14 @@ func TestOverrideHttpsProxyAddrsFromEnvWithRequest(t *testing.T) {
 	fakeExternalProxy.OnResponse().DoFunc(tagExternalProxyPassthrough)
 
 	fakeStripeEgressProxy := goproxy.NewProxyHttpServer()
-	// We set the
+	// We set the CONNECT response handler function to increment our counter such that we can tell
+	// if our FakeStripeEgressProxy was actually called
 	fakeStripeEgressProxy.ConnectRespHandler = func(ctx *goproxy.ProxyCtx, resp *http.Response) error {
 		c += 1
 		return nil
 	}
 	fakeStripeEgressProxyTestStruct := httptest.NewServer(fakeStripeEgressProxy)
+
 	// Next, we construct the client that we'll be using to talk to our 2 proxies
 	egressProxyUrl, _ := url.Parse(fakeStripeEgressProxyTestStruct.URL)
 	tr := &http.Transport{
