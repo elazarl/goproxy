@@ -722,7 +722,7 @@ func TestHttpProxyAddrsFromEnv(t *testing.T) {
 	os.Setenv("http_proxy", l.URL)
 	os.Setenv("https_proxy", l.URL)
 	proxy2 := goproxy.NewProxyHttpServer()
-	
+
 	client, l2 := oneShotProxy(proxy2, t)
 	defer l2.Close()
 	if r := string(getOrFail(https.URL+"/bobo", client, t)); r != "bobo bobo" {
@@ -731,6 +731,90 @@ func TestHttpProxyAddrsFromEnv(t *testing.T) {
 
 	os.Unsetenv("http_proxy")
 	os.Unsetenv("https_proxy")
+}
+
+func TestOverrideHttpsProxyAddrsFromEnvWithRequest(t *testing.T) {
+	// The request essentially does:
+	// Client -> FakeStripeEgressProxy -> FakeExternalProxy -> FinalDestination
+	finalDestinationUrl := "https://httpbin.org/get"
+
+	// We'll use this counter to mark whether FakeStripeEgressProxy has been called
+	c := 0
+
+	// TODO(pspieker): figure out why this doesn't work - for now, this is fine,
+	// but we should fix this in the medium term before a wider launch
+	//
+	// We should set the env vars here to ensure that our per-request config overrides these
+	// os.Setenv("http_proxy", "http://incorrectproxy.com")
+	// os.Setenv("https_proxy", "http://incorrectproxy.com")
+
+	fakeExternalProxy := goproxy.NewProxyHttpServer()
+	fakeExternalProxyTestStruct := httptest.NewServer(fakeExternalProxy)
+	fakeExternalProxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	tagExternalProxyPassthrough := func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		b, err := ioutil.ReadAll(resp.Body)
+		panicOnErr(err, "readAll resp")
+		resp.Body = ioutil.NopCloser(bytes.NewBufferString(string(b) + "-externalproxy"))
+		return resp
+	}
+	fakeExternalProxy.OnResponse().DoFunc(tagExternalProxyPassthrough)
+
+	fakeStripeEgressProxy := goproxy.NewProxyHttpServer()
+	// We set the CONNECT response handler function to increment our counter such that we can tell
+	// if our FakeStripeEgressProxy was actually called
+	fakeStripeEgressProxy.ConnectRespHandler = func(ctx *goproxy.ProxyCtx, resp *http.Response) error {
+		c += 1
+		return nil
+	}
+	fakeStripeEgressProxyTestStruct := httptest.NewServer(fakeStripeEgressProxy)
+
+	// Next, we construct the client that we'll be using to talk to our 2 proxies
+	egressProxyUrl, _ := url.Parse(fakeStripeEgressProxyTestStruct.URL)
+	tr := &http.Transport{
+		TLSClientConfig: acceptAllCerts,
+		Proxy:           http.ProxyURL(egressProxyUrl),
+		ProxyConnectHeader: map[string][]string{
+			goproxy.PerRequestHTTPSProxyHeaderKey: {fakeExternalProxyTestStruct.URL},
+		},
+	}
+	client := &http.Client{Transport: tr}
+
+	req, err := http.NewRequest("GET", finalDestinationUrl, nil)
+	if err != nil {
+		t.Fatal("Unable to construct request!")
+	}
+
+	req.Header.Set("X-Test-Header-Key", "Test-Header-Value")
+
+	res, err := client.Do(req)
+	if err != nil {
+		t.Fatal("Unable to make the request!")
+	}
+
+	bodyBytes, err := io.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal("Unable to parse the response bytes!")
+	}
+	resBody := string(bodyBytes)
+
+	// Making sure we received the response we expected from the final destination
+	if !strings.Contains(resBody, "\"X-Test-Header-Key\": \"Test-Header-Value\"") {
+		t.Error("Expected the passed request headers to be present in the response body!")
+	}
+
+	// Ensuring the external proxy was routed through
+	if !strings.Contains(resBody, "-externalproxy") {
+		t.Error("Expected the request have been passed through the external proxy on the way to the final destination!")
+	}
+
+	// Ensuring the "internal" egress proxy was routed through
+	if c != 1 {
+		t.Error("Expected the internal egress proxy to have been passed through!")
+	}
+
+	// TODO(pspieker): see comment above
+	// os.Unsetenv("http_proxy")
+	// os.Unsetenv("https_proxy")
 }
 
 func TestCustomHttpProxyAddrs(t *testing.T) {
@@ -748,7 +832,7 @@ func TestCustomHttpProxyAddrs(t *testing.T) {
 	defer l.Close()
 
 	proxy2 := goproxy.NewProxyHttpServer(goproxy.WithHttpProxyAddr(l.URL), goproxy.WithHttpsProxyAddr(l.URL))
-	
+
 	client, l2 := oneShotProxy(proxy2, t)
 	defer l2.Close()
 	if r := string(getOrFail(https.URL+"/bobo", client, t)); r != "bobo bobo" {

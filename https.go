@@ -33,11 +33,12 @@ const (
 )
 
 var (
-	OkConnect       = &ConnectAction{Action: ConnectAccept, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
-	MitmConnect     = &ConnectAction{Action: ConnectMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
-	HTTPMitmConnect = &ConnectAction{Action: ConnectHTTPMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
-	RejectConnect   = &ConnectAction{Action: ConnectReject, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
-	httpsRegexp     = regexp.MustCompile(`^https:\/\/`)
+	OkConnect                     = &ConnectAction{Action: ConnectAccept, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
+	MitmConnect                   = &ConnectAction{Action: ConnectMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
+	HTTPMitmConnect               = &ConnectAction{Action: ConnectHTTPMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
+	RejectConnect                 = &ConnectAction{Action: ConnectReject, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
+	httpsRegexp                   = regexp.MustCompile(`^https:\/\/`)
+	PerRequestHTTPSProxyHeaderKey = "X-Upstream-Https-Proxy"
 )
 
 type ConnectAction struct {
@@ -84,8 +85,8 @@ func (proxy *ProxyHttpServer) connectDialContext(ctx *ProxyCtx, network, addr st
 }
 
 func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request) {
-	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy}
 
+	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy}
 	hij, ok := w.(http.Hijacker)
 	if !ok {
 		panic("httpserver does not support hijacking")
@@ -118,7 +119,12 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			host += ":80"
 		}
 
-		httpsProxy, err := httpsProxyAddr(r.URL, proxy.HttpsProxyAddr)
+		var httpsProxyURL string = proxy.HttpsProxyAddr
+		if r.Header.Get(PerRequestHTTPSProxyHeaderKey) != "" {
+			httpsProxyURL = r.Header.Get(PerRequestHTTPSProxyHeaderKey)
+		}
+
+		httpsProxy, err := httpsProxyAddr(r.URL, httpsProxyURL)
 		if err != nil {
 			ctx.Warnf("Error configuring HTTPS proxy err=%q url=%q", err, r.URL.String())
 		}
@@ -565,7 +571,7 @@ func (proxy *ProxyHttpServer) connectDialProxyWithContext(ctx *ProxyCtx, proxyHo
 	return c, nil
 }
 
-// httpsProxyAddr function uses the address in httpsProxy parameter. 
+// httpsProxyAddr function uses the address in httpsProxy parameter.
 // When the httpProxyAddr parameter is empty, uses the HTTPS_PROXY, https_proxy from environment variables.
 // httpsProxyAddr function allows goproxy to respect no_proxy env vars
 // https://github.com/stripe/goproxy/pull/5
