@@ -38,7 +38,7 @@ var (
 	HTTPMitmConnect               = &ConnectAction{Action: ConnectHTTPMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
 	RejectConnect                 = &ConnectAction{Action: ConnectReject, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
 	httpsRegexp                   = regexp.MustCompile(`^https:\/\/`)
-	PerRequestHTTPSProxyHeaderKey = "X-Https-Proxy"
+	PerRequestHTTPSProxyHeaderKey = "X-Upstream-Https-Proxy"
 )
 
 type ConnectAction struct {
@@ -593,10 +593,6 @@ func httpsProxyAddr(reqURL *url.URL, httpsProxy string) (string, error) {
 	reqSchemeURL.Scheme = "https"
 
 	proxyURL, err := cfg.ProxyFunc()(reqSchemeURL)
-	if err != nil {
-		return "", err
-	}
-
 	if err != nil {
 		return "", err
 	}

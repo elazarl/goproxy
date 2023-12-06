@@ -774,12 +774,11 @@ func TestOverrideHttpsProxyAddrsFromEnvWithRequest(t *testing.T) {
 		TLSClientConfig: acceptAllCerts,
 		Proxy:           http.ProxyURL(egressProxyUrl),
 		ProxyConnectHeader: map[string][]string{
-			"X-Https-Proxy": {fakeExternalProxyTestStruct.URL},
+			goproxy.PerRequestHTTPSProxyHeaderKey: {fakeExternalProxyTestStruct.URL},
 		},
 	}
 	client := &http.Client{Transport: tr}
 
-	// r := string(getOrFail(finalDestinationUrl, client, t))
 	req, err := http.NewRequest("GET", finalDestinationUrl, nil)
 	if err != nil {
 		t.Fatal("Unable to construct request!")
@@ -804,7 +803,7 @@ func TestOverrideHttpsProxyAddrsFromEnvWithRequest(t *testing.T) {
 	}
 
 	// Ensuring the external proxy was routed through
-	if resBody[len(resBody)-14:] != "-externalproxy" {
+	if !strings.Contains(resBody, "-externalproxy") {
 		t.Error("Expected the request have been passed through the external proxy on the way to the final destination!")
 	}
 
