@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"reflect"
+	"sync"
 	"time"
 )
 
@@ -14,8 +15,10 @@ func NewSniffer(conn net.Conn) *Sniffer {
 }
 
 type Sniffer struct {
-	conn net.Conn
-	buf  *bytes.Buffer
+	conn        net.Conn
+	buf         *bytes.Buffer
+	clientHello []byte
+	mu          sync.Mutex
 }
 
 func (s *Sniffer) Read(b []byte) (int, error) {
@@ -24,8 +27,17 @@ func (s *Sniffer) Read(b []byte) (int, error) {
 		return n, err
 	}
 
+	if s.buf == nil {
+		// already read client hello
+		return n, nil
+	}
+
 	go func() {
-		s.buf.Write(b[:n])
+		buf := s.buf
+		if buf == nil {
+			return
+		}
+		buf.Write(b[:n])
 	}()
 
 	return n, nil
@@ -60,7 +72,13 @@ func (s *Sniffer) SetWriteDeadline(t time.Time) error {
 }
 
 func (s *Sniffer) ReadClientHello() ([]byte, error) {
-	defer s.buf.Reset()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.clientHello != nil {
+		return s.clientHello, nil
+	}
+
 	conn := &fakeConn{r: s.buf}
 
 	server := tls.Server(conn, nil)
@@ -78,6 +96,9 @@ func (s *Sniffer) ReadClientHello() ([]byte, error) {
 
 	clientHelloRecord := []byte{0x16, 0x03, 0x01, 0x02, 0x00}
 	clientHelloRecord = append(clientHelloRecord, v.Elem().FieldByName("raw").Bytes()...)
+
+	s.clientHello = clientHelloRecord
+	s.buf = nil
 
 	return clientHelloRecord, nil
 }
