@@ -238,7 +238,7 @@ func main() {
 	verbose := flag.Bool("v", false, "should every proxy request be logged to stdout")
 	addr := flag.String("l", ":8080", "on which address should the proxy listen")
 	flag.Parse()
-	proxy := goproxy.NewProxyHttpServer()
+	proxy := goproxy.NewProxyHttpServer(nil)
 	proxy.Verbose = *verbose
 	if err := os.MkdirAll("db", 0755); err != nil {
 		log.Fatal("Can't create dir", err)

@@ -2,9 +2,10 @@ package main
 
 import (
 	"flag"
-	"github.com/elazarl/goproxy"
 	"log"
 	"net/http"
+
+	"github.com/elazarl/goproxy"
 )
 
 func main() {
@@ -12,7 +13,7 @@ func main() {
 	addr := flag.String("addr", ":8080", "proxy listen address")
 	flag.Parse()
 
-	proxy := goproxy.NewProxyHttpServer()
+	proxy := goproxy.NewProxyHttpServer(nil)
 	proxy.CertStore = NewCertStorage() //设置storage
 
 	proxy.Verbose = *verbose

@@ -1,15 +1,16 @@
 package main
 
 import (
-	"github.com/elazarl/goproxy"
-	"github.com/elazarl/goproxy/ext/image"
 	"image"
 	"log"
 	"net/http"
+
+	"github.com/elazarl/goproxy"
+	goproxy_image "github.com/elazarl/goproxy/ext/image"
 )
 
 func main() {
-	proxy := goproxy.NewProxyHttpServer()
+	proxy := goproxy.NewProxyHttpServer(nil)
 	proxy.OnResponse().Do(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
 		dx, dy := img.Bounds().Dx(), img.Bounds().Dy()
 

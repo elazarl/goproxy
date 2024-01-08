@@ -13,7 +13,7 @@ func main() {
 	addr := flag.String("addr", ":8080", "proxy listen address")
 	flag.Parse()
 	setCA(caCert, caKey)
-	proxy := goproxy.NewProxyHttpServer()
+	proxy := goproxy.NewProxyHttpServer(nil)
 	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 	proxy.Verbose = *verbose
 	log.Fatal(http.ListenAndServe(*addr, proxy))

@@ -40,10 +40,7 @@ func (f RoundTripperFunc) RoundTrip(req *http.Request, ctx *ProxyCtx) (*http.Res
 }
 
 func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
-	if ctx.RoundTripper != nil {
-		return ctx.RoundTripper.RoundTrip(req, ctx)
-	}
-	return ctx.Proxy.Tr.RoundTrip(req)
+	panic("http transport unavailable, please use goproxy from upstream")
 }
 
 func (ctx *ProxyCtx) printf(msg string, argv ...interface{}) {

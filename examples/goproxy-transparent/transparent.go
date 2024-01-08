@@ -28,7 +28,7 @@ func main() {
 	https_addr := flag.String("httpsaddr", ":3128", "proxy https listen address")
 	flag.Parse()
 
-	proxy := goproxy.NewProxyHttpServer()
+	proxy := goproxy.NewProxyHttpServer(nil)
 	proxy.Verbose = *verbose
 	if proxy.Verbose {
 		log.Printf("Server starting up! - configured to listen on http interface %s and https interface %s", *http_addr, *https_addr)

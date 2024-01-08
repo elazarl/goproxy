@@ -53,7 +53,7 @@ func main() {
 	username, password := "foo", "bar"
 
 	// start end proxy server
-	endProxy := goproxy.NewProxyHttpServer()
+	endProxy := goproxy.NewProxyHttpServer(nil)
 	endProxy.Verbose = true
 	auth.ProxyBasic(endProxy, "my_realm", func(user, pwd string) bool {
 		return user == username && password == pwd
@@ -62,7 +62,7 @@ func main() {
 	go http.ListenAndServe("localhost:8082", endProxy)
 
 	// start middle proxy server
-	middleProxy := goproxy.NewProxyHttpServer()
+	middleProxy := goproxy.NewProxyHttpServer(nil)
 	middleProxy.Verbose = true
 	middleProxy.Tr.Proxy = func(req *http.Request) (*url.URL, error) {
 		return url.Parse("http://localhost:8082")

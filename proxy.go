@@ -9,6 +9,8 @@ import (
 	"os"
 	"regexp"
 	"sync/atomic"
+
+	utls "github.com/refraction-networking/utls"
 )
 
 // The basic proxy type. Implements http.Handler.
@@ -25,7 +27,7 @@ type ProxyHttpServer struct {
 	reqHandlers     []ReqHandler
 	respHandlers    []RespHandler
 	httpsHandlers   []HttpsHandler
-	Tr              *http.Transport
+	tlsConfig       *utls.Config
 	// ConnectDial will be used to create TCP connections for CONNECT requests
 	// if nil Tr.Dial will be used
 	ConnectDial        func(network string, addr string) (net.Conn, error)
@@ -207,7 +209,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 }
 
 // NewProxyHttpServer creates and returns a proxy server, logging to stderr by default
-func NewProxyHttpServer() *ProxyHttpServer {
+func NewProxyHttpServer(tlsConfig *utls.Config) *ProxyHttpServer {
 	proxy := ProxyHttpServer{
 		Logger:        log.New(os.Stderr, "", log.LstdFlags),
 		reqHandlers:   []ReqHandler{},
@@ -216,7 +218,7 @@ func NewProxyHttpServer() *ProxyHttpServer {
 		NonproxyHandler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, "This is a proxy server. Does not respond to non-proxy requests.", 500)
 		}),
-		Tr: &http.Transport{TLSClientConfig: tlsClientSkipVerify, Proxy: http.ProxyFromEnvironment},
+		tlsConfig: tlsConfig,
 	}
 
 	proxy.ConnectDial = dialerFromEnv(&proxy)

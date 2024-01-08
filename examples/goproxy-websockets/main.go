@@ -2,8 +2,6 @@ package main
 
 import (
 	"crypto/tls"
-	"github.com/elazarl/goproxy"
-	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
 	"net/url"
@@ -11,6 +9,9 @@ import (
 	"os/signal"
 	"sync"
 	"time"
+
+	"github.com/elazarl/goproxy"
+	"github.com/gorilla/websocket"
 )
 
 var upgrader = websocket.Upgrader{} // use default options
@@ -54,7 +55,7 @@ func StartProxy(wg *sync.WaitGroup) {
 	log.Println("Starting proxy server")
 	wg.Add(1)
 	go func() {
-		proxy := goproxy.NewProxyHttpServer()
+		proxy := goproxy.NewProxyHttpServer(nil)
 		proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 		proxy.Verbose = true
 
