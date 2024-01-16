@@ -195,7 +195,9 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		w.WriteHeader(resp.StatusCode)
 		var copyWriter io.Writer = w
 		// the header may container charset definition, so the check should be contains, not equals.
-		if strings.Contains(w.Header().Get("content-type"), "text/event-stream") {
+		// or check the tranfer encoding
+		if strings.Contains(w.Header().Get("content-type"), "text/event-stream") ||
+			strings.Contains(w.Header().Get("transfer-encoding"), "chunked") {
 			// server-side events, flush the buffered data to the client.
 			copyWriter = &flushWriter{w: w}
 		}
