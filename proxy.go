@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strings"
 	"sync/atomic"
 )
 
@@ -193,7 +194,8 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		copyHeaders(w.Header(), resp.Header, proxy.KeepDestinationHeaders)
 		w.WriteHeader(resp.StatusCode)
 		var copyWriter io.Writer = w
-		if w.Header().Get("content-type") == "text/event-stream" {
+		// the header may container charset definition, so the check should be contains, not equals.
+		if strings.Contains(w.Header().Get("content-type"), "text/event-stream") {
 			// server-side events, flush the buffered data to the client.
 			copyWriter = &flushWriter{w: w}
 		}
