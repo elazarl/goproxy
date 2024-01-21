@@ -2,45 +2,54 @@ package sniff
 
 import (
 	"bytes"
-	"crypto/tls"
-	"fmt"
 	"net"
-	"reflect"
 	"sync"
 	"time"
 )
 
 func NewSniffer(conn net.Conn) *Sniffer {
-	return &Sniffer{conn: conn, buf: new(bytes.Buffer)}
+	s := &Sniffer{conn: conn}
+	s.mu.Lock()
+	return s
 }
 
 type Sniffer struct {
-	conn        net.Conn
-	buf         *bytes.Buffer
-	clientHello []byte
-	mu          sync.Mutex
+	conn net.Conn
+
+	clientHelloRecord bytes.Buffer
+	mu                sync.Mutex
+
+	clientHelloRecordSize int
 }
 
 func (s *Sniffer) Read(b []byte) (int, error) {
-	n, err := s.conn.Read(b)
+	bytesRead, err := s.conn.Read(b)
 	if err != nil {
-		return n, err
+		return bytesRead, err
 	}
 
-	if s.buf == nil {
-		// already read client hello
-		return n, nil
+	if s.clientHelloRecordSize == 0 {
+		length := int(b[3])<<8 | int(b[4])   // data length
+		s.clientHelloRecordSize = length + 5 // with record header
 	}
 
-	go func() {
-		buf := s.buf
-		if buf == nil {
-			return
-		}
-		buf.Write(b[:n])
-	}()
+	left := s.clientHelloRecordSize - s.clientHelloRecord.Len()
+	if left == 0 {
+		return bytesRead, nil
+	}
 
-	return n, nil
+	bytesToSniff := left
+	if bytesToSniff > bytesRead {
+		bytesToSniff = bytesRead
+	}
+
+	s.clientHelloRecord.Write(b[:left])
+
+	if left == bytesRead {
+		s.mu.Unlock()
+	}
+
+	return bytesRead, nil
 }
 
 func (s *Sniffer) Write(b []byte) (int, error) {
@@ -73,32 +82,6 @@ func (s *Sniffer) SetWriteDeadline(t time.Time) error {
 
 func (s *Sniffer) ReadClientHello() ([]byte, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
-	if s.clientHello != nil {
-		return s.clientHello, nil
-	}
-
-	conn := &fakeConn{r: s.buf}
-
-	server := tls.Server(conn, nil)
-	defer server.Close()
-
-	msg, err := readHandshake(server, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	v := reflect.ValueOf(msg)
-	if t := v.Type().String(); t != "*tls.clientHelloMsg" {
-		return nil, fmt.Errorf("sniffer: unexpected type: %s", t)
-	}
-
-	clientHelloRecord := []byte{0x16, 0x03, 0x01, 0x02, 0x00}
-	clientHelloRecord = append(clientHelloRecord, v.Elem().FieldByName("raw").Bytes()...)
-
-	s.clientHello = clientHelloRecord
-	s.buf = nil
-
-	return clientHelloRecord, nil
+	return s.clientHelloRecord.Bytes(), nil
 }
