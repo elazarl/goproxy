@@ -43,7 +43,7 @@ func (s *Sniffer) Read(b []byte) (int, error) {
 		bytesToSniff = bytesRead
 	}
 
-	s.clientHelloRecord.Write(b[:left])
+	s.clientHelloRecord.Write(b[:bytesToSniff])
 
 	if left == bytesRead {
 		s.mu.Unlock()
