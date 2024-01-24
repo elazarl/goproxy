@@ -217,8 +217,6 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		}
 
 		go func() {
-			tlsConfig.NextProtos = []string{"h2", "http/1.1"}
-
 			sniffer := sniff.NewSniffer(proxyClient)
 			clientConn := tls.Server(sniffer, tlsConfig)
 			if err := clientConn.Handshake(); err != nil {
