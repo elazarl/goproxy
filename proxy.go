@@ -28,9 +28,10 @@ type ProxyHttpServer struct {
 	Tr              *http.Transport
 	// ConnectDial will be used to create TCP connections for CONNECT requests
 	// if nil Tr.Dial will be used
-	ConnectDial func(network string, addr string) (net.Conn, error)
-	CertStore   CertStorage
-	KeepHeader  bool
+	ConnectDial        func(network string, addr string) (net.Conn, error)
+	ConnectDialWithReq func(req *http.Request, network string, addr string) (net.Conn, error)
+	CertStore          CertStorage
+	KeepHeader         bool
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
@@ -107,6 +108,20 @@ func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 	r.Header.Del("Connection")
 }
 
+type flushWriter struct {
+	w io.Writer
+}
+
+func (fw flushWriter) Write(p []byte) (int, error) {
+	n, err := fw.w.Write(p)
+	if f, ok := fw.w.(http.Flusher); ok {
+		// only flush if the Writer implements the Flusher interface.
+		f.Flush()
+	}
+
+	return n, err
+}
+
 // Standard net/http function. Shouldn't be used directly, http.Serve will use it.
 func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	//r.Header["X-Forwarded-For"] = w.RemoteAddr()
@@ -177,7 +192,13 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 		copyHeaders(w.Header(), resp.Header, proxy.KeepDestinationHeaders)
 		w.WriteHeader(resp.StatusCode)
-		nr, err := io.Copy(w, resp.Body)
+		var copyWriter io.Writer = w
+		if w.Header().Get("content-type") == "text/event-stream" {
+			// server-side events, flush the buffered data to the client.
+			copyWriter = &flushWriter{w: w}
+		}
+
+		nr, err := io.Copy(copyWriter, resp.Body)
 		if err := resp.Body.Close(); err != nil {
 			ctx.Warnf("Can't close response body %v", err)
 		}
