@@ -233,7 +233,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				ctx.Logf("req %v", r.Host)
 
 				if !httpsRegexp.MatchString(req.URL.String()) {
-					req.URL, err = url.Parse("https://" + r.Host + req.URL.String())
+					if req.URL.Scheme != "" {
+						req.URL.Scheme = "https"
+					} else {
+						req.URL, err = url.Parse("https://" + r.Host + req.URL.String())
+					}
 				}
 
 				// Bug fix which goproxy fails to provide request
