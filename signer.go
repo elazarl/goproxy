@@ -6,6 +6,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rsa"
 	"crypto/sha1"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -48,9 +49,12 @@ func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err er
 	start := time.Unix(time.Now().Unix()-2592000, 0) // 2592000  = 30 day
 	end := time.Unix(time.Now().Unix()+31536000, 0)  // 31536000 = 365 day
 
-	serial := big.NewInt(rand.Int63())
+	serial, err := generateSerialNumber(ca)
+	if err != nil {
+		return
+
+	}
 	template := x509.Certificate{
-		// TODO(elazar): instead of this ugly hack, just encode the certificate and hash the binary form.
 		SerialNumber: serial,
 		Issuer:       x509ca.Subject,
 		Subject: pkix.Name{
@@ -100,6 +104,15 @@ func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err er
 		Certificate: [][]byte{derBytes, ca.Certificate[0]},
 		PrivateKey:  certpriv,
 	}, nil
+}
+
+func generateSerialNumber(pubKey crypto.PublicKey) (*big.Int, error) {
+	pubKeyBytes, err := x509.MarshalPKIXPublicKey(pubKey)
+	if err != nil {
+		return nil, err
+	}
+	hash := sha256.Sum256(pubKeyBytes)
+	return new(big.Int).SetBytes(hash[:]), nil
 }
 
 func init() {
