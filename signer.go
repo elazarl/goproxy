@@ -96,8 +96,10 @@ func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err er
 	if derBytes, err = x509.CreateCertificate(&csprng, &template, x509ca, certpriv.Public(), ca.PrivateKey); err != nil {
 		return
 	}
+	certBytes := [][]byte{derBytes}
+	certBytes = append(certBytes, ca.Certificate...)
 	return &tls.Certificate{
-		Certificate: [][]byte{derBytes, ca.Certificate[0]},
+		Certificate: certBytes,
 		PrivateKey:  certpriv,
 	}, nil
 }

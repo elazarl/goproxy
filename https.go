@@ -453,6 +453,11 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy strin
 }
 
 func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls.Config, error) {
+	ca.Certificate = [][]byte{ca.Certificate[0]}
+	return TLSConfigFromCANative(ca)
+}
+
+func TLSConfigFromCANative(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls.Config, error) {
 	return func(host string, ctx *ProxyCtx) (*tls.Config, error) {
 		var err error
 		var cert *tls.Certificate
