@@ -921,10 +921,6 @@ func TestHttpsMitmURLRewrite(t *testing.T) {
 	}
 }
 
-func returnNil(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
-	return nil
-}
-
 func TestSimpleHttpRequest(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
 
@@ -950,21 +946,25 @@ func TestSimpleHttpRequest(t *testing.T) {
 	}
 	client := http.Client{Transport: tr}
 
-	resp, err := client.Get("http://google.de")
-	if err != nil || resp.StatusCode != 200 {
-		t.Error("Error while requesting google with http", err)
+	resp, err := client.Get("http://example.com")
+	if err != nil {
+		t.Error("Error requesting http site", err)
+	} else if resp.StatusCode != 200 {
+		t.Error("Non-OK status requesting http site", err)
 	}
-	resp, err = client.Get("http://google20012312031.de")
-	fmt.Println(resp)
+	resp, _ = client.Get("http://example.invalid")
 	if resp == nil {
-		t.Error("Error while requesting random string with http", resp)
+		t.Error("No response requesting invalid http site")
+	}
+
+	returnNil := func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		return nil
 	}
 	proxy.OnResponse(goproxy.UrlMatches(regexp.MustCompile(".*"))).DoFunc(returnNil)
 
-	resp, err = client.Get("http://google20012312031.de")
-	fmt.Println(resp)
+	resp, _ = client.Get("http://example.invalid")
 	if resp == nil {
-		t.Error("Error while requesting random string with http", resp)
+		t.Error("No response requesting invalid http site")
 	}
 
 	server.Shutdown(context.TODO())
