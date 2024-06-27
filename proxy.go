@@ -2,6 +2,7 @@ package goproxy
 
 import (
 	"bufio"
+	"errors"
 	"io"
 	"log"
 	"net"
@@ -27,6 +28,10 @@ type ProxyHttpServer struct {
 	respHandlers    []RespHandler
 	httpsHandlers   []HttpsHandler
 	Tr              *http.Transport
+
+	// Defined error pages for user
+	ErrorPages *ErrorPages
+
 	// ConnectDial will be used to create TCP connections for CONNECT requests
 	// if nil Tr.Dial will be used
 	ConnectDial func(network string, addr string) (net.Conn, error)
@@ -164,11 +169,19 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			if ctx.Error != nil {
 				errorString = "error read response " + r.URL.Host + " : " + ctx.Error.Error()
 				ctx.Logf(errorString)
-				http.Error(w, ctx.Error.Error(), 500)
+				if proxy.ErrorPages.Enabled() {
+					proxy.ErrorPages.WriteErrorPage(ctx.Error, r.URL.Host, w)
+				} else {
+					http.Error(w, ctx.Error.Error(), 500)
+				}
 			} else {
 				errorString = "error read response " + r.URL.Host
 				ctx.Logf(errorString)
-				http.Error(w, errorString, 500)
+				if proxy.ErrorPages.Enabled() {
+					proxy.ErrorPages.WriteErrorPage(errors.New(errorString), r.URL.Host, w)
+				} else {
+					http.Error(w, errorString, 500)
+				}
 			}
 			return
 		}
@@ -204,6 +217,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 func NewProxyHttpServer() *ProxyHttpServer {
 	proxy := ProxyHttpServer{
 		Logger:        log.New(os.Stderr, "", log.LstdFlags),
+		ErrorPages:    &ErrorPages{},
 		reqHandlers:   []ReqHandler{},
 		respHandlers:  []RespHandler{},
 		httpsHandlers: []HttpsHandler{},
