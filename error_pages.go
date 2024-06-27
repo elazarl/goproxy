@@ -17,7 +17,7 @@ type ErrorPages struct {
 func (e *ErrorPages) WriteErrorPage(err error, host string, w http.ResponseWriter) {
 	// If any of ErrorPageConnect, ErrorPageDNS, or ErrorPageGeneral are empty,
 	// return and do nothing.
-	if e.ErrorPageConnect == nil || e.ErrorPageDNS == nil || e.ErrorPageGeneral == nil {
+	if !e.Enabled() {
 		return
 	}
 
