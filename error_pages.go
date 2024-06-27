@@ -6,6 +6,8 @@ import (
 	"strings"
 )
 
+// ErrorPages is a struct that contains the HTML content for error pages that can be
+// displayed to clients when an error occurs during a request.
 type ErrorPages struct {
 	ErrorPageConnect []byte
 	ErrorPageDNS     []byte
