@@ -120,21 +120,21 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			host += ":80"
 		}
 
-		var httpsProxyURL string = proxy.HttpsProxyAddr
+		var httpsProxyString string = proxy.HttpsProxyAddr
 		if r.Header.Get(PerRequestHTTPSProxyHeaderKey) != "" {
-			httpsProxyURL = r.Header.Get(PerRequestHTTPSProxyHeaderKey)
+			httpsProxyString = r.Header.Get(PerRequestHTTPSProxyHeaderKey)
 		}
 
-		httpsProxy, err := httpsProxyAddr(r.URL, httpsProxyURL)
+		httpsProxyString, err := httpsProxyAddr(r.URL, httpsProxyString)
 		if err != nil {
 			ctx.Warnf("Error configuring HTTPS proxy err=%q url=%q", err, r.URL.String())
 		}
 
 		var targetSiteCon net.Conn
-		if httpsProxy == "" {
+		if httpsProxyString == "" {
 			targetSiteCon, err = proxy.connectDialContext(ctx, "tcp", host)
 		} else {
-			targetSiteCon, err = proxy.connectDialProxyWithContext(ctx, httpsProxyURL, host)
+			targetSiteCon, err = proxy.connectDialProxyWithContext(ctx, httpsProxyString, host)
 		}
 		if err != nil {
 			httpError(proxyClient, ctx, err)
@@ -614,5 +614,10 @@ func httpsProxyAddr(reqURL *url.URL, httpsProxy string) (string, error) {
 		service = proxyURL.Scheme
 	}
 
-	return fmt.Sprintf("%s://%s:%s", proxyURL.Scheme, proxyURL.Hostname(), service), nil
+	hostname := proxyURL.Hostname()
+	if proxyURL.User.String() != "" {
+		hostname = proxyURL.User.String() + "@" + hostname
+	}
+
+	return fmt.Sprintf("%s://%s:%s", proxyURL.Scheme, hostname, service), nil
 }
