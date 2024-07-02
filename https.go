@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -133,7 +134,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		if httpsProxy == "" {
 			targetSiteCon, err = proxy.connectDialContext(ctx, "tcp", host)
 		} else {
-			targetSiteCon, err = proxy.connectDialProxyWithContext(ctx, httpsProxy, host)
+			targetSiteCon, err = proxy.connectDialProxyWithContext(ctx, httpsProxyURL, host)
 		}
 		if err != nil {
 			httpError(proxyClient, ctx, err)
@@ -543,11 +544,19 @@ func (proxy *ProxyHttpServer) connectDialProxyWithContext(ctx *ProxyCtx, proxyHo
 		c = tls.Client(c, proxy.Tr.TLSClientConfig)
 	}
 
+	hdr := make(http.Header)
+
+	// Add proxy authentication header if needed
+	auth := proxyURL.User.String()
+	if auth != "" {
+		hdr.Add("Proxy-Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(auth)))
+	}
+
 	connectReq := &http.Request{
 		Method: "CONNECT",
 		URL:    &url.URL{Opaque: host},
 		Host:   host,
-		Header: make(http.Header),
+		Header: hdr,
 	}
 	connectReq.Write(c)
 	// Read response.
