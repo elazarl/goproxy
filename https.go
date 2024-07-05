@@ -544,19 +544,21 @@ func (proxy *ProxyHttpServer) connectDialProxyWithContext(ctx *ProxyCtx, proxyHo
 		c = tls.Client(c, proxy.Tr.TLSClientConfig)
 	}
 
-	hdr := make(http.Header)
+	connectRequestHeaders := make(http.Header)
 
-	// Add proxy authentication header if needed
-	auth := proxyURL.User.String()
-	if auth != "" {
-		hdr.Add("Proxy-Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(auth)))
+	// Add authentication header if needed to the CONNECT request to the proxy
+	user := proxyURL.User
+	if user != nil {
+		if auth := user.String(); auth != "" {
+			connectRequestHeaders.Add("Proxy-Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(auth)))
+		}
 	}
 
 	connectReq := &http.Request{
 		Method: "CONNECT",
 		URL:    &url.URL{Opaque: host},
 		Host:   host,
-		Header: hdr,
+		Header: connectRequestHeaders,
 	}
 	connectReq.Write(c)
 	// Read response.
