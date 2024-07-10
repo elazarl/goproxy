@@ -617,7 +617,7 @@ func httpsProxyAddr(reqURL *url.URL, httpsProxy string) (string, error) {
 	}
 
 	hostname := proxyURL.Hostname()
-	if proxyURL.User.String() != "" {
+	if proxyURL.User != nil && proxyURL.User.String() != "" {
 		hostname = proxyURL.User.String() + "@" + hostname
 	}
 
