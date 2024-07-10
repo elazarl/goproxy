@@ -750,7 +750,12 @@ func TestOverrideHttpsProxyAddrsFromEnvWithRequest(t *testing.T) {
 
 	fakeExternalProxy := goproxy.NewProxyHttpServer()
 	fakeExternalProxyTestStruct := httptest.NewServer(fakeExternalProxy)
-	fakeExternalProxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	var AlwaysMitmAndPassthrough goproxy.FuncHttpsHandler = func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+		// TODO: make this test use the X-Https-Upstream-Proxy header and parse it out here to make sure it's set and passed through
+		//  to the authorization header
+		return goproxy.MitmConnect, host
+	}
+	fakeExternalProxy.OnRequest().HandleConnect(AlwaysMitmAndPassthrough)
 	tagExternalProxyPassthrough := func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
 		b, err := ioutil.ReadAll(resp.Body)
 		panicOnErr(err, "readAll resp")

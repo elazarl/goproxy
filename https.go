@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -119,21 +120,21 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			host += ":80"
 		}
 
-		var httpsProxyURL string = proxy.HttpsProxyAddr
+		var httpsProxyString string = proxy.HttpsProxyAddr
 		if r.Header.Get(PerRequestHTTPSProxyHeaderKey) != "" {
-			httpsProxyURL = r.Header.Get(PerRequestHTTPSProxyHeaderKey)
+			httpsProxyString = r.Header.Get(PerRequestHTTPSProxyHeaderKey)
 		}
 
-		httpsProxy, err := httpsProxyAddr(r.URL, httpsProxyURL)
+		httpsProxyString, err := httpsProxyAddr(r.URL, httpsProxyString)
 		if err != nil {
 			ctx.Warnf("Error configuring HTTPS proxy err=%q url=%q", err, r.URL.String())
 		}
 
 		var targetSiteCon net.Conn
-		if httpsProxy == "" {
+		if httpsProxyString == "" {
 			targetSiteCon, err = proxy.connectDialContext(ctx, "tcp", host)
 		} else {
-			targetSiteCon, err = proxy.connectDialProxyWithContext(ctx, httpsProxy, host)
+			targetSiteCon, err = proxy.connectDialProxyWithContext(ctx, httpsProxyString, host)
 		}
 		if err != nil {
 			httpError(proxyClient, ctx, err)
@@ -543,11 +544,21 @@ func (proxy *ProxyHttpServer) connectDialProxyWithContext(ctx *ProxyCtx, proxyHo
 		c = tls.Client(c, proxy.Tr.TLSClientConfig)
 	}
 
+	connectRequestHeaders := make(http.Header)
+
+	// Add authentication header if needed to the CONNECT request to the proxy
+	user := proxyURL.User
+	if user != nil {
+		if auth := user.String(); auth != "" {
+			connectRequestHeaders.Add("Proxy-Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(auth)))
+		}
+	}
+
 	connectReq := &http.Request{
 		Method: "CONNECT",
 		URL:    &url.URL{Opaque: host},
 		Host:   host,
-		Header: make(http.Header),
+		Header: connectRequestHeaders,
 	}
 	connectReq.Write(c)
 	// Read response.
@@ -605,5 +616,10 @@ func httpsProxyAddr(reqURL *url.URL, httpsProxy string) (string, error) {
 		service = proxyURL.Scheme
 	}
 
-	return fmt.Sprintf("%s://%s:%s", proxyURL.Scheme, proxyURL.Hostname(), service), nil
+	hostname := proxyURL.Hostname()
+	if proxyURL.User != nil && proxyURL.User.String() != "" {
+		hostname = proxyURL.User.String() + "@" + hostname
+	}
+
+	return fmt.Sprintf("%s://%s:%s", proxyURL.Scheme, hostname, service), nil
 }
