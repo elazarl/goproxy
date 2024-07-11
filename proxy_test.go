@@ -751,8 +751,9 @@ func TestOverrideHttpsProxyAddrsFromEnvWithRequest(t *testing.T) {
 	fakeExternalProxy := goproxy.NewProxyHttpServer()
 	fakeExternalProxyTestStruct := httptest.NewServer(fakeExternalProxy)
 	var AlwaysMitmAndPassthrough goproxy.FuncHttpsHandler = func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
-		// TODO: make this test use the X-Https-Upstream-Proxy header and parse it out here to make sure it's set and passed through
-		//  to the authorization header
+		if ctx.Req.Header["Proxy-Authorization"][0] != "Basic dGVzdHVzZXI6dGVzdHBhc3N3b3Jk" {
+			t.Error("Expected the Proxy-Authorization header to be present in the CONNECT request!")
+		}
 		return goproxy.MitmConnect, host
 	}
 	fakeExternalProxy.OnRequest().HandleConnect(AlwaysMitmAndPassthrough)
@@ -767,19 +768,27 @@ func TestOverrideHttpsProxyAddrsFromEnvWithRequest(t *testing.T) {
 	fakeStripeEgressProxy := goproxy.NewProxyHttpServer()
 	// We set the CONNECT response handler function to increment our counter such that we can tell
 	// if our FakeStripeEgressProxy was actually called
+	fakeStripeEgressProxyTestStruct := httptest.NewServer(fakeStripeEgressProxy)
+
+	egressProxyUrl, _ := url.Parse(fakeStripeEgressProxyTestStruct.URL)
+	externalProxyUrl, _ := url.Parse(fakeExternalProxyTestStruct.URL)
+	externalProxyUrl.User = url.UserPassword("testuser", "testpassword")
+	externalProxyUrlString := externalProxyUrl.String()
+
 	fakeStripeEgressProxy.ConnectRespHandler = func(ctx *goproxy.ProxyCtx, resp *http.Response) error {
+		if ctx.Req.Header["X-Upstream-Https-Proxy"][0] != externalProxyUrlString {
+			t.Error("Expected the CONNECT request to have been routed through the external proxy!")
+		}
 		c += 1
 		return nil
 	}
-	fakeStripeEgressProxyTestStruct := httptest.NewServer(fakeStripeEgressProxy)
 
 	// Next, we construct the client that we'll be using to talk to our 2 proxies
-	egressProxyUrl, _ := url.Parse(fakeStripeEgressProxyTestStruct.URL)
 	tr := &http.Transport{
 		TLSClientConfig: acceptAllCerts,
 		Proxy:           http.ProxyURL(egressProxyUrl),
 		ProxyConnectHeader: map[string][]string{
-			goproxy.PerRequestHTTPSProxyHeaderKey: {fakeExternalProxyTestStruct.URL},
+			goproxy.PerRequestHTTPSProxyHeaderKey: {externalProxyUrlString},
 		},
 	}
 	client := &http.Client{Transport: tr}
