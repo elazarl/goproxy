@@ -41,9 +41,26 @@ func (QueryHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	io.WriteString(w, req.Form.Get("result"))
 }
 
+type HeadersHandler struct{}
+
+// This handlers returns a body with a string containing all the request headers it received.
+func (HeadersHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	var sb strings.Builder
+	for name, values := range req.Header {
+		for _, value := range values {
+			sb.WriteString(name)
+			sb.WriteString(": ")
+			sb.WriteString(value)
+			sb.WriteString(";")
+		}
+	}
+	io.WriteString(w, sb.String())
+}
+
 func init() {
 	http.DefaultServeMux.Handle("/bobo", ConstantHanlder("bobo"))
 	http.DefaultServeMux.Handle("/query", QueryHandler{})
+	http.DefaultServeMux.Handle("/headers", HeadersHandler{})
 }
 
 type ConstantHanlder string
@@ -434,6 +451,33 @@ func TestSimpleMitm(t *testing.T) {
 	if resp := string(getOrFail(https.URL+"/query?result=bar", client, t)); resp != "bar" {
 		t.Error("Wrong response when mitm", resp, "expected bar")
 	}
+}
+
+func TestMitmMutateRequest(t *testing.T) {
+	mitmMutateRequest := func(req *http.Request, ctx *goproxy.ProxyCtx) {
+		// We inject a header in the request
+		req.Header.Set("Mitm-Header-Inject", "true")
+	}
+	mitmConnect := &goproxy.ConnectAction{
+		Action:            goproxy.ConnectMitm,
+		TLSConfig:         goproxy.TLSConfigFromCA(&goproxy.GoproxyCa),
+		MitmMutateRequest: mitmMutateRequest,
+	}
+	var mitm goproxy.FuncHttpsHandler = func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+		return mitmConnect, host
+	}
+
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.OnRequest().HandleConnect(mitm)
+
+	client, l := oneShotProxy(proxy, t)
+	defer l.Close()
+
+	r := string(getOrFail(https.URL+"/headers", client, t))
+	if !strings.Contains(r, "Mitm-Header-Inject: true") {
+		t.Error("Expected response body to contain the MITM injected header. Got instead: ", r)
+	}
+
 }
 
 func TestConnectHandler(t *testing.T) {
