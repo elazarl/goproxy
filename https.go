@@ -43,9 +43,10 @@ var (
 )
 
 type ConnectAction struct {
-	Action    ConnectActionLiteral
-	Hijack    func(req *http.Request, client net.Conn, ctx *ProxyCtx)
-	TLSConfig func(host string, ctx *ProxyCtx) (*tls.Config, error)
+	Action            ConnectActionLiteral
+	Hijack            func(req *http.Request, client net.Conn, ctx *ProxyCtx)
+	TLSConfig         func(host string, ctx *ProxyCtx) (*tls.Config, error)
+	MitmMutateRequest func(req *http.Request, ctx *ProxyCtx)
 }
 
 func stripPort(s string) string {
@@ -114,6 +115,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			break
 		}
 	}
+	ctx.ConnectAction = todo.Action
 	switch todo.Action {
 	case ConnectAccept:
 		if !hasPort.MatchString(host) {
@@ -264,7 +266,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				req, err := http.ReadRequest(clientTlsReader)
 				// Set the RoundTripper on the ProxyCtx within the `HandleConnect` action of goproxy, then
 				// inject the roundtripper here in order to use a custom round tripper while mitm.
-				var ctx = &ProxyCtx{Req: req, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy, UserData: ctx.UserData, RoundTripper: ctx.RoundTripper}
+				var ctx = &ProxyCtx{Req: req, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy, UserData: ctx.UserData, RoundTripper: ctx.RoundTripper, ConnectAction: ctx.ConnectAction}
 				if err != nil && err != io.EOF {
 					return
 				}
@@ -273,6 +275,9 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					return
 				}
 				req.RemoteAddr = r.RemoteAddr // since we're converting the request, need to carry over the original connecting IP as well
+				if todo.MitmMutateRequest != nil {
+					todo.MitmMutateRequest(req, ctx)
+				}
 				ctx.Logf("req %v", r.Host)
 
 				if !httpsRegexp.MatchString(req.URL.String()) {
