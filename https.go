@@ -135,7 +135,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			return
 		}
 		ctx.Logf("Accepting CONNECT to %s", host)
-		proxyClient.Write([]byte("HTTP/1.0 200 Connection established\r\n\r\n"))
+		if todo.Hijack != nil {
+			todo.Hijack(r, proxyClient, ctx)
+		} else {
+			proxyClient.Write([]byte("HTTP/1.0 200 Connection established\r\n\r\n"))
+		}
 
 		targetTCP, targetOK := targetSiteCon.(halfClosable)
 		proxyClientTCP, clientOK := proxyClient.(halfClosable)
@@ -158,7 +162,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 	case ConnectHijack:
 		todo.Hijack(r, proxyClient, ctx)
 	case ConnectHTTPMitm:
-		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+		if todo.Hijack != nil {
+			todo.Hijack(r, proxyClient, ctx)
+		} else {
+			proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+		}
 		ctx.Logf("Assuming CONNECT is plain HTTP tunneling, mitm proxying it")
 		targetSiteCon, err := proxy.connectDial(ctx, "tcp", host)
 		if err != nil {
@@ -195,7 +203,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			}
 		}
 	case ConnectMitm:
-		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+		if todo.Hijack != nil {
+			todo.Hijack(r, proxyClient, ctx)
+		} else {
+			proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+		}
 		ctx.Logf("Assuming CONNECT is TLS, mitm proxying it")
 		// this goes in a separate goroutine, so that the net/http server won't think we're
 		// still handling the request even after hijacking the connection. Those HTTP CONNECT
@@ -404,7 +416,11 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxy(https_proxy string) func(net
 	return proxy.NewConnectDialToProxyWithHandler(https_proxy, nil)
 }
 
-func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy string, connectReqHandler func(req *http.Request)) func(network, addr string) (net.Conn, error) {
+func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy string, connectReqHandler func(req *http.Request) error) func(network, addr string) (net.Conn, error) {
+	return proxy.NewConnectDialToProxyWithMoreHandlers(https_proxy, nil, nil)
+}
+
+func (proxy *ProxyHttpServer) NewConnectDialToProxyWithMoreHandlers(https_proxy string, connectReqHandler func(req *http.Request) error, connectRespHandler func(req *http.Response) error) func(network, addr string) (net.Conn, error) {
 	u, err := url.Parse(https_proxy)
 	if err != nil {
 		return nil
@@ -421,7 +437,9 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy strin
 				Header: make(http.Header),
 			}
 			if connectReqHandler != nil {
-				connectReqHandler(connectReq)
+				if err := connectReqHandler(connectReq); err != nil {
+					return nil, err
+				}
 			}
 			c, err := proxy.dial(network, u.Host)
 			if err != nil {
@@ -438,7 +456,12 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy strin
 				return nil, err
 			}
 			defer resp.Body.Close()
-			if resp.StatusCode != 200 {
+			if connectRespHandler != nil {
+				if err := connectRespHandler(resp); err != nil {
+					c.Close()
+					return nil, err
+				}
+			} else if resp.StatusCode != 200 {
 				resp, err := ioutil.ReadAll(resp.Body)
 				if err != nil {
 					return nil, err
@@ -466,7 +489,9 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy strin
 				Header: make(http.Header),
 			}
 			if connectReqHandler != nil {
-				connectReqHandler(connectReq)
+				if err := connectReqHandler(connectReq); err != nil {
+					return nil, err
+				}
 			}
 			connectReq.Write(c)
 			// Read response.
@@ -479,7 +504,12 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy strin
 				return nil, err
 			}
 			defer resp.Body.Close()
-			if resp.StatusCode != 200 {
+			if connectRespHandler != nil {
+				if err := connectRespHandler(resp); err != nil {
+					c.Close()
+					return nil, err
+				}
+			} else if resp.StatusCode != 200 {
 				body, err := ioutil.ReadAll(io.LimitReader(resp.Body, 500))
 				if err != nil {
 					return nil, err
