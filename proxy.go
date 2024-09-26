@@ -127,6 +127,11 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 
 		r, resp := proxy.filterRequest(r, ctx)
+		// If a cancel function is set, ensure we call it when
+		// we've finished handling the request
+		if ctx.Cancel != nil {
+			defer ctx.Cancel()
+		}
 
 		if r == nil || r.URL == nil {
 			return

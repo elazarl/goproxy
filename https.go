@@ -602,6 +602,11 @@ func (proxy *ProxyHttpServer) HandleHttps(w http.ResponseWriter, r *http.Request
 				return
 			}
 			req, resp := proxy.filterRequest(req, ctx)
+			// If a cancel function is set, ensure we call it when
+			// we've finished handling the request
+			if ctx.Cancel != nil {
+				defer ctx.Cancel()
+			}
 			if resp == nil {
 				if err := req.Write(targetSiteCon); err != nil {
 					httpError(proxyClient, ctx, err)
@@ -667,6 +672,11 @@ func (proxy *ProxyHttpServer) HandleHttps(w http.ResponseWriter, r *http.Request
 				ctx.Req = req
 
 				req, resp := proxy.filterRequest(req, ctx)
+				// If a cancel function is set, ensure we call it when
+				// we've finished handling the request
+				if ctx.Cancel != nil {
+					defer ctx.Cancel()
+				}
 				if resp == nil {
 					if err != nil {
 						ctx.Warnf("Illegal URL %s", "https://"+r.Host+req.URL.Path)

@@ -2,6 +2,7 @@ package goproxy
 
 import (
 	"bufio"
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
@@ -38,6 +39,13 @@ type ProxyCtx struct {
 	Session   int64
 	certStore CertStorage
 	Proxy     *ProxyHttpServer
+
+	// Cancel can be used to ensure contexts created during the request
+	// in callbacks provided to DoFunc and HandleConnectFunc are cancelled
+	// when the request is complete.
+	//
+	// Behaviour is unchanged if Cancel is nil.
+	Cancel context.CancelFunc
 
 	ProxyLogger                          *ProxyLeveledLogger
 	LogRequestID                         string
