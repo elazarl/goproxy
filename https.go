@@ -362,7 +362,7 @@ func createCustomConnectResponse(ctx *ProxyCtx) ([]byte, error) {
 	if ctx.proxy.ConnectRespHandler == nil {
 		return nil, nil
 	}
-	resp := &http.Response{Status: "200 OK", StatusCode: 200, Proto: "HTTP/1.0", Header: http.Header{}}
+	resp := &http.Response{Status: "200 OK", StatusCode: 200, Proto: "HTTP/1.0", ProtoMajor: 1, ProtoMinor: 0, Header: http.Header{}}
 	err := ctx.proxy.ConnectRespHandler(ctx, resp)
 	if err != nil {
 		return nil, err
