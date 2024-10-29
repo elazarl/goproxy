@@ -462,8 +462,8 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	ctx.Logf("targetSiteCon type: %+v", reflect.TypeOf(targetSiteCon))
 	ctx.Logf("targetSiteCon info: %s -> %s", targetSiteCon.LocalAddr().String(), targetSiteCon.RemoteAddr().String())
 
-	//This is a hack for now to support tproxy metrics
-	if ctx.ForwardProxy == "" && ctx.ForwardProxyTProxy {
+	//This is a hack for now to support tproxy metrics and forward requests made via tproxy
+	if ctx.ForwardProxy == "" && (ctx.ForwardProxyTProxy || ctx.ForwardProxyLocalViaTProxy) {
 		ctx.ForwardProxy = "127.0.0.1"
 	}
 
