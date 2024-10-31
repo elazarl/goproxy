@@ -64,7 +64,7 @@ type ProxyCtx struct {
 	ForwardProxyFallbackTimeout          int
 	ForwardProxyFallbackSecondaryTimeout int
 	ForwardProxyTProxy                   bool
-	ForwardProxyLocalViaTProxy           bool
+	ForwardProxyLocalRequest             bool
 	ForwatdTProxyDropIP                  string
 	ForwardProxySourceIP                 string
 	ForwardProxySourceIPv6               string
