@@ -414,7 +414,7 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 
 		ctx.Logf("getTargetSiteConnection to %+v returned error %+v", host, err)
 
-		//handle tproxy errors
+		// Handle tproxy errors and forward proxy local request error metrics
 		if ctx.ForwardProxy == "" && (ctx.ForwardProxyTProxy || ctx.ForwardProxyLocalRequest) {
 			ctx.Logf("error-metric: https (tproxy dial) to host: %s failed: %v - headers %+v", host, err, logHeaders)
 			ctx.ForwardProxy = "127.0.0.1"
