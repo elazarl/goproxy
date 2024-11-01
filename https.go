@@ -795,6 +795,10 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 				written += int64(nw)
 			}
 			if ew != nil {
+				// Add timeout handling for writes
+		                if (errors.Is(ew, os.ErrDeadlineExceeded) || errors.Is(ew, syscall.ETIMEDOUT)) && dst.IgnoreDeadlineErrors {
+		                    continue
+		                }
 				err = ew
 				break
 			}
@@ -804,10 +808,12 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 			}
 		}
 		if er != nil {
-			if netErr, ok := er.(net.Error); ok && netErr.Timeout() && src.IgnoreDeadlineErrors {
+			if (errors.Is(er, os.ErrDeadlineExceeded) || errors.Is(er, syscall.ETIMEDOUT)) && src.IgnoreDeadlineErrors {
 				continue
 			}
 			if er != io.EOF {
+				proxyCtx.Warnf("Non-timeout error during copy: %v (src=%s dst=%s bytes_copied=%d)",
+					er, src.RemoteAddr(), dst.RemoteAddr(), written)
 				err = er
 			}
 			break
