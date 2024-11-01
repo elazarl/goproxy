@@ -813,6 +813,11 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 				continue
 			}
 			if er != io.EOF {
+				if strings.Contains(er.Error(), "connection reset by peer") {
+					proxyCtx.Infof("[%s] Connection reset by peer during copy: %v (src=%s dst=%s bytes_copied=%d)",
+						rqID, er, src.RemoteAddr(), dst.RemoteAddr(), written)
+					break
+				}
 				proxyCtx.Warnf("Non-timeout error during copy: %v (src=%s dst=%s bytes_copied=%d)",
 					er, src.RemoteAddr(), dst.RemoteAddr(), written)
 				err = er
