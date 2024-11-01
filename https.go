@@ -488,8 +488,8 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	clientConn := &ProxyTCPConn{
 		Conn:                 proxyClient,
 		Logger:               ctx.ProxyLogger,
-		ReadTimeout:          time.Second * 5,
-		WriteTimeout:         time.Second * 5,
+		ReadTimeout:          time.Second * time.Duration(ctx.ProxyReadDeadline),
+		WriteTimeout:         time.Second * time.Duration(ctx.ProxyReadDeadline),
 		IgnoreDeadlineErrors: true,
 	}
 
@@ -506,8 +506,8 @@ func (proxy *ProxyHttpServer) handleHttpsConnectAccept(ctx *ProxyCtx, host strin
 	targetConn := &ProxyTCPConn{
 		Conn:                 targetSiteCon,
 		Logger:               ctx.ProxyLogger,
-		ReadTimeout:          time.Second * 5,
-		WriteTimeout:         time.Second * 5,
+		ReadTimeout:          time.Second * time.Duration(ctx.ProxyReadDeadline),
+		WriteTimeout:         time.Second * time.Duration(ctx.ProxyReadDeadline),
 		IgnoreDeadlineErrors: true,
 	}
 	// Since we dont have access to the *tls.Conn underlying connection, we have to set it
