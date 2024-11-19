@@ -44,9 +44,8 @@ func copyHeaders(dst, src http.Header, keepDestHeaders bool) {
 		}
 	}
 	for k, vs := range src {
-		for _, v := range vs {
-			dst.Add(k, v)
-		}
+		// direct assignment to avoid canonicalization
+		dst[k] = append([]string(nil), vs...)
 	}
 }
 
