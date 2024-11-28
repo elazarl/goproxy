@@ -3,6 +3,7 @@ package goproxy
 import (
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rsa"
 	"crypto/sha1"
@@ -86,6 +87,10 @@ func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err er
 		}
 	case *ecdsa.PrivateKey:
 		if certpriv, err = ecdsa.GenerateKey(elliptic.P256(), &csprng); err != nil {
+			return
+		}
+	case ed25519.PrivateKey:
+		if _, certpriv, err = ed25519.GenerateKey(&csprng); err != nil {
 			return
 		}
 	default:
