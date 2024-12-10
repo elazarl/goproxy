@@ -67,8 +67,9 @@ func main() {
 	middleProxy.Tr.Proxy = func(req *http.Request) (*url.URL, error) {
 		return url.Parse("http://localhost:8082")
 	}
-	connectReqHandler := func(req *http.Request) {
+	connectReqHandler := func(req *http.Request) error {
 		SetBasicAuth(username, password, req)
+		return nil
 	}
 	middleProxy.ConnectDial = middleProxy.NewConnectDialToProxyWithHandler("http://localhost:8082", connectReqHandler)
 	middleProxy.OnRequest().Do(goproxy.FuncReqHandler(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
