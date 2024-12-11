@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"github.com/elazarl/goproxy"
 	"log"
@@ -13,8 +14,9 @@ func main() {
 	addr := flag.String("addr", ":8080", "proxy listen address")
 	flag.Parse()
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.Tr.Dial = func(network, addr string) (c net.Conn, err error) {
-		c, err = net.Dial(network, addr)
+	proxy.Tr.DialContext = func(ctx context.Context, network, addr string) (c net.Conn, err error) {
+		var d net.Dialer
+		c, err = d.DialContext(ctx, network, addr)
 		if c, ok := c.(*net.TCPConn); err == nil && ok {
 			c.SetKeepAlive(true)
 		}
