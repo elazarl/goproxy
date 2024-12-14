@@ -109,14 +109,14 @@ There are 3 kinds of useful handlers to manipulate the behavior, as follows:
 ```go
 // handler called after receiving HTTP CONNECT from the client, and before proxy establish connection 
 // with destination host
-httpsHandlers   []HttpsHandler
+HttpsHandlers   []HttpsHandler
     
 // handler called before proxy send HTTP request to destination host
-reqHandlers     []ReqHandler 
+ReqHandlers     []ReqHandler 
     
 // handler called after proxy receives HTTP Response from destination host, and before proxy forward 
 // the Response to the client.
-respHandlers    []RespHandler 
+RespHandlers    []RespHandler 
 ```
 
 Depending on what you want to manipulate, the ways to add handlers to each handler list are:
