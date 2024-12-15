@@ -51,24 +51,19 @@ func stripPort(s string) string {
 	var ix int
 	if strings.Contains(s, "[") && strings.Contains(s, "]") {
 		//ipv6 : for example : [2606:4700:4700::1111]:443
-
-		//strip '[' and ']'
-		s = strings.ReplaceAll(s, "[", "")
-		s = strings.ReplaceAll(s, "]", "")
-
 		ix = strings.LastIndexAny(s, ":")
-		if ix == -1 {
+		if ix == -1 || s[ix:] == "]" {
 			return s
 		}
+		return s[:ix] 
 	} else {
 		//ipv4
 		ix = strings.IndexRune(s, ':')
 		if ix == -1 {
 			return s
 		}
-
+		return s[:ix]
 	}
-	return s[:ix]
 }
 
 func (proxy *ProxyHttpServer) dial(network, addr string) (c net.Conn, err error) {
