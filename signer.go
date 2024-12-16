@@ -103,8 +103,3 @@ func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err er
 		PrivateKey:  certpriv,
 	}, nil
 }
-
-func init() {
-	// Avoid deterministic random numbers
-	rand.Seed(time.Now().UnixNano())
-}
