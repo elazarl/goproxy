@@ -228,7 +228,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				req.RemoteAddr = r.RemoteAddr // since we're converting the request, need to carry over the original connecting IP as well
 				ctx.Logf("req %v", r.Host)
 
-				if !strings.HasPrefix(req.URL.String(), "https") {
+				if !strings.HasPrefix(req.URL.String(), "https://") {
 					req.URL, err = url.Parse("https://" + r.Host + req.URL.String())
 				}
 
@@ -406,7 +406,7 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy strin
 			return c, nil
 		}
 	}
-	if u.Scheme == "https" || u.Scheme == "wss" {
+	if u.Scheme == "" || u.Scheme == "wss" {
 		if strings.IndexRune(u.Host, ':') == -1 {
 			u.Host += ":443"
 		}
