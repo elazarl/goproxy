@@ -48,10 +48,13 @@ func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err er
 	start := time.Unix(time.Now().Unix()-2592000, 0) // 2592000  = 30 day
 	end := time.Unix(time.Now().Unix()+31536000, 0)  // 31536000 = 365 day
 
-	serial := big.NewInt(rand.Int63())
+	// Always generate a positive int value
+	// (Two complement is not enabled when the first bit is 0)
+	generated := rand.Uint64()
+	generated >>= 1
+
 	template := x509.Certificate{
-		// TODO(elazar): instead of this ugly hack, just encode the certificate and hash the binary form.
-		SerialNumber: serial,
+		SerialNumber: big.NewInt(int64(generated)),
 		Issuer:       x509ca.Subject,
 		Subject:      x509ca.Subject,
 		NotBefore:    start,
