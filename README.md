@@ -135,8 +135,9 @@ proxy.OnResponse(Some RespConditions).Do(YourRespHandlerFunc())
 For example:
 
 ```go
-// This rejects the HTTPS request to *.reddit.com during HTTP CONNECT phase
-proxy.OnRequest(goproxy.ReqHostMatches(regexp.MustCompile("reddit.*:443$"))).HandleConnect(goproxy.AlwaysReject)
+// This rejects the HTTPS request to *.reddit.com during HTTP CONNECT phase.
+// Reddit URL check is case-insensitive, so the block will work also if the user types something like rEdDit.com.
+proxy.OnRequest(goproxy.ReqHostMatches(regexp.MustCompile("(?i)reddit.*:443$"))).HandleConnect(goproxy.AlwaysReject)
 
 // This will NOT reject the HTTPS request with URL ending with gif, due to the fact that proxy 
 // only got the URL.Hostname and URL.Port during the HTTP CONNECT phase if the scheme is HTTPS, which is
