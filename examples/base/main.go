@@ -1,10 +1,11 @@
 package main
 
 import (
-	"github.com/elazarl/goproxy"
-	"log"
 	"flag"
+	"log"
 	"net/http"
+
+	"github.com/elazarl/goproxy"
 )
 
 func main() {

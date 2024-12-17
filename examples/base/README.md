@@ -1,23 +1,23 @@
 # Simple HTTP Proxy
 
-`goproxy-basic` starts an HTTP proxy on :8080. It only handles explicit CONNECT
-requests.
+This example contains a base HTTP proxy server that listens on port :8080.
+It only handles explicit CONNECT requests.
 
 Start it in one shell:
 
 ```sh
-goproxy-basic -v
+go build
+base -v
 ```
 
-Fetch goproxy homepage in another:
-
+Fetch a website using the proxy:
 ```sh
 http_proxy=http://127.0.0.1:8080 wget -O - \
 	http://ripper234.com/p/introducing-goproxy-light-http-proxy/
 ```
 
-The homepage HTML content should be displayed in the console. The proxy should
-have logged the request being processed:
+The homepage HTML content should be displayed in the console.
+The proxy should have logged the request being processed:
 
 ```sh
 2015/04/09 18:19:17 [001] INFO: Got request /p/introducing-goproxy-light-http-proxy/ ripper234.com GET http://ripper234.com/p/introducing-goproxy-light-http-proxy/
