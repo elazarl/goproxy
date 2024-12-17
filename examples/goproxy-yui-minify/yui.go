@@ -2,19 +2,18 @@
 // using the command line utility YUI compressor http://yui.github.io/yuicompressor/
 // Example usage:
 //
-//    ./yui -java /usr/local/bin/java -yuicompressor ~/Downloads/yuicompressor-2.4.8.jar
-//    $ curl -vx localhost:8080  http://golang.org/lib/godoc/godocs.js
-//    (function(){function g(){var u=$("#search");if(u.length===0){return}function t(){if(....
-//    $ curl http://golang.org/lib/godoc/godocs.js | head -n 3
-//    // Copyright 2012 The Go Authors. All rights reserved.
-//    // Use of this source code is governed by a BSD-style
-//    // license that can be found in the LICENSE file.
+//	./yui -java /usr/local/bin/java -yuicompressor ~/Downloads/yuicompressor-2.4.8.jar
+//	$ curl -vx localhost:8080  http://golang.org/lib/godoc/godocs.js
+//	(function(){function g(){var u=$("#search");if(u.length===0){return}function t(){if(....
+//	$ curl http://golang.org/lib/godoc/godocs.js | head -n 3
+//	// Copyright 2012 The Go Authors. All rights reserved.
+//	// Use of this source code is governed by a BSD-style
+//	// license that can be found in the LICENSE file.
 package main
 
 import (
 	"flag"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -33,7 +32,7 @@ func main() {
 	yuicompressordir := flag.String("yuicompressordir", ".", "a folder to search yuicompressor in, will be ignored if yuicompressor is set")
 	flag.Parse()
 	if *yuicompressor == "" {
-		files, err := ioutil.ReadDir(*yuicompressordir)
+		files, err := os.ReadDir(*yuicompressordir)
 		if err != nil {
 			log.Fatal("Cannot find yuicompressor jar")
 		}
@@ -76,7 +75,7 @@ func main() {
 			go func() {
 				defer stderr.Close()
 				const kb = 1024
-				msg, err := ioutil.ReadAll(&io.LimitedReader{stderr, 50 * kb})
+				msg, err := io.ReadAll(&io.LimitedReader{stderr, 50 * kb})
 				if len(msg) != 0 {
 					ctx.Logf("Error executing yuicompress: %s", string(msg))
 				}

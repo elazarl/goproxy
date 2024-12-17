@@ -126,7 +126,7 @@ func (fw flushWriter) Write(p []byte) (int, error) {
 // Standard net/http function. Shouldn't be used directly, http.Serve will use it.
 func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	//r.Header["X-Forwarded-For"] = w.RemoteAddr()
-	if r.Method == "CONNECT" {
+	if r.Method == http.MethodConnect {
 		proxy.handleHttps(w, r)
 	} else {
 		ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy}

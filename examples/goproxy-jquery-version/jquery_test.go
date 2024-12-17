@@ -2,11 +2,12 @@ package main
 
 import (
 	"bytes"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 )
@@ -24,7 +25,7 @@ func equal(u, v []string) bool {
 }
 
 func readFile(fname string, t *testing.T) string {
-	b, err := ioutil.ReadFile(fname)
+	b, err := os.ReadFile(fname)
 	if err != nil {
 		t.Fatal("readFile", err)
 	}
@@ -77,7 +78,7 @@ func get(t *testing.T, server *httptest.Server, client *http.Client, url string)
 	if err != nil {
 		t.Fatal("cannot get proxy", err)
 	}
-	ioutil.ReadAll(resp.Body)
+	io.ReadAll(resp.Body)
 	resp.Body.Close()
 }
 

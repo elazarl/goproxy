@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"strings"
 
@@ -37,7 +36,7 @@ var IsWebRelatedText goproxy.RespCondition = goproxy.ContentTypeIs("text/html",
 // guessing Html charset encoding from the <META> tags is not yet implemented.
 func HandleString(f func(s string, ctx *goproxy.ProxyCtx) string) goproxy.RespHandler {
 	return HandleStringReader(func(r io.Reader, ctx *goproxy.ProxyCtx) io.Reader {
-		b, err := ioutil.ReadAll(r)
+		b, err := io.ReadAll(r)
 		if err != nil {
 			ctx.Warnf("Cannot read string from resp body: %v", err)
 			return r
@@ -74,10 +73,10 @@ func HandleStringReader(f func(r io.Reader, ctx *goproxy.ProxyCtx) io.Reader) go
 				return resp
 			}
 			newr := charset.NewTranslatingReader(f(r, ctx), tr)
-			resp.Body = &readFirstCloseBoth{ioutil.NopCloser(newr), resp.Body}
+			resp.Body = &readFirstCloseBoth{io.NopCloser(newr), resp.Body}
 		} else {
 			//no translation is needed, already at utf-8
-			resp.Body = &readFirstCloseBoth{ioutil.NopCloser(f(resp.Body, ctx)), resp.Body}
+			resp.Body = &readFirstCloseBoth{io.NopCloser(f(resp.Body, ctx)), resp.Body}
 		}
 		return resp
 	})

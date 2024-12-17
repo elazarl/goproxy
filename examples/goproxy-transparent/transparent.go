@@ -96,7 +96,7 @@ func main() {
 				return
 			}
 			connectReq := &http.Request{
-				Method: "CONNECT",
+				Method: http.MethodConnect,
 				URL: &url.URL{
 					Opaque: tlsConn.Host(),
 					Host:   net.JoinHostPort(tlsConn.Host(), "443"),
