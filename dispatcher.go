@@ -126,8 +126,9 @@ func UrlMatches(re *regexp.Regexp) ReqConditionFunc {
 
 // DstHostIs returns a ReqCondition testing wether the host in the request url is the given string
 func DstHostIs(host string) ReqConditionFunc {
+	host = strings.ToLower(host)
 	return func(req *http.Request, ctx *ProxyCtx) bool {
-		return req.URL.Host == host
+		return strings.ToLower(req.URL.Host) == host
 	}
 }
 
