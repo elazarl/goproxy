@@ -13,14 +13,16 @@ func main() {
 	flag.Parse()
 
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.CertStore = NewCertStorage() //设置storage
-
+	proxy.CertStore = NewCertStorage()
 	proxy.Verbose = *verbose
 
 	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		// Log requested URL
 		log.Println(req.URL.String())
 		return req, nil
 	})
+
+	// Start proxy server
 	log.Fatal(http.ListenAndServe(*addr, proxy))
 }
