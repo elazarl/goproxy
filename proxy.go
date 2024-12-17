@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strings"
 	"sync/atomic"
 )
 
@@ -193,7 +194,10 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		copyHeaders(w.Header(), resp.Header, proxy.KeepDestinationHeaders)
 		w.WriteHeader(resp.StatusCode)
 		var copyWriter io.Writer = w
-		if w.Header().Get("content-type") == "text/event-stream" {
+		// Content-Type header may also contain charset definition, so here we need to check the prefix.
+		// Transfer-Encoding can be a list of comma separated values, so we use Contains() for it.
+		if strings.HasPrefix(w.Header().Get("content-type"), "text/event-stream") ||
+			strings.Contains(w.Header().Get("transfer-encoding"), "chunked") {
 			// server-side events, flush the buffered data to the client.
 			copyWriter = &flushWriter{w: w}
 		}
