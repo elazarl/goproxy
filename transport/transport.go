@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -367,7 +366,7 @@ func (t *Transport) getConn(cm *connectMethod) (*persistConn, error) {
 		}
 	case cm.targetScheme == "https":
 		connectReq := &http.Request{
-			Method: "CONNECT",
+			Method: http.MethodConnect,
 			URL:    &url.URL{Opaque: cm.targetAddr},
 			Host:   cm.targetAddr,
 			Header: make(http.Header),
@@ -386,7 +385,7 @@ func (t *Transport) getConn(cm *connectMethod) (*persistConn, error) {
 			conn.Close()
 			return nil, err
 		}
-		if resp.StatusCode != 200 {
+		if resp.StatusCode != http.StatusOK {
 			f := strings.SplitN(resp.Status, " ", 2)
 			conn.Close()
 			return nil, errors.New(f[1])
@@ -471,7 +470,6 @@ func useProxy(addr string) bool {
 // http://proxy.com|http           http to proxy, http to anywhere after that
 //
 // Note: no support to https to the proxy yet.
-//
 type connectMethod struct {
 	proxyURL     *url.URL // nil for no proxy, else full proxy URL
 	targetScheme string   // "http" or "https"
@@ -578,7 +576,7 @@ func (pc *persistConn) readLoop() {
 		if err != nil {
 			pc.close()
 		} else {
-			hasBody := rc.req.Method != "HEAD" && resp.ContentLength != 0
+			hasBody := rc.req.Method != http.MethodHead && resp.ContentLength != 0
 			if rc.addedGzip && hasBody && resp.Header.Get("Content-Encoding") == "gzip" {
 				resp.Header.Del("Content-Encoding")
 				resp.Header.Del("Content-Length")
@@ -782,6 +780,6 @@ type discardOnCloseReadCloser struct {
 }
 
 func (d *discardOnCloseReadCloser) Close() error {
-	io.Copy(ioutil.Discard, d.ReadCloser) // ignore errors; likely invalid or already closed
+	io.Copy(io.Discard, d.ReadCloser) // ignore errors; likely invalid or already closed
 	return d.ReadCloser.Close()
 }

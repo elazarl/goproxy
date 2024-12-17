@@ -34,7 +34,7 @@ func TestIsLocalHost(t *testing.T) {
 				addr = net.JoinHostPort(host, port)
 			}
 			t.Run(addr, func(t *testing.T) {
-				req, err := http.NewRequest("GET", "http://"+addr, http.NoBody)
+				req, err := http.NewRequest(http.MethodGet, "http://"+addr, http.NoBody)
 				if err != nil {
 					t.Fatal(err)
 				}

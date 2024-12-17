@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/base64"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -82,7 +82,7 @@ func main() {
 
 	// fire a http request: client --> middle proxy --> end proxy --> internet
 	proxyUrl := "http://localhost:8081"
-	request, err := http.NewRequest("GET", "https://ip.cn", nil)
+	request, err := http.NewRequest(http.MethodGet, "https://ip.cn", nil)
 	if err != nil {
 		log.Fatalf("new request failed:%v", err)
 	}
@@ -94,7 +94,7 @@ func main() {
 
 	}
 	defer rsp.Body.Close()
-	data, _ := ioutil.ReadAll(rsp.Body)
+	data, _ := io.ReadAll(rsp.Body)
 
 	if rsp.StatusCode != http.StatusOK {
 		log.Fatalf("status %d, data %s", rsp.StatusCode, data)

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
@@ -309,7 +308,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					return
 				}
 
-				if resp.Request.Method == "HEAD" {
+				if resp.Request.Method == http.MethodHead {
 					// don't change Content-Length for HEAD request
 				} else {
 					// Since we don't know the length of resp, return chunked encoded response
@@ -328,7 +327,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					return
 				}
 
-				if resp.Request.Method == "HEAD" {
+				if resp.Request.Method == http.MethodHead {
 					// Don't write out a response body for HEAD request
 				} else {
 					chunked := newChunkedWriter(rawClientTls)
@@ -413,7 +412,7 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy strin
 		}
 		return func(network, addr string) (net.Conn, error) {
 			connectReq := &http.Request{
-				Method: "CONNECT",
+				Method: http.MethodConnect,
 				URL:    &url.URL{Opaque: addr},
 				Host:   addr,
 				Header: make(http.Header),
@@ -436,8 +435,8 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy strin
 				return nil, err
 			}
 			defer resp.Body.Close()
-			if resp.StatusCode != 200 {
-				resp, err := ioutil.ReadAll(resp.Body)
+			if resp.StatusCode != http.StatusOK {
+				resp, err := io.ReadAll(resp.Body)
 				if err != nil {
 					return nil, err
 				}
@@ -458,7 +457,7 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy strin
 			}
 			c = tls.Client(c, proxy.Tr.TLSClientConfig)
 			connectReq := &http.Request{
-				Method: "CONNECT",
+				Method: http.MethodConnect,
 				URL:    &url.URL{Opaque: addr},
 				Host:   addr,
 				Header: make(http.Header),
@@ -477,8 +476,8 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy strin
 				return nil, err
 			}
 			defer resp.Body.Close()
-			if resp.StatusCode != 200 {
-				body, err := ioutil.ReadAll(io.LimitReader(resp.Body, 500))
+			if resp.StatusCode != http.StatusOK {
+				body, err := io.ReadAll(io.LimitReader(resp.Body, 500))
 				if err != nil {
 					return nil, err
 				}

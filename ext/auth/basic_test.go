@@ -3,7 +3,6 @@ package auth_test
 import (
 	"encoding/base64"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -115,12 +114,12 @@ func TestBasicAuth(t *testing.T) {
 	if resp.Header.Get("Proxy-Authenticate") != "Basic realm=my_realm" {
 		t.Error("Expected Proxy-Authenticate header got", resp.Header.Get("Proxy-Authenticate"))
 	}
-	if resp.StatusCode != 407 {
+	if resp.StatusCode != http.StatusProxyAuthRequired {
 		t.Error("Expected status 407 Proxy Authentication Required, got", resp.Status)
 	}
 
 	// with auth
-	req, err := http.NewRequest("GET", background.URL, nil)
+	req, err := http.NewRequest(http.MethodGet, background.URL, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,10 +129,10 @@ func TestBasicAuth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Error("Expected status 200 OK, got", resp.Status)
 	}
-	msg, err := ioutil.ReadAll(resp.Body)
+	msg, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
