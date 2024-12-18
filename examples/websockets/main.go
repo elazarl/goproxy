@@ -9,80 +9,80 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"sync"
 	"time"
 )
 
-var upgrader = websocket.Upgrader{} // use default options
+var _upgrader = websocket.Upgrader{
+	HandshakeTimeout: 10 * time.Second,
+}
 
 func echo(w http.ResponseWriter, r *http.Request) {
-	c, err := upgrader.Upgrade(w, r, nil)
+	c, err := _upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Print("upgrade:", err)
+		log.Printf("upgrade: %v\n", err)
 		return
 	}
 	defer c.Close()
+
 	for {
 		mt, message, err := c.ReadMessage()
 		if err != nil {
-			log.Println("read:", err)
+			log.Printf("read: %v\n", err)
 			break
 		}
-		log.Printf("recv: %s", message)
-		err = c.WriteMessage(mt, message)
-		if err != nil {
-			log.Println("write:", err)
+		log.Printf("recv: %s\n", message)
+		if err := c.WriteMessage(mt, message); err != nil {
+			log.Printf("write: %v\n", err)
 			break
 		}
 	}
 }
 
-func StartEchoServer(wg *sync.WaitGroup) {
+func StartEchoServer() {
 	log.Println("Starting echo server")
-	wg.Add(1)
 	go func() {
 		http.HandleFunc("/", echo)
 		err := http.ListenAndServeTLS(":12345", "localhost.pem", "localhost-key.pem", nil)
 		if err != nil {
-			panic("ListenAndServe: " + err.Error())
+			log.Fatal(err)
 		}
-		wg.Done()
 	}()
 }
 
-func StartProxy(wg *sync.WaitGroup) {
+func StartProxy() {
 	log.Println("Starting proxy server")
-	wg.Add(1)
 	go func() {
 		proxy := goproxy.NewProxyHttpServer()
 		proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 		proxy.Verbose = true
 
-		err := http.ListenAndServe(":54321", proxy)
-		if err != nil {
-			log.Fatal(err.Error())
+		if err := http.ListenAndServe(":54321", proxy); err != nil {
+			log.Fatal(err)
 		}
-		wg.Done()
 	}()
 }
 
 func main() {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
-	wg := &sync.WaitGroup{}
-	StartEchoServer(wg)
-	StartProxy(wg)
+	StartEchoServer()
+	StartProxy()
 
-	endpointUrl := "wss://localhost:12345"
 	proxyUrl := "http://localhost:54321"
-
-	surl, _ := url.Parse(proxyUrl)
-	dialer := websocket.Dialer{
-		Subprotocols:    []string{"p1"},
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		Proxy:           http.ProxyURL(surl),
+	parsedProxy, err := url.Parse(proxyUrl)
+	if err != nil {
+		log.Fatal("unable to parse proxy URL")
 	}
 
+	dialer := websocket.Dialer{
+		Subprotocols: []string{"p1"},
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+		Proxy: http.ProxyURL(parsedProxy),
+	}
+
+	endpointUrl := "wss://localhost:12345"
 	c, _, err := dialer.Dial(endpointUrl, nil)
 	if err != nil {
 		log.Fatal("dial:", err)
@@ -92,7 +92,6 @@ func main() {
 	done := make(chan struct{})
 
 	go func() {
-		defer c.Close()
 		defer close(done)
 		for {
 			_, message, err := c.ReadMessage()
@@ -109,13 +108,13 @@ func main() {
 
 	for {
 		select {
-		case t := <-ticker.C:
-			err := c.WriteMessage(websocket.TextMessage, []byte(t.String()))
-			if err != nil {
+		case t := <-ticker.C: // Message send
+			// Write current time to the websocket client every 1 second
+			if err := c.WriteMessage(websocket.TextMessage, []byte(t.String())); err != nil {
 				log.Println("write:", err)
 				return
 			}
-		case <-interrupt:
+		case <-interrupt: // Server shutdown
 			log.Println("interrupt")
 			// To cleanly close a connection, a client should send a close
 			// frame and wait for the server to close the connection.
@@ -124,11 +123,11 @@ func main() {
 				log.Println("write close:", err)
 				return
 			}
+
 			select {
 			case <-done:
 			case <-time.After(time.Second):
 			}
-			c.Close()
 			return
 		}
 	}
