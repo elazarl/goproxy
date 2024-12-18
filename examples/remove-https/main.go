@@ -1,9 +1,9 @@
 package main
 
 import (
+	"flag"
 	"github.com/elazarl/goproxy"
 	"log"
-	"flag"
 	"net/http"
 )
 
@@ -13,7 +13,7 @@ func main() {
 	flag.Parse()
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
-	proxy.OnRequest().DoFunc(func (req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		if req.URL.Scheme == "https" {
 			req.URL.Scheme = "http"
 		}
