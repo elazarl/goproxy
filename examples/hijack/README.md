@@ -5,6 +5,7 @@ In this mode, we take over on the raw connection and we could send any
 data that we want.
 
 Curl example:
+
 ```
 $ curl -x localhost:8080 http://google.it -v -k -p
 
