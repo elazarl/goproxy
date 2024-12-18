@@ -38,11 +38,13 @@ func hashSortedBigInt(lst []string) *big.Int {
 var goproxySignerVersion = ":goroxy1"
 
 func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err error) {
-	var x509ca *x509.Certificate
-
-	// Use the provided ca and not the global GoproxyCa for certificate generation.
-	if x509ca, err = x509.ParseCertificate(ca.Certificate[0]); err != nil {
-		return
+	// Use the provided CA for certificate generation.
+	// Use already parsed Leaf certificate when present.
+	x509ca := ca.Leaf
+	if x509ca == nil {
+		if x509ca, err = x509.ParseCertificate(ca.Certificate[0]); err != nil {
+			return nil, err
+		}
 	}
 
 	start := time.Unix(time.Now().Unix()-2592000, 0) // 2592000  = 30 day
@@ -97,12 +99,23 @@ func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err er
 		err = fmt.Errorf("unsupported key type %T", ca.PrivateKey)
 	}
 
-	var derBytes []byte
-	if derBytes, err = x509.CreateCertificate(&csprng, &template, x509ca, certpriv.Public(), ca.PrivateKey); err != nil {
-		return
+	derBytes, err := x509.CreateCertificate(&csprng, &template, x509ca, certpriv.Public(), ca.PrivateKey)
+	if err != nil {
+		return nil, err
 	}
+
+	// Save an already parsed leaf certificate to use less CPU
+	// when it will be used
+	leafCert, err := x509.ParseCertificate(derBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	certBytes := [][]byte{derBytes}
+	certBytes = append(certBytes, ca.Certificate...)
 	return &tls.Certificate{
-		Certificate: [][]byte{derBytes, ca.Certificate[0]},
+		Certificate: certBytes,
 		PrivateKey:  certpriv,
+		Leaf:        leafCert,
 	}, nil
 }

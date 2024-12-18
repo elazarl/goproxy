@@ -5,13 +5,21 @@ import (
 	"crypto/x509"
 )
 
+var GoproxyCa tls.Certificate
+
 func init() {
-	if goproxyCaErr != nil {
-		panic("Error parsing builtin CA " + goproxyCaErr.Error())
-	}
+	// When we included the embedded certificate inside this file, we made
+	// sure that it was valid.
+	// If there is an error here, this is a really exceptional case that requires
+	// a panic. It should NEVER happen!
 	var err error
+	GoproxyCa, err = tls.X509KeyPair(CA_CERT, CA_KEY)
+	if err != nil {
+		panic("Error parsing builtin CA: " + err.Error())
+	}
+
 	if GoproxyCa.Leaf, err = x509.ParseCertificate(GoproxyCa.Certificate[0]); err != nil {
-		panic("Error parsing builtin CA " + err.Error())
+		panic("Error parsing builtin CA leaf: " + err.Error())
 	}
 }
 
@@ -107,5 +115,3 @@ pmcjjocD/UCCSuHgbAYNNnO/JdhnSylz1tIg26I+2iLNyeTKIepSNlsBxnkLmqM1
 cj/azKBaT04IOMLaN8xfSqitJYSraWMVNgGJM5vfcVaivZnNh0lZBv+qu6YkdM88
 4/avCJ8IutT+FcMM+GbGazOm5ALWqUyhrnbLGc4CQMPfe7Il6NxwcrOxT8w=
 -----END RSA PRIVATE KEY-----`)
-
-var GoproxyCa, goproxyCaErr = tls.X509KeyPair(CA_CERT, CA_KEY)
