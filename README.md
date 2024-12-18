@@ -97,7 +97,7 @@ a `ReqCondition` accepting only requests directed to "www.reddit.com".
 
 `DoFunc` will receive a function that will preprocess the request. We can change the request, or
 return a response. If the time is between 8:00am and 17:00pm, we will reject the request, and
-return a precanned text response saying "do not waste your time".
+return a pre-canned text response saying "do not waste your time".
 
 See additional examples in the examples directory.
 
@@ -135,13 +135,14 @@ proxy.OnResponse(Some RespConditions).Do(YourRespHandlerFunc())
 For example:
 
 ```go
-// This rejects the HTTPS request to *.reddit.com during HTTP CONNECT phase
-proxy.OnRequest(goproxy.ReqHostMatches(regexp.MustCompile("reddit.*:443$"))).HandleConnect(goproxy.RejectConnect)
+// This rejects the HTTPS request to *.reddit.com during HTTP CONNECT phase.
+// Reddit URL check is case-insensitive, so the block will work also if the user types something like rEdDit.com.
+proxy.OnRequest(goproxy.ReqHostMatches(regexp.MustCompile("(?i)reddit.*:443$"))).HandleConnect(goproxy.AlwaysReject)
 
 // This will NOT reject the HTTPS request with URL ending with gif, due to the fact that proxy 
 // only got the URL.Hostname and URL.Port during the HTTP CONNECT phase if the scheme is HTTPS, which is
 // quiet common these days.
-proxy.OnRequest(goproxy.UrlMatches(regexp.MustCompile(`.*gif$`))).HandleConnect(goproxy.RejectConnect)
+proxy.OnRequest(goproxy.UrlMatches(regexp.MustCompile(`.*gif$`))).HandleConnect(goproxy.AlwaysReject)
 
 // The correct way to manipulate the HTTP request using URL.Path as condition is:
 proxy.OnRequest(goproxy.UrlMatches(regexp.MustCompile(`.*gif$`))).Do(YourReqHandlerFunc())

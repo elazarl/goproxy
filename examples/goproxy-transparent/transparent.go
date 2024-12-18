@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -54,7 +55,8 @@ func main() {
 				client.Close()
 			}()
 			clientBuf := bufio.NewReadWriter(bufio.NewReader(client), bufio.NewWriter(client))
-			remote, err := connectDial(proxy, "tcp", req.URL.Host)
+
+			remote, err := connectDial(req.Context(), proxy, "tcp", req.URL.Host)
 			orPanic(err)
 			remoteBuf := bufio.NewReadWriter(bufio.NewReader(remote), bufio.NewWriter(remote))
 			for {
@@ -94,7 +96,7 @@ func main() {
 				return
 			}
 			connectReq := &http.Request{
-				Method: "CONNECT",
+				Method: http.MethodConnect,
 				URL: &url.URL{
 					Opaque: tlsConn.Host(),
 					Host:   net.JoinHostPort(tlsConn.Host(), "443"),
@@ -110,17 +112,18 @@ func main() {
 }
 
 // copied/converted from https.go
-func dial(proxy *goproxy.ProxyHttpServer, network, addr string) (c net.Conn, err error) {
-	if proxy.Tr.Dial != nil {
-		return proxy.Tr.Dial(network, addr)
+func dial(ctx context.Context, proxy *goproxy.ProxyHttpServer, network, addr string) (c net.Conn, err error) {
+	if proxy.Tr.DialContext != nil {
+		return proxy.Tr.DialContext(ctx, network, addr)
 	}
-	return net.Dial(network, addr)
+	var d net.Dialer
+	return d.DialContext(ctx, network, addr)
 }
 
 // copied/converted from https.go
-func connectDial(proxy *goproxy.ProxyHttpServer, network, addr string) (c net.Conn, err error) {
+func connectDial(ctx context.Context, proxy *goproxy.ProxyHttpServer, network, addr string) (c net.Conn, err error) {
 	if proxy.ConnectDial == nil {
-		return dial(proxy, network, addr)
+		return dial(ctx, proxy, network, addr)
 	}
 	return proxy.ConnectDial(network, addr)
 }

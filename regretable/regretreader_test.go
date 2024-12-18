@@ -4,7 +4,6 @@ import (
 	"bytes"
 	. "github.com/elazarl/goproxy/regretable"
 	"io"
-	"io/ioutil"
 	"strings"
 	"testing"
 )
@@ -19,9 +18,9 @@ func TestRegretableReader(t *testing.T) {
 	mb.Read(fivebytes)
 	mb.Regret()
 
-	s, _ := ioutil.ReadAll(mb)
+	s, _ := io.ReadAll(mb)
 	if string(s) != word {
-		t.Errorf("Uncommited read is gone, [%d,%d] actual '%v' expected '%v'\n", len(s), len(word), string(s), word)
+		t.Errorf("Uncommitted read is gone, [%d,%d] actual '%v' expected '%v'\n", len(s), len(word), string(s), word)
 	}
 }
 
@@ -35,9 +34,9 @@ func TestRegretableEmptyRead(t *testing.T) {
 	mb.Read(zero)
 	mb.Regret()
 
-	s, err := ioutil.ReadAll(mb)
+	s, err := io.ReadAll(mb)
 	if string(s) != word {
-		t.Error("Uncommited read is gone, actual:", string(s), "expected:", word, "err:", err)
+		t.Error("Uncommitted read is gone, actual:", string(s), "expected:", word, "err:", err)
 	}
 }
 
@@ -55,9 +54,9 @@ func TestRegretableAlsoEmptyRead(t *testing.T) {
 	mb.Read(five)
 	mb.Regret()
 
-	s, _ := ioutil.ReadAll(mb)
+	s, _ := io.ReadAll(mb)
 	if string(s) != word {
-		t.Error("Uncommited read is gone", string(s), "expected", word)
+		t.Error("Uncommitted read is gone", string(s), "expected", word)
 	}
 }
 
@@ -71,9 +70,9 @@ func TestRegretableRegretBeforeRead(t *testing.T) {
 	mb.Regret()
 	mb.Read(five)
 
-	s, err := ioutil.ReadAll(mb)
+	s, err := io.ReadAll(mb)
 	if string(s) != "678" {
-		t.Error("Uncommited read is gone", string(s), len(string(s)), "expected", "678", len("678"), "err:", err)
+		t.Error("Uncommitted read is gone", string(s), len(string(s)), "expected", "678", len("678"), "err:", err)
 	}
 }
 
@@ -87,9 +86,9 @@ func TestRegretableFullRead(t *testing.T) {
 	mb.Read(twenty)
 	mb.Regret()
 
-	s, _ := ioutil.ReadAll(mb)
+	s, _ := io.ReadAll(mb)
 	if string(s) != word {
-		t.Error("Uncommited read is gone", string(s), len(string(s)), "expected", word, len(word))
+		t.Error("Uncommitted read is gone", string(s), len(string(s)), "expected", word, len(word))
 	}
 }
 
@@ -100,7 +99,7 @@ func assertEqual(t *testing.T, expected, actual string) {
 }
 
 func assertReadAll(t *testing.T, r io.Reader) string {
-	s, err := ioutil.ReadAll(r)
+	s, err := io.ReadAll(r)
 	if err != nil {
 		t.Fatal("error when reading", err)
 	}
@@ -148,7 +147,7 @@ func TestRegretableCloserSizeRegrets(t *testing.T) {
 	}()
 	buf := new(bytes.Buffer)
 	buf.WriteString("123456")
-	mb := NewRegretableReaderCloserSize(ioutil.NopCloser(buf), 3)
+	mb := NewRegretableReaderCloserSize(io.NopCloser(buf), 3)
 	mb.Read(make([]byte, 4))
 	mb.Regret()
 }

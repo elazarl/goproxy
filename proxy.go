@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strings"
 	"sync/atomic"
 )
 
@@ -28,9 +29,11 @@ type ProxyHttpServer struct {
 	Tr              *http.Transport
 	// ConnectDial will be used to create TCP connections for CONNECT requests
 	// if nil Tr.Dial will be used
-	ConnectDial func(network string, addr string) (net.Conn, error)
-	CertStore   CertStorage
-	KeepHeader  bool
+	ConnectDial        func(network string, addr string) (net.Conn, error)
+	ConnectDialWithReq func(req *http.Request, network string, addr string) (net.Conn, error)
+	CertStore          CertStorage
+	KeepHeader         bool
+	AllowHTTP2         bool
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
@@ -42,9 +45,8 @@ func copyHeaders(dst, src http.Header, keepDestHeaders bool) {
 		}
 	}
 	for k, vs := range src {
-		for _, v := range vs {
-			dst.Add(k, v)
-		}
+		// direct assignment to avoid canonicalization
+		dst[k] = append([]string(nil), vs...)
 	}
 }
 
@@ -59,7 +61,7 @@ func isEof(r *bufio.Reader) bool {
 func (proxy *ProxyHttpServer) filterRequest(r *http.Request, ctx *ProxyCtx) (req *http.Request, resp *http.Response) {
 	req = r
 	for _, h := range proxy.reqHandlers {
-		req, resp = h.Handle(r, ctx)
+		req, resp = h.Handle(req, ctx)
 		// non-nil resp means the handler decided to skip sending the request
 		// and return canned response instead.
 		if resp != nil {
@@ -108,10 +110,24 @@ func RemoveProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 	r.Header.Del("Connection")
 }
 
+type flushWriter struct {
+	w io.Writer
+}
+
+func (fw flushWriter) Write(p []byte) (int, error) {
+	n, err := fw.w.Write(p)
+	if f, ok := fw.w.(http.Flusher); ok {
+		// only flush if the Writer implements the Flusher interface.
+		f.Flush()
+	}
+
+	return n, err
+}
+
 // Standard net/http function. Shouldn't be used directly, http.Serve will use it.
 func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	//r.Header["X-Forwarded-For"] = w.RemoteAddr()
-	if r.Method == "CONNECT" {
+	if r.Method == http.MethodConnect {
 		proxy.handleHttps(w, r)
 	} else {
 		ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy}
@@ -178,7 +194,16 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 		copyHeaders(w.Header(), resp.Header, proxy.KeepDestinationHeaders)
 		w.WriteHeader(resp.StatusCode)
-		nr, err := io.Copy(w, resp.Body)
+		var copyWriter io.Writer = w
+		// Content-Type header may also contain charset definition, so here we need to check the prefix.
+		// Transfer-Encoding can be a list of comma separated values, so we use Contains() for it.
+		if strings.HasPrefix(w.Header().Get("content-type"), "text/event-stream") ||
+			strings.Contains(w.Header().Get("transfer-encoding"), "chunked") {
+			// server-side events, flush the buffered data to the client.
+			copyWriter = &flushWriter{w: w}
+		}
+
+		nr, err := io.Copy(copyWriter, resp.Body)
 		if err := resp.Body.Close(); err != nil {
 			ctx.Warnf("Can't close response body %v", err)
 		}
@@ -189,17 +214,12 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 // NewProxyHttpServer creates and returns a proxy server, logging to stderr by default
 func NewProxyHttpServer() *ProxyHttpServer {
 	proxy := ProxyHttpServer{
-		Logger:        log.New(os.Stderr, "", log.LstdFlags),
-		reqHandlers:   []ReqHandler{},
-		respHandlers:  []RespHandler{},
-		httpsHandlers: []HttpsHandler{},
+		Logger: log.New(os.Stderr, "", log.LstdFlags),
 		NonproxyHandler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, "This is a proxy server. Does not respond to non-proxy requests.", 500)
 		}),
 		Tr: &http.Transport{TLSClientConfig: tlsClientSkipVerify, Proxy: http.ProxyFromEnvironment},
 	}
-
 	proxy.ConnectDial = dialerFromEnv(&proxy)
-
 	return &proxy
 }
