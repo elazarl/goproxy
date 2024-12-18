@@ -79,7 +79,8 @@ func (proxy *ProxyHttpServer) filterResponse(respOrig *http.Response, ctx *Proxy
 	return
 }
 
-func removeProxyHeaders(ctx *ProxyCtx, r *http.Request) {
+// RemoveProxyHeaders removes all proxy headers which should not propagate to the next hop
+func RemoveProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 	r.RequestURI = "" // this must be reset when serving a request with the client
 	ctx.Logf("Sending request %v %v", r.Method, r.URL.String())
 	// If no Accept-Encoding header exists, Transport will add the headers it can accept
@@ -146,7 +147,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			}
 
 			if !proxy.KeepHeader {
-				removeProxyHeaders(ctx, r)
+				RemoveProxyHeaders(ctx, r)
 			}
 			resp, err = ctx.RoundTrip(r)
 			if err != nil {
