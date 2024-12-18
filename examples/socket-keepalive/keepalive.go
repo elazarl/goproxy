@@ -20,12 +20,8 @@ func main() {
 		if c, ok := c.(*net.TCPConn); err == nil && ok {
 			c.SetKeepAlive(true)
 			go func() {
-				select {
-				case <-ctx.Done():
-					{
-						c.Close()
-					}
-				}
+				<-ctx.Done()
+				c.Close()
 			}()
 		}
 		return
