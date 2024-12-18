@@ -16,7 +16,7 @@ func equal(u, v []string) bool {
 	if len(u) != len(v) {
 		return false
 	}
-	for i, _ := range u {
+	for i := range u {
 		if u[i] != v[i] {
 			return false
 		}
@@ -63,7 +63,7 @@ func TestDefectiveScriptParser(t *testing.T) {
 }
 
 func proxyWithLog() (*http.Client, *bytes.Buffer) {
-	proxy := NewJqueryVersionProxy()
+	proxy := NewJQueryVersionProxy()
 	proxyServer := httptest.NewServer(proxy)
 	buf := new(bytes.Buffer)
 	proxy.Logger = log.New(buf, "", 0)

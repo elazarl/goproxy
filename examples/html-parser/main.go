@@ -31,7 +31,7 @@ func findScriptSrc(html string) []string {
 // NewJQueryVersionProxy creates a proxy checking responses HTML content, looks
 // for scripts referencing jQuery library and emits warnings if different
 // versions of the library are being used for a given host.
-func NewJqueryVersionProxy() *goproxy.ProxyHttpServer {
+func NewJQueryVersionProxy() *goproxy.ProxyHttpServer {
 	proxy := goproxy.NewProxyHttpServer()
 	m := make(map[string]string)
 	jqueryMatcher := regexp.MustCompile(`(?i:jquery\.)`)
@@ -59,6 +59,6 @@ func NewJqueryVersionProxy() *goproxy.ProxyHttpServer {
 }
 
 func main() {
-	proxy := NewJqueryVersionProxy()
+	proxy := NewJQueryVersionProxy()
 	log.Fatal(http.ListenAndServe(":8080", proxy))
 }
