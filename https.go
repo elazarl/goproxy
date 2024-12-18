@@ -157,14 +157,12 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 	case ConnectHTTPMitm:
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 		ctx.Logf("Assuming CONNECT is plain HTTP tunneling, mitm proxying it")
-		targetSiteCon, err := proxy.connectDial(ctx, "tcp", host)
-		if err != nil {
-			ctx.Warnf("Error dialing to %s: %s", host, err.Error())
-			return
-		}
+
+		var targetSiteCon net.Conn
+		var remote *bufio.Reader
+
 		for {
 			client := bufio.NewReader(proxyClient)
-			remote := bufio.NewReader(targetSiteCon)
 			req, err := http.ReadRequest(client)
 			if err != nil && err != io.EOF {
 				ctx.Warnf("cannot read request of MITM HTTP client: %+#v", err)
@@ -174,6 +172,17 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			}
 			req, resp := proxy.filterRequest(req, ctx)
 			if resp == nil {
+				// Establish a connection with the remote server only if the proxy
+				// doesn't produce a response
+				if targetSiteCon == nil {
+					targetSiteCon, err = proxy.connectDial(ctx, "tcp", host)
+					if err != nil {
+						ctx.Warnf("Error dialing to %s: %s", host, err.Error())
+						return
+					}
+					remote = bufio.NewReader(targetSiteCon)
+				}
+
 				if err := req.Write(targetSiteCon); err != nil {
 					httpError(proxyClient, ctx, err)
 					return
@@ -310,6 +319,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 
 				if resp.Request.Method == http.MethodHead {
 					// don't change Content-Length for HEAD request
+				} else if (resp.StatusCode >= 100 && resp.StatusCode < 200) ||
+					resp.StatusCode == http.StatusNoContent {
+					// RFC7230: A server MUST NOT send a Content-Length header field in any response
+					// with a status code of 1xx (Informational) or 204 (No Content)
+					resp.Header.Del("Content-Length")
 				} else {
 					// Since we don't know the length of resp, return chunked encoded response
 					// TODO: use a more reasonable scheme
@@ -327,8 +341,12 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					return
 				}
 
-				if resp.Request.Method == http.MethodHead {
-					// Don't write out a response body for HEAD request
+				if resp.Request.Method == http.MethodHead ||
+					(resp.StatusCode >= 100 && resp.StatusCode < 200) ||
+					resp.StatusCode == http.StatusNoContent ||
+					resp.StatusCode == http.StatusNotModified {
+					// Don't write out a response body, when it's not allowed
+					// in RFC7230
 				} else {
 					chunked := newChunkedWriter(rawClientTls)
 					if _, err := io.Copy(chunked, resp.Body); err != nil {
