@@ -41,6 +41,11 @@ func main() {
 		// socks5://localhost:8082
 		return url.Parse("http://localhost:8082")
 	}
+	connectReqHandler := func(req *http.Request) {
+		SetBasicAuth(username, password, req)
+	}
+	middleProxy.ConnectDial = middleProxy.NewConnectDialToProxyWithHandler("http://localhost:8082", connectReqHandler)
+
 	middleProxy.OnRequest().Do(goproxy.FuncReqHandler(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		SetBasicAuth(username, password, req)
 		return req, nil
