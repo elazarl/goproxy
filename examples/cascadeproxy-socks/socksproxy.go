@@ -1,13 +1,3 @@
-// This example demonstrates how to configure goproxy to act as an HTTP/HTTPS proxy
-// that forwards all traffic through a SOCKS5 proxy.
-// The goproxy server acts as an aggregator, handling incoming HTTP and HTTPS requests
-// and routing them via the SOCKS5 proxy.
-// Example usage:
-// socks proxy with no auth:
-// 		go run socksproxy.go -v -addr ":8080" -socks "localhost:1080"
-// socks with auth:
-// 		go run socksproxy.go -v -addr ":8080" -socks "localhost:1080" -user "bob" -pass "123"
-
 package main
 
 import (
@@ -17,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"strings"
 )
 
 func createSocksProxy(socksAddr string, auth SocksAuth) func(r *http.Request) (*url.URL, error) {
@@ -53,16 +42,7 @@ func main() {
 		return req, nil
 	}))
 	proxyServer.Tr.Proxy = createSocksProxy(*socksAddr, auth)
-	proxyServer.Tr.Dial = func(network, addr string) (net.Conn, error) {
-		return net.Dial(network, addr)
-	}
-	socksConnectDial, err := NewSocks5ConnectDialedToProxy(proxyServer, *socksAddr, &auth, func(req *http.Request) {
-		if strings.ContainsRune(req.URL.Host, ':') {
-			req.URL.Host = strings.Split(req.URL.Host, ":")[0]
-		}
-		resolvedAddr, _ := net.ResolveIPAddr("ip", req.URL.Host)
-		req.URL.Host = resolvedAddr.String() + ":" + req.URL.Port()
-	})
+	socksConnectDial, err := NewSocks5ConnectDialedToProxy(proxyServer, *socksAddr, &auth, nil)
 	if err != nil {
 		log.Fatalf("failed to create SOCKS5 connect dial: %v", err)
 	}
