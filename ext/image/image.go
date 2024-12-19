@@ -8,7 +8,7 @@ import (
 	_ "image/gif"
 	"image/jpeg"
 	"image/png"
-	"io/ioutil"
+	"io"
 	"net/http"
 )
 
@@ -25,7 +25,7 @@ func HandleImage(f func(img image.Image, ctx *ProxyCtx) image.Image) RespHandler
 		if !RespIsImage.HandleResp(resp, ctx) {
 			return resp
 		}
-		if resp.StatusCode != 200 {
+		if resp.StatusCode != http.StatusOK {
 			// we might get 304 - not modified response without data
 			return resp
 		}
@@ -72,7 +72,7 @@ func HandleImage(f func(img image.Image, ctx *ProxyCtx) image.Image) RespHandler
 		default:
 			panic("unhandlable type" + contentType)
 		}
-		resp.Body = ioutil.NopCloser(buf)
+		resp.Body = io.NopCloser(buf)
 		return resp
 	})
 }

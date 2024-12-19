@@ -3,7 +3,7 @@ module github.com/elazarl/goproxy
 go 1.20
 
 require (
-	github.com/elazarl/goproxy/ext v0.0.0-20241216102027-e85c60b37433
+	github.com/elazarl/goproxy/ext v0.0.0-20241217120900-7711dfa3811c
 	golang.org/x/net v0.32.0
 )
 
