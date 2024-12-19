@@ -778,7 +778,7 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 
 	// Defer this logic to ensure we always set the bytes sent/received
 	// regardless of the return condition.
-	go func() {
+	defer func() {
 		switch dir {
 		case "sent":
 			proxyCtx.BytesSent = written
