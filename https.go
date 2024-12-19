@@ -776,6 +776,17 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 	var written int64
 	var err error
 
+	// Defer this logic to ensure we always set the bytes sent/received
+	// regardless of the return condition.
+	go func() {
+		switch dir {
+		case "sent":
+			proxyCtx.BytesSent = written
+		case "recv":
+			proxyCtx.BytesReceived = written
+		}
+	}()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -797,9 +808,9 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 			}
 			if ew != nil {
 				// Add timeout handling for writes
-		                if (errors.Is(ew, os.ErrDeadlineExceeded) || errors.Is(ew, syscall.ETIMEDOUT)) && dst.IgnoreDeadlineErrors {
-		                    continue
-		                }
+				if (errors.Is(ew, os.ErrDeadlineExceeded) || errors.Is(ew, syscall.ETIMEDOUT)) && dst.IgnoreDeadlineErrors {
+					continue
+				}
 				err = ew
 				break
 			}
@@ -827,13 +838,6 @@ func copyAndClose(ctx context.Context, cancel context.CancelFunc, proxyCtx *Prox
 	}
 	if err != nil {
 		proxyCtx.Warnf("Error copying: %s", err)
-	}
-
-	switch dir {
-	case "sent":
-		proxyCtx.BytesSent = written
-	case "recv":
-		proxyCtx.BytesReceived = written
 	}
 }
 
