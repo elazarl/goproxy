@@ -11,72 +11,62 @@
 package main
 
 import (
-	"context"
 	"flag"
-	"fmt"
 	"github.com/elazarl/goproxy"
-	"golang.org/x/net/proxy"
 	"log"
 	"net"
 	"net/http"
+	"net/url"
+	"strings"
 )
 
-func createSocksDialer(socksAddr string, auth proxy.Auth) func(network, addr string) (net.Conn, error) {
-	return func(network, addr string) (net.Conn, error) {
-		dialer, err := proxy.SOCKS5(network, socksAddr, &auth, proxy.Direct)
-		if err != nil {
-			return nil, err
+func createSocksProxy(socksAddr string, auth SocksAuth) func(r *http.Request) (*url.URL, error) {
+	return func(r *http.Request) (*url.URL, error) {
+		Url := &url.URL{
+			Scheme: "socks5",
+			Host:   socksAddr,
 		}
-		resolvedAddr, err := resolveAddress(addr)
-		if err != nil {
-			return nil, err
+		if auth.Username != "" {
+			Url.User = url.UserPassword(auth.Username, auth.Password)
 		}
-		return dialer.Dial(network, resolvedAddr)
+		return Url, nil
 	}
 }
 
-func createSocksDialerContext(socksAddr string, auth proxy.Auth) func(context.Context, string, string) (net.Conn, error) {
-	return func(ctx context.Context, network, addr string) (net.Conn, error) {
-		dialer, err := proxy.SOCKS5(network, socksAddr, &auth, proxy.Direct)
-		if err != nil {
-			return nil, err
-		}
-		resolvedAddr, err := resolveAddress(addr)
-		if err != nil {
-			return nil, err
-		}
-		return dialer.Dial(network, resolvedAddr)
-	}
-}
-
-func resolveAddress(addr string) (string, error) {
-	host, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		return "", fmt.Errorf("invalid address format: %w", err)
-	}
-
-	ipAddr, err := net.ResolveIPAddr("ip", host)
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve hostname: %w", err)
-	}
-
-	return net.JoinHostPort(ipAddr.String(), port), nil
-}
 func main() {
 	verbose := flag.Bool("v", false, "should every proxy request be logged to stdout")
 	addr := flag.String("addr", ":8080", "proxy listen address")
 	socksAddr := flag.String("socks", "127.0.0.1:1080", "socks proxy address")
-	username := flag.String("user", "", "username for SOCKS5 proxy")
+	username := flag.String("user", "", "username for SOCKS5 proxy if auth is required")
 	password := flag.String("pass", "", "password for SOCKS5 proxy")
 	flag.Parse()
 
-	auth := proxy.Auth{
-		User:     *username,
+	auth := SocksAuth{
+		Username: *username,
 		Password: *password,
 	}
 	proxyServer := goproxy.NewProxyHttpServer()
-	proxyServer.ConnectDial = createSocksDialer(*socksAddr, auth)           // Routing HTTP request
-	proxyServer.Tr.DialContext = createSocksDialerContext(*socksAddr, auth) // Routing HTTPS request
+
+	proxyServer.OnRequest().Do(goproxy.FuncReqHandler(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		resolvedAddr, _ := net.ResolveIPAddr("ip", req.URL.Host)
+		req.URL.Host = resolvedAddr.String() + ":" + req.URL.Port()
+		return req, nil
+	}))
+	proxyServer.Tr.Proxy = createSocksProxy(*socksAddr, auth)
+	proxyServer.Tr.Dial = func(network, addr string) (net.Conn, error) {
+		return net.Dial(network, addr)
+	}
+	socksConnectDial, err := NewSocks5ConnectDialedToProxy(proxyServer, *socksAddr, &auth, func(req *http.Request) {
+		if strings.ContainsRune(req.URL.Host, ':') {
+			req.URL.Host = strings.Split(req.URL.Host, ":")[0]
+		}
+		resolvedAddr, _ := net.ResolveIPAddr("ip", req.URL.Host)
+		req.URL.Host = resolvedAddr.String() + ":" + req.URL.Port()
+	})
+	if err != nil {
+		log.Fatalf("failed to create SOCKS5 connect dial: %v", err)
+	}
+	proxyServer.ConnectDial = socksConnectDial
 	proxyServer.Verbose = *verbose
 
 	log.Fatalln(http.ListenAndServe(*addr, proxyServer))
