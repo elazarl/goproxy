@@ -8,7 +8,6 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
-	"image"
 	"io"
 	"net"
 	"net/http"
@@ -22,7 +21,6 @@ import (
 	"time"
 
 	"github.com/elazarl/goproxy"
-	goproxy_image "github.com/elazarl/goproxy/ext/image"
 )
 
 var acceptAllCerts = &tls.Config{InsecureSkipVerify: true}
@@ -221,18 +219,6 @@ func TestContentType(t *testing.T) {
 	}
 }
 
-func getImage(file string, t *testing.T) image.Image {
-	newimage, err := os.ReadFile(file)
-	if err != nil {
-		t.Fatal("Cannot read file", file, err)
-	}
-	img, _, err := image.Decode(bytes.NewReader(newimage))
-	if err != nil {
-		t.Fatal("Cannot decode image", file, err)
-	}
-	return img
-}
-
 func readAll(r io.Reader, t *testing.T) []byte {
 	b, err := io.ReadAll(r)
 	if err != nil {
@@ -259,84 +245,6 @@ func panicOnErr(err error, msg string) {
 	}
 }
 
-func compareImage(eImg, aImg image.Image, t *testing.T) {
-	if eImg.Bounds().Dx() != aImg.Bounds().Dx() || eImg.Bounds().Dy() != aImg.Bounds().Dy() {
-		t.Error("image sizes different")
-		return
-	}
-	for i := 0; i < eImg.Bounds().Dx(); i++ {
-		for j := 0; j < eImg.Bounds().Dy(); j++ {
-			er, eg, eb, ea := eImg.At(i, j).RGBA()
-			ar, ag, ab, aa := aImg.At(i, j).RGBA()
-			if er != ar || eg != ag || eb != ab || ea != aa {
-				t.Error("images different at", i, j, "vals\n", er, eg, eb, ea, "\n", ar, ag, ab, aa, aa)
-				return
-			}
-		}
-	}
-}
-
-func TestConstantImageHandler(t *testing.T) {
-	proxy := goproxy.NewProxyHttpServer()
-	//panda := getImage("panda.png", t)
-	football := getImage("test_data/football.png", t)
-	proxy.OnResponse().Do(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
-		return football
-	}))
-
-	client, l := oneShotProxy(proxy, t)
-	defer l.Close()
-
-	resp, err := client.Get(localFile("test_data/panda.png"))
-	if err != nil {
-		t.Fatal("Cannot get panda.png", err)
-	}
-
-	img, _, err := image.Decode(resp.Body)
-	if err != nil {
-		t.Error("decode", err)
-	} else {
-		compareImage(football, img, t)
-	}
-}
-
-func TestImageHandler(t *testing.T) {
-	proxy := goproxy.NewProxyHttpServer()
-	football := getImage("test_data/football.png", t)
-
-	proxy.OnResponse(goproxy.UrlIs("/test_data/panda.png")).Do(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
-		return football
-	}))
-
-	client, l := oneShotProxy(proxy, t)
-	defer l.Close()
-
-	resp, err := client.Get(localFile("test_data/panda.png"))
-	if err != nil {
-		t.Fatal("Cannot get panda.png", err)
-	}
-
-	img, _, err := image.Decode(resp.Body)
-	if err != nil {
-		t.Error("decode", err)
-	} else {
-		compareImage(football, img, t)
-	}
-
-	// and again
-	resp, err = client.Get(localFile("test_data/panda.png"))
-	if err != nil {
-		t.Fatal("Cannot get panda.png", err)
-	}
-
-	img, _, err = image.Decode(resp.Body)
-	if err != nil {
-		t.Error("decode", err)
-	} else {
-		compareImage(football, img, t)
-	}
-}
-
 func TestChangeResp(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
@@ -357,30 +265,6 @@ func TestChangeResp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-}
-func TestReplaceImage(t *testing.T) {
-	proxy := goproxy.NewProxyHttpServer()
-
-	panda := getImage("test_data/panda.png", t)
-	football := getImage("test_data/football.png", t)
-
-	proxy.OnResponse(goproxy.UrlIs("/test_data/panda.png")).Do(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
-		return football
-	}))
-	proxy.OnResponse(goproxy.UrlIs("/test_data/football.png")).Do(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
-		return panda
-	}))
-
-	client, l := oneShotProxy(proxy, t)
-	defer l.Close()
-
-	imgByPandaReq, _, err := image.Decode(bytes.NewReader(getOrFail(localFile("test_data/panda.png"), client, t)))
-	fatalOnErr(err, "decode panda", t)
-	compareImage(football, imgByPandaReq, t)
-
-	imgByFootballReq, _, err := image.Decode(bytes.NewReader(getOrFail(localFile("test_data/football.png"), client, t)))
-	fatalOnErr(err, "decode football", t)
-	compareImage(panda, imgByFootballReq, t)
 }
 
 func getCert(c *tls.Conn, t *testing.T) []byte {
