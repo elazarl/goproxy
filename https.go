@@ -157,7 +157,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			go func() {
 				err := copyOrWarn(ctx, targetSiteCon, proxyClient)
 				if err != nil && proxy.ConnectionErrHandler != nil {
-					proxy.ConnectionErrHandler(w, ctx, err)
+					proxy.ConnectionErrHandler(proxyClient, ctx, err)
 				}
 				_ = targetSiteCon.Close()
 			}()
