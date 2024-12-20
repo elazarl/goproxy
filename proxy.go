@@ -34,6 +34,14 @@ type ProxyHttpServer struct {
 	CertStore          CertStorage
 	KeepHeader         bool
 	AllowHTTP2         bool
+	// KeepAcceptEncoding, if true, prevents the proxy from dropping
+	// Accept-Encoding headers from the client.
+	//
+	// Note that the outbound http.Transport may still choose to add
+	// Accept-Encoding: gzip if the client did not explicitly send an
+	// Accept-Encoding header. To disable this behavior, set
+	// Tr.DisableCompression to true.
+	KeepAcceptEncoding bool
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
@@ -83,9 +91,11 @@ func (proxy *ProxyHttpServer) filterResponse(respOrig *http.Response, ctx *Proxy
 func RemoveProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 	r.RequestURI = "" // this must be reset when serving a request with the client
 	ctx.Logf("Sending request %v %v", r.Method, r.URL.String())
-	// If no Accept-Encoding header exists, Transport will add the headers it can accept
-	// and would wrap the response body with the relevant reader.
-	r.Header.Del("Accept-Encoding")
+	if !ctx.Proxy.KeepAcceptEncoding {
+		// If no Accept-Encoding header exists, Transport will add the headers it can accept
+		// and would wrap the response body with the relevant reader.
+		r.Header.Del("Accept-Encoding")
+	}
 	// curl can add that, see
 	// https://jdebp.eu./FGA/web-proxy-connection-header.html
 	r.Header.Del("Proxy-Connection")
@@ -153,7 +163,6 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			if err != nil {
 				ctx.Error = err
 				resp = proxy.filterResponse(nil, ctx)
-
 			}
 			if resp != nil {
 				ctx.Logf("Received response %v", resp.Status)
