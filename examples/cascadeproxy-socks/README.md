@@ -9,7 +9,7 @@ client --> goproxy --> socks5 proxy --> internet
 ```
 
 This example starts a HTTP/HTTPS proxy using goproxy that listens on port `8080`, and forward the requests to the socks5 proxy on `socks5://localhost:1080`.
-
+Its use MITM to forward the HTTP/HTTPS requests to socks5 proxy with Go standard library `net/http`. 
 
 ### Example usage:
 
