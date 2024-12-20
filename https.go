@@ -12,7 +12,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 )
 
@@ -137,17 +136,35 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		targetTCP, targetOK := targetSiteCon.(halfClosable)
 		proxyClientTCP, clientOK := proxyClient.(halfClosable)
 		if targetOK && clientOK {
-			go copyAndClose(targetTCP, proxyClientTCP)
-			go copyAndClose(proxyClientTCP, targetTCP)
+			go copyAndClose(ctx, targetTCP, proxyClientTCP)
+			go copyAndClose(ctx, proxyClientTCP, targetTCP)
 		} else {
+			// There is a race with the runtime here. In the case where the
+			// connection to the target site times out, we cannot control which
+			// io.Copy loop will receive the timeout signal first. This means
+			// that in some cases the error passed to the ConnErrorHandler will
+			// be the timeout error, and in other cases it will be an error raised
+			// by the use of a closed network connection.
+			//
+			// 2020/05/28 23:42:17 [001] WARN: Error copying to client: read tcp 127.0.0.1:33742->127.0.0.1:34763: i/o timeout
+			// 2020/05/28 23:42:17 [001] WARN: Error copying to client: read tcp 127.0.0.1:45145->127.0.0.1:60494: use of closed network connection
+			//
+			// It's also not possible to synchronize these connection closures due to
+			// TCP connections which are half-closed. When this happens, only the one
+			// side of the connection breaks out of its io.Copy loop. The other side
+			// of the connection remains open until it either times out or is reset by
+			// the client.
 			go func() {
-				var wg sync.WaitGroup
-				wg.Add(2)
-				go copyOrWarn(targetSiteCon, proxyClient, &wg)
-				go copyOrWarn(proxyClient, targetSiteCon, &wg)
-				wg.Wait()
-				proxyClient.Close()
-				targetSiteCon.Close()
+				err := copyOrWarn(ctx, targetSiteCon, proxyClient)
+				if err != nil && proxy.ConnectionErrHandler != nil {
+					proxy.ConnectionErrHandler(w, ctx, err)
+				}
+				_ = targetSiteCon.Close()
+			}()
+
+			go func() {
+				_ = copyOrWarn(ctx, proxyClient, targetSiteCon)
+				_ = proxyClient.Close()
 			}()
 		}
 
@@ -226,7 +243,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			clientTlsReader := bufio.NewReader(rawClientTls)
 			for !isEof(clientTlsReader) {
 				req, err := http.ReadRequest(clientTlsReader)
-				var ctx = &ProxyCtx{Req: req, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy, UserData: ctx.UserData}
+				var ctx = &ProxyCtx{Req: req, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy, UserData: ctx.UserData, RoundTripper: ctx.RoundTripper}
 				if err != nil && err != io.EOF {
 					return
 				}
@@ -380,22 +397,36 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 }
 
 func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
-	errStr := fmt.Sprintf("HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(err.Error()), err.Error())
-	if _, err := io.WriteString(w, errStr); err != nil {
-		ctx.Warnf("Error responding to client: %s", err)
+	if ctx.Proxy.ConnectionErrHandler != nil {
+		ctx.Proxy.ConnectionErrHandler(w, ctx, err)
+	} else {
+		errStr := fmt.Sprintf("HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(err.Error()), err.Error())
+		if _, err := io.WriteString(w, errStr); err != nil {
+			ctx.Warnf("Error responding to client: %s", err)
+		}
 	}
 	if err := w.Close(); err != nil {
 		ctx.Warnf("Error closing client connection: %s", err)
 	}
 }
 
-func copyOrWarn(dst io.Writer, src io.Reader, wg *sync.WaitGroup) {
-	_, _ = io.Copy(dst, src)
-	wg.Done()
+func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader) error {
+	_, err := io.Copy(dst, src)
+	if err != nil && errors.Is(err, net.ErrClosed) {
+		// Discard closed connection errors
+		err = nil
+	} else if err != nil {
+		ctx.Warnf("Error copying to client: %s", err)
+	}
+	return err
 }
 
-func copyAndClose(dst, src halfClosable) {
-	_, _ = io.Copy(dst, src)
+func copyAndClose(ctx *ProxyCtx, dst, src halfClosable) {
+	_, err := io.Copy(dst, src)
+	if err != nil && !errors.Is(err, net.ErrClosed) {
+		ctx.Warnf("Error copying to client: %s", err.Error())
+	}
+
 	dst.CloseWrite()
 	src.CloseRead()
 }
