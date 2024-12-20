@@ -2,8 +2,8 @@ package goproxy
 
 import (
 	"crypto/tls"
+	"mime"
 	"net/http"
-	"regexp"
 )
 
 // ProxyCtx is the Proxy context, contains useful information about every request. It is passed to
@@ -79,15 +79,15 @@ func (ctx *ProxyCtx) Warnf(msg string, argv ...interface{}) {
 	ctx.printf("WARN: "+msg, argv...)
 }
 
-var charsetFinder = regexp.MustCompile("charset=([^ ;]*)")
-
 // Will try to infer the character set of the request from the headers.
 // Returns the empty string if we don't know which character set it used.
 // Currently it will look for charset=<charset> in the Content-Type header of the request.
 func (ctx *ProxyCtx) Charset() string {
-	charsets := charsetFinder.FindStringSubmatch(ctx.Resp.Header.Get("Content-Type"))
-	if charsets == nil {
-		return ""
+	contentType := ctx.Resp.Header.Get("Content-Type")
+	if _, params, err := mime.ParseMediaType(contentType); err == nil {
+		if cs, ok := params["charset"]; ok {
+			return cs
+		}
 	}
-	return charsets[1]
+	return ""
 }
