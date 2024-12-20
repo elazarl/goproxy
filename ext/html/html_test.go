@@ -14,7 +14,6 @@ type ConstantServer int
 
 func (s ConstantServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=iso-8859-8")
-	//w.Header().Set("Content-Type","text/plain; charset=cp-1255")
 	w.Write([]byte{0xe3, 0xf3})
 }
 
