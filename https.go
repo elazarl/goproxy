@@ -263,6 +263,9 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				ctx.Req = req
 
 				req, resp := proxy.filterRequest(req, ctx)
+				if req == nil {
+					req = ctx.Req
+				}
 				if resp == nil {
 					if req.Method == "PRI" {
 						// Handle HTTP/2 connections.
@@ -381,7 +384,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					}
 				}
 
-				if ctx.Req.Close {
+				if req.Close {
 					ctx.Logf("Non-persistent connection; closing")
 					return
 				}
