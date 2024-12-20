@@ -9,26 +9,11 @@ import (
 	"strings"
 
 	"github.com/elazarl/goproxy"
-	"github.com/rogpeppe/go-charset/charset"
-	_ "github.com/rogpeppe/go-charset/data"
+	"golang.org/x/net/html/charset"
+	"golang.org/x/text/transform"
 )
 
-var IsHtml goproxy.RespCondition = goproxy.ContentTypeIs("text/html")
-
-var IsCss goproxy.RespCondition = goproxy.ContentTypeIs("text/css")
-
-var IsJavaScript goproxy.RespCondition = goproxy.ContentTypeIs("text/javascript",
-	"application/javascript")
-
-var IsJson goproxy.RespCondition = goproxy.ContentTypeIs("text/json")
-
-var IsXml goproxy.RespCondition = goproxy.ContentTypeIs("text/xml")
-
-var IsWebRelatedText goproxy.RespCondition = goproxy.ContentTypeIs("text/html",
-	"text/css",
-	"text/javascript", "application/javascript",
-	"text/xml",
-	"text/json")
+var IsHtml = goproxy.ContentTypeIs("text/html")
 
 // HandleString will receive a function that filters a string, and will convert the
 // request body to a utf8 string, according to the charset specified in the Content-Type
@@ -58,21 +43,16 @@ func HandleStringReader(f func(r io.Reader, ctx *goproxy.ProxyCtx) io.Reader) go
 		}
 
 		if strings.ToLower(charsetName) != "utf-8" {
-			r, err := charset.NewReader(charsetName, resp.Body)
-			if err != nil {
-				ctx.Warnf("Cannot convert from %v to utf-8: %v", charsetName, err)
+			tr, _ := charset.Lookup(charsetName)
+			if tr == nil {
+				ctx.Warnf("Cannot convert from %s to utf-8: not found", charsetName)
 				return resp
 			}
-			tr, err := charset.TranslatorTo(charsetName)
-			if err != nil {
-				ctx.Warnf("Can't translate to %v from utf-8: %v", charsetName, err)
-				return resp
-			}
-			if err != nil {
-				ctx.Warnf("Cannot translate to %v: %v", charsetName, err)
-				return resp
-			}
-			newr := charset.NewTranslatingReader(f(r, ctx), tr)
+
+			// Pass UTF-8 data to the callback f() function and convert its
+			// result back to the original encoding
+			r := transform.NewReader(resp.Body, tr.NewDecoder())
+			newr := transform.NewReader(f(r, ctx), tr.NewEncoder())
 			resp.Body = &readFirstCloseBoth{io.NopCloser(newr), resp.Body}
 		} else {
 			//no translation is needed, already at utf-8
