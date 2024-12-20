@@ -42,15 +42,7 @@ func main() {
 	}
 	proxyServer := goproxy.NewProxyHttpServer()
 
-	proxyServer.OnRequest().Do(goproxy.FuncReqHandler(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-		resolvedAddr, _ := net.ResolveIPAddr("ip", req.URL.Host)
-		req.URL.Host = resolvedAddr.String() + ":" + req.URL.Port()
-		return req, nil
-	}))
-
-	proxyServer.OnRequest().HandleConnect(goproxy.FuncHttpsHandler(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
-		req := ctx.Req
-		req.RequestURI = ""
+	proxyServer.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		client := &http.Client{
 			Transport: &http.Transport{
 				Proxy: createSocksProxy(*socksAddr, auth),
@@ -59,12 +51,17 @@ func main() {
 				},
 			},
 		}
-		var port string
-		if strings.ContainsRune(host, ':') {
-			host, port, _ = net.SplitHostPort(host)
+		var host, port string
+		if strings.ContainsRune(req.URL.Host, ':') {
+			splited := strings.Split(req.URL.Host, ":")
+			host = splited[0]
+			port = splited[1]
 		} else {
-			port = "443"
+			host = req.URL.Host
+			port = "80"
 		}
+
+		req.RequestURI = ""
 		switch port {
 		case "80":
 			req.URL.Scheme = "http"
@@ -72,25 +69,27 @@ func main() {
 			req.URL.Scheme = "https"
 		default:
 			ctx.Logf("Unsupported port: " + port)
-			return nil, ""
+			return nil, nil
 		}
 
-		ip, _ := net.ResolveIPAddr("ip", host)
-		host = ip.String()
-		host = net.JoinHostPort(host, port)
-		req.URL.Host = host
-
-		var err error
-		ctx.Resp, err = client.Do(req)
+		ip, err := net.ResolveIPAddr("ip", host)
 		if err != nil {
-			ctx.Logf("Failed to dial socks proxy: " + err.Error())
-			return nil, ""
+			ctx.Logf("Failed to resolve host: " + err.Error())
+			return nil, nil
+		}
+		host = net.JoinHostPort(ip.String(), port)
+		req.URL.Host = host
+		req.Host = host
+		resp, err := client.Do(req)
+		if err != nil {
+			ctx.Logf("Failed to forward request: " + err.Error())
+			return nil, nil
 		}
 		ctx.Logf("Succesfully dial to socks proxy")
-		return &goproxy.ConnectAction{
-			Action: goproxy.ConnectAccept,
-		}, host
-	}))
+		return req, resp
+	})
+
+	proxyServer.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 
 	proxyServer.Tr.Proxy = createSocksProxy(*socksAddr, auth)
 	proxyServer.Verbose = *verbose
