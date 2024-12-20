@@ -3,12 +3,13 @@ package main
 import (
 	"crypto/tls"
 	"flag"
-	"github.com/elazarl/goproxy"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/elazarl/goproxy"
 )
 
 type SocksAuth struct {
