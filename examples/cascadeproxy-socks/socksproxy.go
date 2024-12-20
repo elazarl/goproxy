@@ -1,12 +1,14 @@
 package main
 
 import (
+	"crypto/tls"
 	"flag"
 	"github.com/elazarl/goproxy"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 func createSocksProxy(socksAddr string, auth SocksAuth) func(r *http.Request) (*url.URL, error) {
@@ -41,12 +43,52 @@ func main() {
 		req.URL.Host = resolvedAddr.String() + ":" + req.URL.Port()
 		return req, nil
 	}))
+
+	proxyServer.OnRequest().HandleConnect(goproxy.FuncHttpsHandler(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+		req := ctx.Req
+		req.RequestURI = ""
+		client := &http.Client{
+			Transport: &http.Transport{
+				Proxy: createSocksProxy(*socksAddr, auth),
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+			},
+		}
+		var port string
+		if strings.ContainsRune(host, ':') {
+			host, port, _ = net.SplitHostPort(host)
+		} else {
+			port = "443"
+		}
+		switch port {
+		case "80":
+			req.URL.Scheme = "http"
+		case "443":
+			req.URL.Scheme = "https"
+		default:
+			ctx.Logf("Unsupported port: " + port)
+			return nil, ""
+		}
+
+		ip, _ := net.ResolveIPAddr("ip", host)
+		host = ip.String()
+		host = net.JoinHostPort(host, port)
+		req.URL.Host = host
+
+		var err error
+		ctx.Resp, err = client.Do(req)
+		if err != nil {
+			ctx.Logf("Failed to dial socks proxy: " + err.Error())
+			return nil, ""
+		}
+		ctx.Logf("Succesfully dial to socks proxy")
+		return &goproxy.ConnectAction{
+			Action: goproxy.ConnectAccept,
+		}, host
+	}))
+
 	proxyServer.Tr.Proxy = createSocksProxy(*socksAddr, auth)
-	socksConnectDial, err := NewSocks5ConnectDialedToProxy(proxyServer, *socksAddr, &auth, nil)
-	if err != nil {
-		log.Fatalf("failed to create SOCKS5 connect dial: %v", err)
-	}
-	proxyServer.ConnectDial = socksConnectDial
 	proxyServer.Verbose = *verbose
 
 	log.Fatalln(http.ListenAndServe(*addr, proxyServer))
