@@ -3,7 +3,7 @@ package auth
 import (
 	"bytes"
 	"encoding/base64"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 
@@ -15,12 +15,15 @@ var unauthorizedMsg = []byte("407 Proxy Authentication Required")
 func BasicUnauthorized(req *http.Request, realm string) *http.Response {
 	// TODO(elazar): verify realm is well formed
 	return &http.Response{
-		StatusCode:    407,
-		ProtoMajor:    1,
-		ProtoMinor:    1,
-		Request:       req,
-		Header:        http.Header{"Proxy-Authenticate": []string{"Basic realm=" + realm}},
-		Body:          ioutil.NopCloser(bytes.NewBuffer(unauthorizedMsg)),
+		StatusCode: http.StatusProxyAuthRequired,
+		ProtoMajor: 1,
+		ProtoMinor: 1,
+		Request:    req,
+		Header: http.Header{
+			"Proxy-Authenticate": []string{"Basic realm=" + realm},
+			"Proxy-Connection":   []string{"close"},
+		},
+		Body:          io.NopCloser(bytes.NewBuffer(unauthorizedMsg)),
 		ContentLength: int64(len(unauthorizedMsg)),
 	}
 }
@@ -65,7 +68,7 @@ func BasicConnect(realm string, f func(user, passwd string) bool) goproxy.HttpsH
 			ctx.Resp = BasicUnauthorized(ctx.Req, realm)
 			return goproxy.RejectConnect, host
 		}
-		return goproxy.OkConnect, host
+		return nil, host
 	})
 }
 

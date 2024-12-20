@@ -1,0 +1,6 @@
+github.com/elazarl/goproxy v0.0.0-20241217120900-7711dfa3811c h1:yWAGp1CjD1mQGLUsADqPn5s1n2AkGAX33XLDUgoXzyo=
+github.com/elazarl/goproxy v0.0.0-20241217120900-7711dfa3811c/go.mod h1:P73liMk9TZCyF9fXG/RyMeSizmATvpvy3ZS61/1eXn4=
+golang.org/x/net v0.33.0 h1:74SYHlV8BIgHIFC/LrYkOGIwL19eTYXQ5wc6TBuO36I=
+golang.org/x/net v0.33.0/go.mod h1:HXLR5J+9DxmrqMwG9qjGCxZ+zKXxBru04zlTvWlWuN4=
+golang.org/x/text v0.21.0 h1:zyQAAkrwaneQ066sspRyJaG9VNi/YJ1NfzcGB3hZ/qo=
+golang.org/x/text v0.21.0/go.mod h1:4IBbMaMmOPCJ8SecivzSH54+73PCFmPWxNTLm+vZkEQ=

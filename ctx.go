@@ -1,8 +1,9 @@
 package goproxy
 
 import (
+	"crypto/tls"
+	"mime"
 	"net/http"
-	"regexp"
 )
 
 // ProxyCtx is the Proxy context, contains useful information about every request. It is passed to
@@ -17,14 +18,19 @@ type ProxyCtx struct {
 	Error error
 	// A handle for the user to keep data in the context, from the call of ReqHandler to the
 	// call of RespHandler
-	UserData interface{}
+	UserData any
 	// Will connect a request to a response
-	Session int64
-	proxy   *ProxyHttpServer
+	Session   int64
+	certStore CertStorage
+	Proxy     *ProxyHttpServer
 }
 
 type RoundTripper interface {
 	RoundTrip(req *http.Request, ctx *ProxyCtx) (*http.Response, error)
+}
+
+type CertStorage interface {
+	Fetch(hostname string, gen func() (*tls.Certificate, error)) (*tls.Certificate, error)
 }
 
 type RoundTripperFunc func(req *http.Request, ctx *ProxyCtx) (*http.Response, error)
@@ -37,11 +43,11 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 	if ctx.RoundTripper != nil {
 		return ctx.RoundTripper.RoundTrip(req, ctx)
 	}
-	return ctx.proxy.Tr.RoundTrip(req)
+	return ctx.Proxy.Tr.RoundTrip(req)
 }
 
-func (ctx *ProxyCtx) printf(msg string, argv ...interface{}) {
-	ctx.proxy.Logger.Printf("[%03d] "+msg+"\n", append([]interface{}{ctx.Session & 0xFF}, argv...)...)
+func (ctx *ProxyCtx) printf(msg string, argv ...any) {
+	ctx.Proxy.Logger.Printf("[%03d] "+msg+"\n", append([]any{ctx.Session & 0xFFFF}, argv...)...)
 }
 
 // Logf prints a message to the proxy's log. Should be used in a ProxyHttpServer's filter
@@ -52,8 +58,8 @@ func (ctx *ProxyCtx) printf(msg string, argv ...interface{}) {
 //		ctx.Printf("So far %d requests",nr)
 //		return r, nil
 //	})
-func (ctx *ProxyCtx) Logf(msg string, argv ...interface{}) {
-	if ctx.proxy.Verbose {
+func (ctx *ProxyCtx) Logf(msg string, argv ...any) {
+	if ctx.Proxy.Verbose {
 		ctx.printf("INFO: "+msg, argv...)
 	}
 }
@@ -69,19 +75,19 @@ func (ctx *ProxyCtx) Logf(msg string, argv ...interface{}) {
 //		}
 //		return r, nil
 //	})
-func (ctx *ProxyCtx) Warnf(msg string, argv ...interface{}) {
+func (ctx *ProxyCtx) Warnf(msg string, argv ...any) {
 	ctx.printf("WARN: "+msg, argv...)
 }
-
-var charsetFinder = regexp.MustCompile("charset=([^ ;]*)")
 
 // Will try to infer the character set of the request from the headers.
 // Returns the empty string if we don't know which character set it used.
 // Currently it will look for charset=<charset> in the Content-Type header of the request.
 func (ctx *ProxyCtx) Charset() string {
-	charsets := charsetFinder.FindStringSubmatch(ctx.Resp.Header.Get("Content-Type"))
-	if charsets == nil {
-		return ""
+	contentType := ctx.Resp.Header.Get("Content-Type")
+	if _, params, err := mime.ParseMediaType(contentType); err == nil {
+		if cs, ok := params["charset"]; ok {
+			return cs
+		}
 	}
-	return charsets[1]
+	return ""
 }

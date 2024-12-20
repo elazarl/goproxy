@@ -3,7 +3,7 @@ package goproxy_html_test
 import (
 	"github.com/elazarl/goproxy"
 	"github.com/elazarl/goproxy/ext/html"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -14,7 +14,6 @@ type ConstantServer int
 
 func (s ConstantServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=iso-8859-8")
-	//w.Header().Set("Content-Type","text/plain; charset=cp-1255")
 	w.Write([]byte{0xe3, 0xf3})
 }
 
@@ -39,7 +38,7 @@ func TestCharset(t *testing.T) {
 	if err != nil {
 		t.Fatal("GET:", err)
 	}
-	b, err := ioutil.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal("readAll:", err)
 	}

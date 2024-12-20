@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -46,28 +47,29 @@ func main() {
 		HandleConnect(goproxy.AlwaysMitm)
 	proxy.OnRequest(goproxy.ReqHostMatches(regexp.MustCompile("^.*:80$"))).
 		HijackConnect(func(req *http.Request, client net.Conn, ctx *goproxy.ProxyCtx) {
-		defer func() {
-			if e := recover(); e != nil {
-				ctx.Logf("error connecting to remote: %v", e)
-				client.Write([]byte("HTTP/1.1 500 Cannot reach destination\r\n\r\n"))
+			defer func() {
+				if e := recover(); e != nil {
+					ctx.Logf("error connecting to remote: %v", e)
+					client.Write([]byte("HTTP/1.1 500 Cannot reach destination\r\n\r\n"))
+				}
+				client.Close()
+			}()
+			clientBuf := bufio.NewReadWriter(bufio.NewReader(client), bufio.NewWriter(client))
+
+			remote, err := connectDial(req.Context(), proxy, "tcp", req.URL.Host)
+			orPanic(err)
+			remoteBuf := bufio.NewReadWriter(bufio.NewReader(remote), bufio.NewWriter(remote))
+			for {
+				req, err := http.ReadRequest(clientBuf.Reader)
+				orPanic(err)
+				orPanic(req.Write(remoteBuf))
+				orPanic(remoteBuf.Flush())
+				resp, err := http.ReadResponse(remoteBuf.Reader, req)
+				orPanic(err)
+				orPanic(resp.Write(clientBuf.Writer))
+				orPanic(clientBuf.Flush())
 			}
-			client.Close()
-		}()
-		clientBuf := bufio.NewReadWriter(bufio.NewReader(client), bufio.NewWriter(client))
-		remote, err := connectDial(proxy, "tcp", req.URL.Host)
-		orPanic(err)
-		remoteBuf := bufio.NewReadWriter(bufio.NewReader(remote), bufio.NewWriter(remote))
-		for {
-			req, err := http.ReadRequest(clientBuf.Reader)
-			orPanic(err)
-			orPanic(req.Write(remoteBuf))
-			orPanic(remoteBuf.Flush())
-			resp, err := http.ReadResponse(remoteBuf.Reader, req)
-			orPanic(err)
-			orPanic(resp.Write(clientBuf.Writer))
-			orPanic(clientBuf.Flush())
-		}
-	})
+		})
 
 	go func() {
 		log.Fatalln(http.ListenAndServe(*http_addr, proxy))
@@ -94,13 +96,14 @@ func main() {
 				return
 			}
 			connectReq := &http.Request{
-				Method: "CONNECT",
+				Method: http.MethodConnect,
 				URL: &url.URL{
 					Opaque: tlsConn.Host(),
 					Host:   net.JoinHostPort(tlsConn.Host(), "443"),
 				},
-				Host:   tlsConn.Host(),
-				Header: make(http.Header),
+				Host:       tlsConn.Host(),
+				Header:     make(http.Header),
+				RemoteAddr: c.RemoteAddr().String(),
 			}
 			resp := dumbResponseWriter{tlsConn}
 			proxy.ServeHTTP(resp, connectReq)
@@ -109,17 +112,18 @@ func main() {
 }
 
 // copied/converted from https.go
-func dial(proxy *goproxy.ProxyHttpServer, network, addr string) (c net.Conn, err error) {
-	if proxy.Tr.Dial != nil {
-		return proxy.Tr.Dial(network, addr)
+func dial(ctx context.Context, proxy *goproxy.ProxyHttpServer, network, addr string) (c net.Conn, err error) {
+	if proxy.Tr.DialContext != nil {
+		return proxy.Tr.DialContext(ctx, network, addr)
 	}
-	return net.Dial(network, addr)
+	var d net.Dialer
+	return d.DialContext(ctx, network, addr)
 }
 
 // copied/converted from https.go
-func connectDial(proxy *goproxy.ProxyHttpServer, network, addr string) (c net.Conn, err error) {
+func connectDial(ctx context.Context, proxy *goproxy.ProxyHttpServer, network, addr string) (c net.Conn, err error) {
 	if proxy.ConnectDial == nil {
-		return dial(proxy, network, addr)
+		return dial(ctx, proxy, network, addr)
 	}
 	return proxy.ConnectDial(network, addr)
 }

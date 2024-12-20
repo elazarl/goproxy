@@ -4,16 +4,14 @@ import (
 	"bufio"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 )
 
@@ -33,9 +31,12 @@ var (
 	MitmConnect     = &ConnectAction{Action: ConnectMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
 	HTTPMitmConnect = &ConnectAction{Action: ConnectHTTPMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
 	RejectConnect   = &ConnectAction{Action: ConnectReject, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
-	httpsRegexp     = regexp.MustCompile(`^https:\/\/`)
 )
 
+// ConnectAction enables the caller to override the standard connect flow.
+// When Action is ConnectHijack, it is up to the implementer to send the
+// HTTP 200, or any other valid http response back to the client from within the
+// Hijack func
 type ConnectAction struct {
 	Action    ConnectActionLiteral
 	Hijack    func(req *http.Request, client net.Conn, ctx *ProxyCtx)
@@ -43,9 +44,25 @@ type ConnectAction struct {
 }
 
 func stripPort(s string) string {
-	ix := strings.IndexRune(s, ':')
-	if ix == -1 {
-		return s
+	var ix int
+	if strings.Contains(s, "[") && strings.Contains(s, "]") {
+		//ipv6 : for example : [2606:4700:4700::1111]:443
+
+		//strip '[' and ']'
+		s = strings.ReplaceAll(s, "[", "")
+		s = strings.ReplaceAll(s, "]", "")
+
+		ix = strings.LastIndexAny(s, ":")
+		if ix == -1 {
+			return s
+		}
+	} else {
+		//ipv4
+		ix = strings.IndexRune(s, ':')
+		if ix == -1 {
+			return s
+		}
+
 	}
 	return s[:ix]
 }
@@ -57,15 +74,28 @@ func (proxy *ProxyHttpServer) dial(network, addr string) (c net.Conn, err error)
 	return net.Dial(network, addr)
 }
 
-func (proxy *ProxyHttpServer) connectDial(network, addr string) (c net.Conn, err error) {
-	if proxy.ConnectDial == nil {
+func (proxy *ProxyHttpServer) connectDial(ctx *ProxyCtx, network, addr string) (c net.Conn, err error) {
+	if proxy.ConnectDialWithReq == nil && proxy.ConnectDial == nil {
 		return proxy.dial(network, addr)
 	}
+
+	if proxy.ConnectDialWithReq != nil {
+		return proxy.ConnectDialWithReq(ctx.Req, network, addr)
+	}
+
 	return proxy.ConnectDial(network, addr)
 }
 
+type halfClosable interface {
+	net.Conn
+	CloseWrite() error
+	CloseRead() error
+}
+
+var _ halfClosable = (*net.TCPConn)(nil)
+
 func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request) {
-	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy}
+	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy, certStore: proxy.CertStore}
 
 	hij, ok := w.(http.Hijacker)
 	if !ok {
@@ -94,16 +124,17 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		if !hasPort.MatchString(host) {
 			host += ":80"
 		}
-		targetSiteCon, err := proxy.connectDial("tcp", host)
+		targetSiteCon, err := proxy.connectDial(ctx, "tcp", host)
 		if err != nil {
+			ctx.Warnf("Error dialing to %s: %s", host, err.Error())
 			httpError(proxyClient, ctx, err)
 			return
 		}
 		ctx.Logf("Accepting CONNECT to %s", host)
-		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+		proxyClient.Write([]byte("HTTP/1.0 200 Connection established\r\n\r\n"))
 
-		targetTCP, targetOK := targetSiteCon.(*net.TCPConn)
-		proxyClientTCP, clientOK := proxyClient.(*net.TCPConn)
+		targetTCP, targetOK := targetSiteCon.(halfClosable)
+		proxyClientTCP, clientOK := proxyClient.(halfClosable)
 		if targetOK && clientOK {
 			go func() {
 				var wg sync.WaitGroup
@@ -116,33 +147,46 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 
 			}()
 		} else {
+			// There is a race with the runtime here. In the case where the
+			// connection to the target site times out, we cannot control which
+			// io.Copy loop will receive the timeout signal first. This means
+			// that in some cases the error passed to the ConnErrorHandler will
+			// be the timeout error, and in other cases it will be an error raised
+			// by the use of a closed network connection.
+			//
+			// 2020/05/28 23:42:17 [001] WARN: Error copying to client: read tcp 127.0.0.1:33742->127.0.0.1:34763: i/o timeout
+			// 2020/05/28 23:42:17 [001] WARN: Error copying to client: read tcp 127.0.0.1:45145->127.0.0.1:60494: use of closed network connection
+			//
+			// It's also not possible to synchronize these connection closures due to
+			// TCP connections which are half-closed. When this happens, only the one
+			// side of the connection breaks out of its io.Copy loop. The other side
+			// of the connection remains open until it either times out or is reset by
+			// the client.
 			go func() {
-				var wg sync.WaitGroup
-				wg.Add(2)
-				go copyOrWarn(ctx, targetSiteCon, proxyClient, &wg)
-				go copyOrWarn(ctx, proxyClient, targetSiteCon, &wg)
-				wg.Wait()
-				proxyClient.Close()
-				targetSiteCon.Close()
+				err := copyOrWarn(ctx, targetSiteCon, proxyClient)
+				if err != nil && proxy.ConnectionErrHandler != nil {
+					proxy.ConnectionErrHandler(w, ctx, err)
+				}
+				_ = targetSiteCon.Close()
+			}()
 
+			go func() {
+				_ = copyOrWarn(ctx, proxyClient, targetSiteCon)
+				_ = proxyClient.Close()
 			}()
 		}
 
 	case ConnectHijack:
-		ctx.Logf("Hijacking CONNECT to %s", host)
-		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 		todo.Hijack(r, proxyClient, ctx)
 	case ConnectHTTPMitm:
 		proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 		ctx.Logf("Assuming CONNECT is plain HTTP tunneling, mitm proxying it")
-		targetSiteCon, err := proxy.connectDial("tcp", host)
-		if err != nil {
-			ctx.Warnf("Error dialing to %s: %s", host, err.Error())
-			return
-		}
+
+		var targetSiteCon net.Conn
+		var remote *bufio.Reader
+
 		for {
 			client := bufio.NewReader(proxyClient)
-			remote := bufio.NewReader(targetSiteCon)
 			req, err := http.ReadRequest(client)
 			if err != nil && err != io.EOF {
 				ctx.Warnf("cannot read request of MITM HTTP client: %+#v", err)
@@ -152,6 +196,17 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			}
 			req, resp := proxy.filterRequest(req, ctx)
 			if resp == nil {
+				// Establish a connection with the remote server only if the proxy
+				// doesn't produce a response
+				if targetSiteCon == nil {
+					targetSiteCon, err = proxy.connectDial(ctx, "tcp", host)
+					if err != nil {
+						ctx.Warnf("Error dialing to %s: %s", host, err.Error())
+						return
+					}
+					remote = bufio.NewReader(targetSiteCon)
+				}
+
 				if err := req.Write(targetSiteCon); err != nil {
 					httpError(proxyClient, ctx, err)
 					return
@@ -188,15 +243,15 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		go func() {
 			//TODO: cache connections to the remote website
 			rawClientTls := tls.Server(proxyClient, tlsConfig)
+			defer rawClientTls.Close()
 			if err := rawClientTls.Handshake(); err != nil {
 				ctx.Warnf("Cannot handshake client %v %v", r.Host, err)
 				return
 			}
-			defer rawClientTls.Close()
 			clientTlsReader := bufio.NewReader(rawClientTls)
 			for !isEof(clientTlsReader) {
 				req, err := http.ReadRequest(clientTlsReader)
-				var ctx = &ProxyCtx{Req: req, Session: atomic.AddInt64(&proxy.sess, 1), proxy: proxy}
+				var ctx = &ProxyCtx{Req: req, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy, UserData: ctx.UserData, RoundTripper: ctx.RoundTripper}
 				if err != nil && err != io.EOF {
 					return
 				}
@@ -207,7 +262,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				req.RemoteAddr = r.RemoteAddr // since we're converting the request, need to carry over the original connecting IP as well
 				ctx.Logf("req %v", r.Host)
 
-				if !httpsRegexp.MatchString(req.URL.String()) {
+				if !strings.HasPrefix(req.URL.String(), "https://") {
 					req.URL, err = url.Parse("https://" + r.Host + req.URL.String())
 				}
 
@@ -217,12 +272,57 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 
 				req, resp := proxy.filterRequest(req, ctx)
 				if resp == nil {
-					if err != nil {
-						ctx.Warnf("Illegal URL %s", "https://"+r.Host+req.URL.Path)
+					if req.Method == "PRI" {
+						// Handle HTTP/2 connections.
+
+						// NOTE: As of 1.22, golang's http module will not recognize or
+						// parse the HTTP Body for PRI requests. This leaves the body of
+						// the http2.ClientPreface ("SM\r\n\r\n") on the wire which we need
+						// to clear before setting up the connection.
+						_, err := clientTlsReader.Discard(6)
+						if err != nil {
+							ctx.Warnf("Failed to process HTTP2 client preface: %v", err)
+							return
+						}
+						if !proxy.AllowHTTP2 {
+							ctx.Warnf("HTTP2 connection failed: disallowed")
+							return
+						}
+						tr := H2Transport{clientTlsReader, rawClientTls, tlsConfig.Clone(), host}
+						if _, err := tr.RoundTrip(req); err != nil {
+							ctx.Warnf("HTTP2 connection failed: %v", err)
+						} else {
+							ctx.Logf("Exiting on EOF")
+						}
 						return
 					}
-					removeProxyHeaders(ctx, req)
-					resp, err = ctx.RoundTrip(req)
+					if isWebSocketRequest(req) {
+						ctx.Logf("Request looks like websocket upgrade.")
+						if req.URL.Scheme == "http" {
+							ctx.Logf("Enforced HTTP websocket forwarding over TLS")
+							proxy.serveWebsocketHttpOverTLS(ctx, w, req, rawClientTls)
+						} else {
+							proxy.serveWebsocketTLS(ctx, w, req, tlsConfig, rawClientTls)
+						}
+						return
+					}
+					if err != nil {
+						if req.URL != nil {
+							ctx.Warnf("Illegal URL %s", "https://"+r.Host+req.URL.Path)
+						} else {
+							ctx.Warnf("Illegal URL %s", "https://"+r.Host)
+						}
+						return
+					}
+					if !proxy.KeepHeader {
+						RemoveProxyHeaders(ctx, req)
+					}
+					resp, err = func() (*http.Response, error) {
+						// explicitly discard request body to avoid data races in certain RoundTripper implementations
+						// see https://github.com/golang/go/issues/61596#issuecomment-1652345131
+						defer req.Body.Close()
+						return ctx.RoundTrip(req)
+					}()
 					if err != nil {
 						ctx.Warnf("Cannot read TLS response from mitm'd server %v", err)
 						return
@@ -242,10 +342,20 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					ctx.Warnf("Cannot write TLS response HTTP status from mitm'd client: %v", err)
 					return
 				}
-				// Since we don't know the length of resp, return chunked encoded response
-				// TODO: use a more reasonable scheme
-				resp.Header.Del("Content-Length")
-				resp.Header.Set("Transfer-Encoding", "chunked")
+
+				if resp.Request.Method == http.MethodHead {
+					// don't change Content-Length for HEAD request
+				} else if (resp.StatusCode >= 100 && resp.StatusCode < 200) ||
+					resp.StatusCode == http.StatusNoContent {
+					// RFC7230: A server MUST NOT send a Content-Length header field in any response
+					// with a status code of 1xx (Informational) or 204 (No Content)
+					resp.Header.Del("Content-Length")
+				} else {
+					// Since we don't know the length of resp, return chunked encoded response
+					// TODO: use a more reasonable scheme
+					resp.Header.Del("Content-Length")
+					resp.Header.Set("Transfer-Encoding", "chunked")
+				}
 				// Force connection close otherwise chrome will keep CONNECT tunnel open forever
 				resp.Header.Set("Connection", "close")
 				if err := resp.Header.Write(rawClientTls); err != nil {
@@ -256,18 +366,27 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					ctx.Warnf("Cannot write TLS response header end from mitm'd client: %v", err)
 					return
 				}
-				chunked := newChunkedWriter(rawClientTls)
-				if _, err := io.Copy(chunked, resp.Body); err != nil {
-					ctx.Warnf("Cannot write TLS response body from mitm'd client: %v", err)
-					return
-				}
-				if err := chunked.Close(); err != nil {
-					ctx.Warnf("Cannot write TLS chunked EOF from mitm'd client: %v", err)
-					return
-				}
-				if _, err = io.WriteString(rawClientTls, "\r\n"); err != nil {
-					ctx.Warnf("Cannot write TLS response chunked trailer from mitm'd client: %v", err)
-					return
+
+				if resp.Request.Method == http.MethodHead ||
+					(resp.StatusCode >= 100 && resp.StatusCode < 200) ||
+					resp.StatusCode == http.StatusNoContent ||
+					resp.StatusCode == http.StatusNotModified {
+					// Don't write out a response body, when it's not allowed
+					// in RFC7230
+				} else {
+					chunked := newChunkedWriter(rawClientTls)
+					if _, err := io.Copy(chunked, resp.Body); err != nil {
+						ctx.Warnf("Cannot write TLS response body from mitm'd client: %v", err)
+						return
+					}
+					if err := chunked.Close(); err != nil {
+						ctx.Warnf("Cannot write TLS chunked EOF from mitm'd client: %v", err)
+						return
+					}
+					if _, err = io.WriteString(rawClientTls, "\r\n"); err != nil {
+						ctx.Warnf("Cannot write TLS response chunked trailer from mitm'd client: %v", err)
+						return
+					}
 				}
 			}
 			ctx.Logf("Exiting on EOF")
@@ -286,24 +405,34 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 }
 
 func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
-	if _, err := io.WriteString(w, "HTTP/1.1 502 Bad Gateway\r\n\r\n"); err != nil {
-		ctx.Warnf("Error responding to client: %s", err)
+	if ctx.Proxy.ConnectionErrHandler != nil {
+		ctx.Proxy.ConnectionErrHandler(w, ctx, err)
+	} else {
+		errStr := fmt.Sprintf("HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(err.Error()), err.Error())
+		if _, err := io.WriteString(w, errStr); err != nil {
+			ctx.Warnf("Error responding to client: %s", err)
+		}
 	}
 	if err := w.Close(); err != nil {
 		ctx.Warnf("Error closing client connection: %s", err)
 	}
 }
 
-func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader, wg *sync.WaitGroup) {
-	if _, err := io.Copy(dst, src); err != nil {
+func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader) error {
+	_, err := io.Copy(dst, src)
+	if err != nil && errors.Is(err, net.ErrClosed) {
+		// Discard closed connection errors
+		err = nil
+	} else if err != nil {
 		ctx.Warnf("Error copying to client: %s", err)
 	}
-	wg.Done()
+	return err
 }
 
-func copyAndClose(ctx *ProxyCtx, dst, src *net.TCPConn, wg *sync.WaitGroup) {
-	if _, err := io.Copy(dst, src); err != nil {
-		ctx.Warnf("Error copying to client: %s", err)
+func copyAndClose(ctx *ProxyCtx, dst, src halfClosable, wg *sync.WaitGroup) {
+	_, err := io.Copy(dst, src)
+	if err != nil && !errors.Is(err, net.ErrClosed) {
+		ctx.Warnf("Error copying to client: %s", err.Error())
 	}
 
 	dst.CloseWrite()
@@ -323,20 +452,27 @@ func dialerFromEnv(proxy *ProxyHttpServer) func(network, addr string) (net.Conn,
 }
 
 func (proxy *ProxyHttpServer) NewConnectDialToProxy(https_proxy string) func(network, addr string) (net.Conn, error) {
+	return proxy.NewConnectDialToProxyWithHandler(https_proxy, nil)
+}
+
+func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(https_proxy string, connectReqHandler func(req *http.Request)) func(network, addr string) (net.Conn, error) {
 	u, err := url.Parse(https_proxy)
 	if err != nil {
 		return nil
 	}
 	if u.Scheme == "" || u.Scheme == "http" {
-		if strings.IndexRune(u.Host, ':') == -1 {
+		if !strings.ContainsRune(u.Host, ':') {
 			u.Host += ":80"
 		}
 		return func(network, addr string) (net.Conn, error) {
 			connectReq := &http.Request{
-				Method: "CONNECT",
+				Method: http.MethodConnect,
 				URL:    &url.URL{Opaque: addr},
 				Host:   addr,
 				Header: make(http.Header),
+			}
+			if connectReqHandler != nil {
+				connectReqHandler(connectReq)
 			}
 			c, err := proxy.dial(network, u.Host)
 			if err != nil {
@@ -353,8 +489,8 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxy(https_proxy string) func(net
 				return nil, err
 			}
 			defer resp.Body.Close()
-			if resp.StatusCode != 200 {
-				resp, err := ioutil.ReadAll(resp.Body)
+			if resp.StatusCode != http.StatusOK {
+				resp, err := io.ReadAll(io.LimitReader(resp.Body, 500))
 				if err != nil {
 					return nil, err
 				}
@@ -364,8 +500,8 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxy(https_proxy string) func(net
 			return c, nil
 		}
 	}
-	if u.Scheme == "https" {
-		if strings.IndexRune(u.Host, ':') == -1 {
+	if u.Scheme == "https" || u.Scheme == "wss" {
+		if !strings.ContainsRune(u.Host, ':') {
 			u.Host += ":443"
 		}
 		return func(network, addr string) (net.Conn, error) {
@@ -375,10 +511,13 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxy(https_proxy string) func(net
 			}
 			c = tls.Client(c, proxy.Tr.TLSClientConfig)
 			connectReq := &http.Request{
-				Method: "CONNECT",
+				Method: http.MethodConnect,
 				URL:    &url.URL{Opaque: addr},
 				Host:   addr,
 				Header: make(http.Header),
+			}
+			if connectReqHandler != nil {
+				connectReqHandler(connectReq)
 			}
 			connectReq.Write(c)
 			// Read response.
@@ -391,8 +530,8 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxy(https_proxy string) func(net
 				return nil, err
 			}
 			defer resp.Body.Close()
-			if resp.StatusCode != 200 {
-				body, err := ioutil.ReadAll(io.LimitReader(resp.Body, 500))
+			if resp.StatusCode != http.StatusOK {
+				body, err := io.ReadAll(io.LimitReader(resp.Body, 500))
 				if err != nil {
 					return nil, err
 				}
@@ -407,14 +546,28 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxy(https_proxy string) func(net
 
 func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls.Config, error) {
 	return func(host string, ctx *ProxyCtx) (*tls.Config, error) {
-		config := *defaultTLSConfig
+		var err error
+		var cert *tls.Certificate
+
+		hostname := stripPort(host)
+		config := defaultTLSConfig.Clone()
 		ctx.Logf("signing for %s", stripPort(host))
-		cert, err := signHost(*ca, []string{stripPort(host)})
+
+		genCert := func() (*tls.Certificate, error) {
+			return signHost(*ca, []string{hostname})
+		}
+		if ctx.certStore != nil {
+			cert, err = ctx.certStore.Fetch(hostname, genCert)
+		} else {
+			cert, err = genCert()
+		}
+
 		if err != nil {
 			ctx.Warnf("Cannot sign host certificate with provided CA: %s", err)
 			return nil, err
 		}
-		config.Certificates = append(config.Certificates, cert)
-		return &config, nil
+
+		config.Certificates = append(config.Certificates, *cert)
+		return config, nil
 	}
 }

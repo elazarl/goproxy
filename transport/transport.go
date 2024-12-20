@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // HTTP client implementation. See RFC 2616.
-// 
+//
 // This is the low-level Transport implementation of RoundTripper.
 // The high-level interface is in client.go.
 
@@ -12,7 +12,6 @@
 package transport
 
 import (
-	"net/http"
 	"bufio"
 	"compress/gzip"
 	"crypto/tls"
@@ -20,9 +19,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
@@ -114,8 +113,8 @@ func ProxyURL(fixedURL *url.URL) func(*http.Request) (*url.URL, error) {
 // transportRequest is a wrapper around a *Request that adds
 // optional extra headers to write.
 type transportRequest struct {
-	*http.Request        // original request, not to be mutated
-	extra    http.Header // extra headers to write, or nil
+	*http.Request             // original request, not to be mutated
+	extra         http.Header // extra headers to write, or nil
 }
 
 func (tr *transportRequest) extraHeaders() http.Header {
@@ -126,10 +125,10 @@ func (tr *transportRequest) extraHeaders() http.Header {
 }
 
 type RoundTripDetails struct {
-	Host string
+	Host    string
 	TCPAddr *net.TCPAddr
 	IsProxy bool
-	Error error
+	Error   error
 }
 
 func (t *Transport) DetailedRoundTrip(req *http.Request) (details *RoundTripDetails, resp *http.Response, err error) {
@@ -305,13 +304,12 @@ func (t *Transport) getIdleConn(cm *connectMethod) (pconn *persistConn) {
 			return
 		}
 	}
-	return
 }
 
 func (t *Transport) dial(network, addr string) (c net.Conn, raddr string, ip *net.TCPAddr, err error) {
 	if t.Dial != nil {
 		ip, err = net.ResolveTCPAddr("tcp", addr)
-		if err!=nil {
+		if err != nil {
 			return
 		}
 		c, err = t.Dial(network, addr)
@@ -319,7 +317,7 @@ func (t *Transport) dial(network, addr string) (c net.Conn, raddr string, ip *ne
 		return
 	}
 	addri, err := net.ResolveTCPAddr("tcp", addr)
-	if err!=nil {
+	if err != nil {
 		return
 	}
 	c, err = net.DialTCP("tcp", nil, addri)
@@ -352,8 +350,8 @@ func (t *Transport) getConn(cm *connectMethod) (*persistConn, error) {
 		cacheKey: cm.String(),
 		conn:     conn,
 		reqch:    make(chan requestAndChan, 50),
-		host: raddr,
-		ip: ip,
+		host:     raddr,
+		ip:       ip,
 	}
 
 	switch {
@@ -368,7 +366,7 @@ func (t *Transport) getConn(cm *connectMethod) (*persistConn, error) {
 		}
 	case cm.targetScheme == "https":
 		connectReq := &http.Request{
-			Method: "CONNECT",
+			Method: http.MethodConnect,
 			URL:    &url.URL{Opaque: cm.targetAddr},
 			Host:   cm.targetAddr,
 			Header: make(http.Header),
@@ -387,7 +385,7 @@ func (t *Transport) getConn(cm *connectMethod) (*persistConn, error) {
 			conn.Close()
 			return nil, err
 		}
-		if resp.StatusCode != 200 {
+		if resp.StatusCode != http.StatusOK {
 			f := strings.SplitN(resp.Status, " ", 2)
 			conn.Close()
 			return nil, errors.New(f[1])
@@ -472,19 +470,18 @@ func useProxy(addr string) bool {
 // http://proxy.com|http           http to proxy, http to anywhere after that
 //
 // Note: no support to https to the proxy yet.
-//
 type connectMethod struct {
 	proxyURL     *url.URL // nil for no proxy, else full proxy URL
 	targetScheme string   // "http" or "https"
 	targetAddr   string   // Not used if proxy + http targetScheme (4th example in table)
 }
 
-func (ck *connectMethod) String() string {
+func (cm *connectMethod) String() string {
 	proxyStr := ""
-	if ck.proxyURL != nil {
-		proxyStr = ck.proxyURL.String()
+	if cm.proxyURL != nil {
+		proxyStr = cm.proxyURL.String()
 	}
-	return strings.Join([]string{proxyStr, ck.targetScheme, ck.targetAddr}, "|")
+	return strings.Join([]string{proxyStr, cm.targetScheme, cm.targetAddr}, "|")
 }
 
 // addr returns the first hop "host:port" to which we need to TCP connect.
@@ -526,7 +523,7 @@ type persistConn struct {
 	broken               bool // an error has happened on this connection; marked broken so it's not reused.
 
 	host string
-	ip *net.TCPAddr
+	ip   *net.TCPAddr
 }
 
 func (pc *persistConn) isBroken() bool {
@@ -579,7 +576,7 @@ func (pc *persistConn) readLoop() {
 		if err != nil {
 			pc.close()
 		} else {
-			hasBody := rc.req.Method != "HEAD" && resp.ContentLength != 0
+			hasBody := rc.req.Method != http.MethodHead && resp.ContentLength != 0
 			if rc.addedGzip && hasBody && resp.Header.Get("Content-Encoding") == "gzip" {
 				resp.Header.Del("Content-Encoding")
 				resp.Header.Del("Content-Length")
@@ -655,7 +652,6 @@ type requestAndChan struct {
 func (pc *persistConn) roundTrip(req *transportRequest) (resp *http.Response, err error) {
 	if pc.mutateHeaderFunc != nil {
 		panic("mutateHeaderFunc not supported in modified Transport")
-		pc.mutateHeaderFunc(req.extraHeaders())
 	}
 
 	// Ask for a compressed version if the caller didn't set their
@@ -664,7 +660,7 @@ func (pc *persistConn) roundTrip(req *transportRequest) (resp *http.Response, er
 	// requested it.
 	requestedGzip := false
 	if !pc.t.DisableCompression && req.Header.Get("Accept-Encoding") == "" {
-		// Request gzip only, not deflate. Deflate is ambiguous and 
+		// Request gzip only, not deflate. Deflate is ambiguous and
 		// not as universally supported anyway.
 		// See: http://www.gzip.org/zlib/zlib_faq.html#faq38
 		requestedGzip = true
@@ -784,6 +780,6 @@ type discardOnCloseReadCloser struct {
 }
 
 func (d *discardOnCloseReadCloser) Close() error {
-	io.Copy(ioutil.Discard, d.ReadCloser) // ignore errors; likely invalid or already closed
+	io.Copy(io.Discard, d.ReadCloser) // ignore errors; likely invalid or already closed
 	return d.ReadCloser.Close()
 }
