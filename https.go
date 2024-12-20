@@ -258,14 +258,14 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					req.URL, err = url.Parse("https://" + r.Host + req.URL.String())
 				}
 
+				// Take the original value before filtering the request
+				closeConn := req.Close
+
 				// Bug fix which goproxy fails to provide request
 				// information URL in the context when does HTTPS MITM
 				ctx.Req = req
 
 				req, resp := proxy.filterRequest(req, ctx)
-				if req == nil {
-					req = ctx.Req
-				}
 				if resp == nil {
 					if req.Method == "PRI" {
 						// Handle HTTP/2 connections.
@@ -384,7 +384,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					}
 				}
 
-				if req.Close {
+				if closeConn {
 					ctx.Logf("Non-persistent connection; closing")
 					return
 				}
