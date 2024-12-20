@@ -380,9 +380,13 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 }
 
 func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
-	errStr := fmt.Sprintf("HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(err.Error()), err.Error())
-	if _, err := io.WriteString(w, errStr); err != nil {
-		ctx.Warnf("Error responding to client: %s", err)
+	if ctx.Proxy.ConnectionErrHandler != nil {
+		ctx.Proxy.ConnectionErrHandler(w, ctx, err)
+	} else {
+		errStr := fmt.Sprintf("HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(err.Error()), err.Error())
+		if _, err := io.WriteString(w, errStr); err != nil {
+			ctx.Warnf("Error responding to client: %s", err)
+		}
 	}
 	if err := w.Close(); err != nil {
 		ctx.Warnf("Error closing client connection: %s", err)
