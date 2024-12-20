@@ -3,12 +3,11 @@ package main
 import (
 	"crypto/tls"
 	"flag"
-	"github.com/elazarl/goproxy"
 	"log"
-	"net"
 	"net/http"
 	"net/url"
-	"strings"
+
+	"github.com/elazarl/goproxy"
 )
 
 type SocksAuth struct {
@@ -51,41 +50,14 @@ func main() {
 				},
 			},
 		}
-		var host, port string
-		if strings.ContainsRune(req.URL.Host, ':') {
-			splited := strings.Split(req.URL.Host, ":")
-			host = splited[0]
-			port = splited[1]
-		} else {
-			host = req.URL.Host
-			port = "80"
-		}
 
 		req.RequestURI = ""
-		switch port {
-		case "80":
-			req.URL.Scheme = "http"
-		case "443":
-			req.URL.Scheme = "https"
-		default:
-			ctx.Logf("Unsupported port: " + port)
-			return nil, nil
-		}
-
-		ip, err := net.ResolveIPAddr("ip", host)
-		if err != nil {
-			ctx.Logf("Failed to resolve host: " + err.Error())
-			return nil, nil
-		}
-		host = net.JoinHostPort(ip.String(), port)
-		req.URL.Host = host
-		req.Host = host
 		resp, err := client.Do(req)
 		if err != nil {
 			ctx.Logf("Failed to forward request: " + err.Error())
 			return nil, nil
 		}
-		ctx.Logf("Succesfully dial to socks proxy")
+		ctx.Logf("Succesfully forwarded request to socks proxy")
 		return req, resp
 	})
 
