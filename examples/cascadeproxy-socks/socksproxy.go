@@ -51,7 +51,9 @@ func main() {
 			},
 		}
 
+		// https://stackoverflow.com/questions/19595860/http-request-requesturi-field-when-making-request-in-go
 		req.RequestURI = ""
+
 		resp, err := client.Do(req)
 		if err != nil {
 			ctx.Logf("Failed to forward request: " + err.Error())
