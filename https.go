@@ -12,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 )
 
@@ -144,7 +145,6 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				wg.Wait()
 				proxyClientTCP.Close()
 				targetTCP.Close()
-
 			}()
 		} else {
 			// There is a race with the runtime here. In the case where the
