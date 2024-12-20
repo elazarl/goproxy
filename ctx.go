@@ -18,7 +18,7 @@ type ProxyCtx struct {
 	Error error
 	// A handle for the user to keep data in the context, from the call of ReqHandler to the
 	// call of RespHandler
-	UserData interface{}
+	UserData any
 	// Will connect a request to a response
 	Session   int64
 	certStore CertStorage
@@ -46,8 +46,8 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 	return ctx.Proxy.Tr.RoundTrip(req)
 }
 
-func (ctx *ProxyCtx) printf(msg string, argv ...interface{}) {
-	ctx.Proxy.Logger.Printf("[%03d] "+msg+"\n", append([]interface{}{ctx.Session & 0xFF}, argv...)...)
+func (ctx *ProxyCtx) printf(msg string, argv ...any) {
+	ctx.Proxy.Logger.Printf("[%03d] "+msg+"\n", append([]any{ctx.Session & 0xFFFF}, argv...)...)
 }
 
 // Logf prints a message to the proxy's log. Should be used in a ProxyHttpServer's filter
@@ -58,7 +58,7 @@ func (ctx *ProxyCtx) printf(msg string, argv ...interface{}) {
 //		ctx.Printf("So far %d requests",nr)
 //		return r, nil
 //	})
-func (ctx *ProxyCtx) Logf(msg string, argv ...interface{}) {
+func (ctx *ProxyCtx) Logf(msg string, argv ...any) {
 	if ctx.Proxy.Verbose {
 		ctx.printf("INFO: "+msg, argv...)
 	}
@@ -75,7 +75,7 @@ func (ctx *ProxyCtx) Logf(msg string, argv ...interface{}) {
 //		}
 //		return r, nil
 //	})
-func (ctx *ProxyCtx) Warnf(msg string, argv ...interface{}) {
+func (ctx *ProxyCtx) Warnf(msg string, argv ...any) {
 	ctx.printf("WARN: "+msg, argv...)
 }
 
