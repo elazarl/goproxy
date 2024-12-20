@@ -137,18 +137,17 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		targetTCP, targetOK := targetSiteCon.(halfClosable)
 		proxyClientTCP, clientOK := proxyClient.(halfClosable)
 		if targetOK && clientOK {
-			go copyAndClose(ctx, targetTCP, proxyClientTCP)
-			go copyAndClose(ctx, proxyClientTCP, targetTCP)
+			go copyAndClose(targetTCP, proxyClientTCP)
+			go copyAndClose(proxyClientTCP, targetTCP)
 		} else {
 			go func() {
 				var wg sync.WaitGroup
 				wg.Add(2)
-				go copyOrWarn(ctx, targetSiteCon, proxyClient, &wg)
-				go copyOrWarn(ctx, proxyClient, targetSiteCon, &wg)
+				go copyOrWarn(targetSiteCon, proxyClient, &wg)
+				go copyOrWarn(proxyClient, targetSiteCon, &wg)
 				wg.Wait()
 				proxyClient.Close()
 				targetSiteCon.Close()
-
 			}()
 		}
 
@@ -390,18 +389,13 @@ func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
 	}
 }
 
-func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader, wg *sync.WaitGroup) {
-	if _, err := io.Copy(dst, src); err != nil {
-		ctx.Warnf("Error copying to client: %s", err)
-	}
+func copyOrWarn(dst io.Writer, src io.Reader, wg *sync.WaitGroup) {
+	_, _ = io.Copy(dst, src)
 	wg.Done()
 }
 
-func copyAndClose(ctx *ProxyCtx, dst, src halfClosable) {
-	if _, err := io.Copy(dst, src); err != nil {
-		ctx.Warnf("Error copying to client: %s", err)
-	}
-
+func copyAndClose(dst, src halfClosable) {
+	_, _ = io.Copy(dst, src)
 	dst.CloseWrite()
 	src.CloseRead()
 }
