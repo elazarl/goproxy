@@ -64,7 +64,6 @@ func main() {
 	})
 
 	proxyServer.OnRequest().HandleConnect(goproxy.AlwaysMitm)
-	proxyServer.Tr.Proxy = createSocksProxy(*socksAddr, auth)
 	proxyServer.Verbose = *verbose
 
 	log.Fatalln(http.ListenAndServe(*addr, proxyServer))
