@@ -11,6 +11,10 @@ import (
 	"strings"
 )
 
+type SocksAuth struct {
+	Username, Password string
+}
+
 func createSocksProxy(socksAddr string, auth SocksAuth) func(r *http.Request) (*url.URL, error) {
 	return func(r *http.Request) (*url.URL, error) {
 		Url := &url.URL{
