@@ -22,7 +22,7 @@ func orFatal(msg string, err error, t *testing.T) {
 type ConstantHanlder string
 
 func (h ConstantHanlder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte(h))
+	_, _ = io.WriteString(w, string(h))
 }
 
 func getBrowser(args []string) string {
@@ -72,7 +72,7 @@ func testSignerTls(t *testing.T, ca tls.Certificate) {
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{RootCAs: certpool},
 	}
-	asLocalhost := strings.Replace(server.URL, "127.0.0.1", "localhost", -1)
+	asLocalhost := strings.ReplaceAll(server.URL, "127.0.0.1", "localhost")
 	req, err := http.NewRequest(http.MethodGet, asLocalhost, nil)
 	orFatal("NewRequest", err, t)
 	resp, err := tr.RoundTrip(req)

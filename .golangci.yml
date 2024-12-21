@@ -125,3 +125,6 @@ linters-settings:
       - default
     skip-generated: false
     custom-order: true
+  gosec:
+    excludes:
+      - G402 # InsecureSkipVerify

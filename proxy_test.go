@@ -222,22 +222,6 @@ func TestContentType(t *testing.T) {
 	}
 }
 
-func readAll(r io.Reader, t *testing.T) []byte {
-	b, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatal("Cannot read", err)
-	}
-	return b
-}
-
-func readFile(file string, t *testing.T) []byte {
-	b, err := os.ReadFile(file)
-	if err != nil {
-		t.Fatal("Cannot read", err)
-	}
-	return b
-}
-
 func fatalOnErr(err error, msg string, t *testing.T) {
 	if err != nil {
 		t.Fatal(msg, err)

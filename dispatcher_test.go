@@ -1,10 +1,12 @@
-package goproxy
+package goproxy_test
 
 import (
 	"net"
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/elazarl/goproxy"
 )
 
 func TestIsLocalHost(t *testing.T) {
@@ -38,7 +40,7 @@ func TestIsLocalHost(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if !IsLocalHost(req, nil) {
+				if !goproxy.IsLocalHost(req, nil) {
 					t.Fatal("expected true")
 				}
 			})

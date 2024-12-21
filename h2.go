@@ -28,7 +28,7 @@ type H2Transport struct {
 func (r *H2Transport) RoundTrip(prefaceReq *http.Request) (*http.Response, error) {
 	raddr := r.Host
 	if !strings.Contains(raddr, ":") {
-		raddr = raddr + ":443"
+		raddr += ":443"
 	}
 	rawServerTLS, err := dial("tcp", raddr)
 	if err != nil {
