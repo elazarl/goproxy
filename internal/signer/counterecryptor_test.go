@@ -1,4 +1,4 @@
-package goproxy_test
+package signer_test
 
 import (
 	"bytes"
@@ -9,7 +9,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/elazarl/goproxy"
+	"github.com/elazarl/goproxy/internal/signer"
 )
 
 type RandSeedReader struct {
@@ -23,10 +23,16 @@ func (r *RandSeedReader) Read(b []byte) (n int, err error) {
 	return len(b), nil
 }
 
+func fatalOnErr(err error, msg string, t *testing.T) {
+	if err != nil {
+		t.Fatal(msg, err)
+	}
+}
+
 func TestCounterEncDifferentConsecutive(t *testing.T) {
 	k, err := rsa.GenerateKey(&RandSeedReader{*rand.New(rand.NewSource(0xFF43109))}, 128)
 	fatalOnErr(err, "rsa.GenerateKey", t)
-	c, err := goproxy.NewCounterEncryptorRandFromKey(k, []byte("the quick brown fox run over the lazy dog"))
+	c, err := signer.NewCounterEncryptorRandFromKey(k, []byte("the quick brown fox run over the lazy dog"))
 	fatalOnErr(err, "NewCounterEncryptorRandFromKey", t)
 	for i := 0; i < 100*1000; i++ {
 		var a, b int64
@@ -41,13 +47,13 @@ func TestCounterEncDifferentConsecutive(t *testing.T) {
 func TestCounterEncIdenticalStreams(t *testing.T) {
 	k, err := rsa.GenerateKey(&RandSeedReader{*rand.New(rand.NewSource(0xFF43109))}, 128)
 	fatalOnErr(err, "rsa.GenerateKey", t)
-	c1, err := goproxy.NewCounterEncryptorRandFromKey(k, []byte("the quick brown fox run over the lazy dog"))
+	c1, err := signer.NewCounterEncryptorRandFromKey(k, []byte("the quick brown fox run over the lazy dog"))
 	fatalOnErr(err, "NewCounterEncryptorRandFromKey", t)
-	c2, err := goproxy.NewCounterEncryptorRandFromKey(k, []byte("the quick brown fox run over the lazy dog"))
+	c2, err := signer.NewCounterEncryptorRandFromKey(k, []byte("the quick brown fox run over the lazy dog"))
 	fatalOnErr(err, "NewCounterEncryptorRandFromKey", t)
 	const nOut = 1000
 	out1, out2 := make([]byte, nOut), make([]byte, nOut)
-	io.ReadFull(&c1, out1)
+	_, _ = io.ReadFull(&c1, out1)
 	tmp := out2
 	rand.Seed(0xFF43109)
 	for len(tmp) > 0 {
@@ -78,11 +84,11 @@ func stddev(data []int) float64 {
 func TestCounterEncStreamHistogram(t *testing.T) {
 	k, err := rsa.GenerateKey(&RandSeedReader{*rand.New(rand.NewSource(0xFF43109))}, 128)
 	fatalOnErr(err, "rsa.GenerateKey", t)
-	c, err := goproxy.NewCounterEncryptorRandFromKey(k, []byte("the quick brown fox run over the lazy dog"))
+	c, err := signer.NewCounterEncryptorRandFromKey(k, []byte("the quick brown fox run over the lazy dog"))
 	fatalOnErr(err, "NewCounterEncryptorRandFromKey", t)
 	nout := 100 * 1000
 	out := make([]byte, nout)
-	io.ReadFull(&c, out)
+	_, _ = io.ReadFull(&c, out)
 	refhist := make([]int, 512)
 	for i := 0; i < nout; i++ {
 		refhist[rand.Intn(256)]++

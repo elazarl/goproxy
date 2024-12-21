@@ -130,6 +130,8 @@ linters-settings:
       - G402 # InsecureSkipVerify
       - G102 # Binds to all network interfaces
       - G403 # RSA keys should be at least 2048 bits
+      - G115 # Integer overflow conversion (uint64 -> int64)
+      - G404 # Use of weak random number generator (math/rand)
 
 issues:
   exclude-rules:

@@ -1,8 +1,10 @@
-package goproxy
+package signer_test
 
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"github.com/elazarl/goproxy"
+	"github.com/elazarl/goproxy/internal/signer"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -38,7 +40,7 @@ func getBrowser(args []string) string {
 }
 
 func testSignerX509(t *testing.T, ca tls.Certificate) {
-	cert, err := signHost(ca, []string{"example.com", "1.1.1.1", "localhost"})
+	cert, err := signer.SignHost(ca, []string{"example.com", "1.1.1.1", "localhost"})
 	orFatal("singHost", err, t)
 	cert.Leaf, err = x509.ParseCertificate(cert.Certificate[0])
 	orFatal("ParseCertificate", err, t)
@@ -54,7 +56,7 @@ func testSignerX509(t *testing.T, ca tls.Certificate) {
 }
 
 func testSignerTls(t *testing.T, ca tls.Certificate) {
-	cert, err := signHost(ca, []string{"example.com", "1.1.1.1", "localhost"})
+	cert, err := signer.SignHost(ca, []string{"example.com", "1.1.1.1", "localhost"})
 	orFatal("singHost", err, t)
 	cert.Leaf, err = x509.ParseCertificate(cert.Certificate[0])
 	orFatal("ParseCertificate", err, t)
@@ -90,11 +92,11 @@ func testSignerTls(t *testing.T, ca tls.Certificate) {
 }
 
 func TestSignerRsaTls(t *testing.T) {
-	testSignerTls(t, GoproxyCa)
+	testSignerTls(t, goproxy.GoproxyCa)
 }
 
 func TestSignerRsaX509(t *testing.T) {
-	testSignerX509(t, GoproxyCa)
+	testSignerX509(t, goproxy.GoproxyCa)
 }
 
 func TestSignerEcdsaTls(t *testing.T) {
@@ -109,7 +111,7 @@ func BenchmarkSignRsa(b *testing.B) {
 	var cert *tls.Certificate
 	var err error
 	for n := 0; n < b.N; n++ {
-		cert, err = signHost(GoproxyCa, []string{"example.com", "1.1.1.1", "localhost"})
+		cert, err = signer.SignHost(goproxy.GoproxyCa, []string{"example.com", "1.1.1.1", "localhost"})
 	}
 	_ = cert
 	_ = err
@@ -119,7 +121,7 @@ func BenchmarkSignEcdsa(b *testing.B) {
 	var cert *tls.Certificate
 	var err error
 	for n := 0; n < b.N; n++ {
-		cert, err = signHost(EcdsaCa, []string{"example.com", "1.1.1.1", "localhost"})
+		cert, err = signer.SignHost(EcdsaCa, []string{"example.com", "1.1.1.1", "localhost"})
 	}
 	_ = cert
 	_ = err

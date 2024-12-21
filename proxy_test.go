@@ -222,12 +222,6 @@ func TestContentType(t *testing.T) {
 	}
 }
 
-func fatalOnErr(err error, msg string, t *testing.T) {
-	if err != nil {
-		t.Fatal(msg, err)
-	}
-}
-
 func panicOnErr(err error, msg string) {
 	if err != nil {
 		println(err.Error() + ":-" + msg)
@@ -496,7 +490,7 @@ func TestChunkedResponse(t *testing.T) {
 		if enc := resp.Header.Get("Transfer-Encoding"); enc != "" {
 			t.Fatal("Chunked response should be received as plaintext", enc)
 		}
-		resp.Body = io.NopCloser(bytes.NewBufferString(strings.Replace(string(b), "e", "E", -1)))
+		resp.Body = io.NopCloser(bytes.NewBufferString(strings.ReplaceAll(string(b), "e", "E")))
 		return resp
 	})
 
@@ -507,7 +501,7 @@ func TestChunkedResponse(t *testing.T) {
 	panicOnErr(err, "client.Get")
 	b, err = io.ReadAll(resp.Body)
 	panicOnErr(err, "readall proxy")
-	if string(b) != strings.Replace(expected, "e", "E", -1) {
+	if string(b) != strings.ReplaceAll(expected, "e", "E") {
 		t.Error("expected", expected, "w/ e->E. Got", string(b))
 	}
 }

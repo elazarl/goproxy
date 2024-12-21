@@ -1,4 +1,4 @@
-package goproxy
+package signer
 
 import (
 	"crypto"
@@ -31,7 +31,7 @@ func hashSorted(lst []string) []byte {
 	return h.Sum(nil)
 }
 
-func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err error) {
+func SignHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err error) {
 	// Use the provided CA for certificate generation.
 	// Use already parsed Leaf certificate when present.
 	x509ca := ca.Leaf

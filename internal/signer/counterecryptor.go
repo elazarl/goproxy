@@ -1,4 +1,4 @@
-package goproxy
+package signer
 
 import (
 	"crypto/aes"
