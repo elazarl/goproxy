@@ -45,8 +45,8 @@ func TestCounterEncIdenticalStreams(t *testing.T) {
 	fatalOnErr(err, "NewCounterEncryptorRandFromKey", t)
 	c2, err := goproxy.NewCounterEncryptorRandFromKey(k, []byte("the quick brown fox run over the lazy dog"))
 	fatalOnErr(err, "NewCounterEncryptorRandFromKey", t)
-	nout := 1000
-	out1, out2 := make([]byte, nout), make([]byte, nout)
+	const nOut = 1000
+	out1, out2 := make([]byte, nOut), make([]byte, nOut)
 	io.ReadFull(&c1, out1)
 	tmp := out2
 	rand.Seed(0xFF43109)

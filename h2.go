@@ -25,7 +25,7 @@ type H2Transport struct {
 // RoundTrip executes an HTTP/2 session (including all contained streams).
 // The request and response are ignored but any error encountered during the
 // proxying from the session is returned as a result of the invocation.
-func (r *H2Transport) RoundTrip(prefaceReq *http.Request) (*http.Response, error) {
+func (r *H2Transport) RoundTrip(_ *http.Request) (*http.Response, error) {
 	raddr := r.Host
 	if !strings.Contains(raddr, ":") {
 		raddr += ":443"

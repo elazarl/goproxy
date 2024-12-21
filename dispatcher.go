@@ -203,7 +203,8 @@ func (proxy *ProxyHttpServer) OnRequest(conds ...ReqCondition) *ReqProxyConds {
 	return &ReqProxyConds{proxy, conds}
 }
 
-// ReqProxyConds aggregate ReqConditions for a ProxyHttpServer. Upon calling Do, it will register a ReqHandler that would
+// ReqProxyConds aggregate ReqConditions for a ProxyHttpServer.
+// Upon calling Do, it will register a ReqHandler that would
 // handle the request if all conditions on the HTTP request are met.
 type ReqProxyConds struct {
 	proxy    *ProxyHttpServer

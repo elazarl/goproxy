@@ -32,12 +32,11 @@ func NewCounterEncryptorRandFromKey(key any, seed []byte) (r CounterEncryptorRan
 			return
 		}
 	default:
-		err = errors.New("only RSA, ED25519 and ECDSA keys supported")
-		return
+		return r, errors.New("only RSA, ED25519 and ECDSA keys supported")
 	}
 	h := sha256.New()
 	if r.cipher, err = aes.NewCipher(h.Sum(keyBytes)[:aes.BlockSize]); err != nil {
-		return
+		return r, err
 	}
 	r.counter = make([]byte, r.cipher.BlockSize())
 	if seed != nil {
@@ -45,7 +44,7 @@ func NewCounterEncryptorRandFromKey(key any, seed []byte) (r CounterEncryptorRan
 	}
 	r.rand = make([]byte, r.cipher.BlockSize())
 	r.ix = len(r.rand)
-	return
+	return r, nil
 }
 
 func (c *CounterEncryptorRand) Seed(b []byte) {

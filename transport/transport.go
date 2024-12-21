@@ -91,10 +91,7 @@ func ProxyFromEnvironment(req *http.Request) (*url.URL, error) {
 	}
 	proxyURL, err := url.Parse(proxy)
 	if err != nil || proxyURL.Scheme == "" {
-		if u, err := url.Parse("http://" + proxy); err == nil {
-			proxyURL = u
-			err = nil
-		}
+		proxyURL, err = url.Parse("http://" + proxy)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("invalid proxy address %q: %v", proxy, err)
@@ -532,18 +529,6 @@ func (pc *persistConn) isBroken() bool {
 	return pc.broken
 }
 
-var remoteSideClosedFunc func(error) bool // or nil to use default
-
-func remoteSideClosed(err error) bool {
-	if err == io.EOF {
-		return true
-	}
-	if remoteSideClosedFunc != nil {
-		return remoteSideClosedFunc(err)
-	}
-	return false
-}
-
 func (pc *persistConn) readLoop() {
 	alive := true
 	var lastbody io.ReadCloser // last response body, if any, read on this connection
@@ -738,7 +723,7 @@ func (es *bodyEOFSignal) Read(p []byte) (n int, err error) {
 	if es.isClosed && n > 0 {
 		panic("http: unexpected bodyEOFSignal Read after Close; see issue 1725")
 	}
-	if err == io.EOF && es.fn != nil {
+	if errors.Is(err, io.EOF) && es.fn != nil {
 		es.fn()
 		es.fn = nil
 	}

@@ -798,8 +798,9 @@ func TestSimpleHttpRequest(t *testing.T) {
 	go func() {
 		fmt.Println("serving end proxy server at localhost:5000")
 		server = &http.Server{
-			Addr:    "localhost:5000",
-			Handler: proxy,
+			Addr:              "localhost:5000",
+			Handler:           proxy,
+			ReadHeaderTimeout: 10 * time.Second,
 		}
 		err := server.ListenAndServe()
 		if err == nil {

@@ -129,7 +129,7 @@ func BenchmarkSignEcdsa(b *testing.B) {
 // Eliptic Curve certificate and key for testing
 //
 
-var ECDSA_CA_CERT = []byte(`-----BEGIN CERTIFICATE-----
+var EcdsaCaCert = []byte(`-----BEGIN CERTIFICATE-----
 MIICGDCCAb8CFEkSgqYhlT0+Yyr9anQNJgtclTL0MAoGCCqGSM49BAMDMIGOMQsw
 CQYDVQQGEwJJTDEPMA0GA1UECAwGQ2VudGVyMQwwCgYDVQQHDANMb2QxEDAOBgNV
 BAoMB0dvUHJveHkxEDAOBgNVBAsMB0dvUHJveHkxGjAYBgNVBAMMEWdvcHJveHku
@@ -144,13 +144,13 @@ svyoAcrcDsynClO9aQtsC9ivZ+Pmr3MwCgYIKoZIzj0EAwMDRwAwRAIgGRSSJVSE
 98Bb3nddk2xys6a9
 -----END CERTIFICATE-----`)
 
-var ECDSA_CA_KEY = []byte(`-----BEGIN PRIVATE KEY-----
+var EcdsaCaKey = []byte(`-----BEGIN PRIVATE KEY-----
 MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgEsc8m+2aZfagnesg
 qMgXe8ph4LtVu2VOUYhHttuEDsChRANCAAQ5R+GK3bpDxQI2zvMfoEfRfCA+3glP
 Dq4W2vzCG5Uka0VXnaY9PJSvtrL8qAHK3A7MpwpTvWkLbAvYr2fj5q9z
 -----END PRIVATE KEY-----`)
 
-var EcdsaCa, ecdsaCaErr = tls.X509KeyPair(ECDSA_CA_CERT, ECDSA_CA_KEY)
+var EcdsaCa, ecdsaCaErr = tls.X509KeyPair(EcdsaCaCert, EcdsaCaKey)
 
 func init() {
 	if ecdsaCaErr != nil {

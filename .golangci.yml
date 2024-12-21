@@ -25,7 +25,6 @@ linters:
     - dupl
     - dupword
     - durationcheck
-    - err113
     - errchkjson
     - errname
     - errorlint
@@ -36,7 +35,6 @@ linters:
     - gci
     - gocheckcompilerdirectives
     - gochecksumtype
-    - goconst
     - gocritic
     - godot
     - gofmt
@@ -50,7 +48,6 @@ linters:
     - iface
     - importas
     - interfacebloat
-    - ireturn
     - lll
     - loggercheck
     - makezero
@@ -60,7 +57,6 @@ linters:
     - nakedret
     - nestif
     - nilerr
-    - nilnil
     - noctx
     - nolintlint
     - perfsprint
@@ -88,20 +84,24 @@ linters:
     - copyloopvar
     - cyclop
     - depguard
+    - err113
     - exhaustruct
     - funlen
     - ginkgolinter
     - gochecknoglobals
     - gochecknoinits
     - gocognit
+    - goconst
     - gocyclo
     - godox
     - goimports
     - gomoddirectives
     - inamedparam
     - intrange
+    - ireturn
     - maintidx
     - musttag
+    - nilnil
     - nlreturn
     - nonamedreturns
     - nosprintfhostport
@@ -128,3 +128,14 @@ linters-settings:
   gosec:
     excludes:
       - G402 # InsecureSkipVerify
+      - G102 # Binds to all network interfaces
+      - G403 # RSA keys should be at least 2048 bits
+
+issues:
+  exclude-rules:
+    - linters:
+        - revive
+      text: "add-constant: "
+    - linters:
+        - revive
+      text: "var-naming: " # TODO: Re-enable in V2
