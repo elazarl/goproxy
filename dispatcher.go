@@ -49,9 +49,15 @@ func (c RespConditionFunc) HandleResp(resp *http.Response, ctx *ProxyCtx) bool {
 // requests to url 'http://host/x'
 func UrlHasPrefix(prefix string) ReqConditionFunc {
 	return func(req *http.Request, ctx *ProxyCtx) bool {
-		return strings.HasPrefix(req.URL.Path, prefix) ||
-			strings.HasPrefix(req.URL.Host+req.URL.Path, prefix) ||
-			strings.HasPrefix(req.URL.Scheme+req.URL.Host+req.URL.Path, prefix)
+		// Make sure to include the / as the first path character
+		relativePath := req.URL.Path
+		if length := len(relativePath); length == 0 || (length > 0 && relativePath[0] != '/') {
+			relativePath = "/" + relativePath
+		}
+		return strings.HasPrefix(relativePath, prefix) ||
+			strings.HasPrefix(req.URL.Host+relativePath, prefix) ||
+			// Scheme value is something like "https", we must include the :// characters
+			strings.HasPrefix(req.URL.Scheme+"://"+req.URL.Host+relativePath, prefix)
 	}
 }
 
