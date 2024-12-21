@@ -2,6 +2,7 @@ package goproxy
 
 import (
 	"bufio"
+	"errors"
 	"io"
 	"log"
 	"net"
@@ -62,12 +63,9 @@ func copyHeaders(dst, src http.Header, keepDestHeaders bool) {
 	}
 }
 
-func isEof(r *bufio.Reader) bool {
+func isEOF(r *bufio.Reader) bool {
 	_, err := r.Peek(1)
-	if err == io.EOF {
-		return true
-	}
-	return false
+	return errors.Is(err, io.EOF)
 }
 
 func (proxy *ProxyHttpServer) filterRequest(r *http.Request, ctx *ProxyCtx) (req *http.Request, resp *http.Response) {

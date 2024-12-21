@@ -15,7 +15,7 @@ func TestRegretableReader(t *testing.T) {
 	buf.WriteString(word)
 
 	fivebytes := make([]byte, 5)
-	mb.Read(fivebytes)
+	_, _ = mb.Read(fivebytes)
 	mb.Regret()
 
 	s, _ := io.ReadAll(mb)
@@ -31,7 +31,7 @@ func TestRegretableEmptyRead(t *testing.T) {
 	buf.WriteString(word)
 
 	zero := make([]byte, 0)
-	mb.Read(zero)
+	_, _ = mb.Read(zero)
 	mb.Regret()
 
 	s, err := io.ReadAll(mb)
@@ -49,9 +49,9 @@ func TestRegretableAlsoEmptyRead(t *testing.T) {
 	one := make([]byte, 1)
 	zero := make([]byte, 0)
 	five := make([]byte, 5)
-	mb.Read(one)
-	mb.Read(zero)
-	mb.Read(five)
+	_, _ = mb.Read(one)
+	_, _ = mb.Read(zero)
+	_, _ = mb.Read(five)
 	mb.Regret()
 
 	s, _ := io.ReadAll(mb)
@@ -68,7 +68,7 @@ func TestRegretableRegretBeforeRead(t *testing.T) {
 
 	five := make([]byte, 5)
 	mb.Regret()
-	mb.Read(five)
+	_, _ = mb.Read(five)
 
 	s, err := io.ReadAll(mb)
 	if string(s) != "678" {
@@ -83,7 +83,7 @@ func TestRegretableFullRead(t *testing.T) {
 	buf.WriteString(word)
 
 	twenty := make([]byte, 20)
-	mb.Read(twenty)
+	_, _ = mb.Read(twenty)
 	mb.Regret()
 
 	s, _ := io.ReadAll(mb)
@@ -133,12 +133,6 @@ func (cc *CloseCounter) Close() error {
 	return nil
 }
 
-func assert(t *testing.T, b bool, msg string) {
-	if !b {
-		t.Errorf("Assertion Error: %s", msg)
-	}
-}
-
 func TestRegretableCloserSizeRegrets(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil || !strings.Contains(r.(string), "regret") {
@@ -148,7 +142,7 @@ func TestRegretableCloserSizeRegrets(t *testing.T) {
 	buf := new(bytes.Buffer)
 	buf.WriteString("123456")
 	mb := NewRegretableReaderCloserSize(io.NopCloser(buf), 3)
-	mb.Read(make([]byte, 4))
+	_, _ = mb.Read(make([]byte, 4))
 	mb.Regret()
 }
 
@@ -159,13 +153,13 @@ func TestRegretableCloserRegretsClose(t *testing.T) {
 	word := "12345678"
 	buf.WriteString(word)
 
-	mb.Read([]byte{0})
-	mb.Close()
+	_, _ = mb.Read([]byte{0})
+	_ = mb.Close()
 	if cc.closed != 1 {
 		t.Error("RegretableReaderCloser ignores Close")
 	}
 	mb.Regret()
-	mb.Close()
+	_ = mb.Close()
 	if cc.closed != 2 {
 		t.Error("RegretableReaderCloser does ignore Close after regret")
 	}

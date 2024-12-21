@@ -374,7 +374,7 @@ func (t *Transport) getConn(cm *connectMethod) (*persistConn, error) {
 		if pa != "" {
 			connectReq.Header.Set("Proxy-Authorization", pa)
 		}
-		connectReq.Write(conn)
+		_ = connectReq.Write(conn)
 
 		// Read response.
 		// Okay to use and discard buffered reader here, because
@@ -780,6 +780,6 @@ type discardOnCloseReadCloser struct {
 }
 
 func (d *discardOnCloseReadCloser) Close() error {
-	io.Copy(io.Discard, d.ReadCloser) // ignore errors; likely invalid or already closed
+	_, _ = io.Copy(io.Discard, d.ReadCloser) // ignore errors; likely invalid or already closed
 	return d.ReadCloser.Close()
 }

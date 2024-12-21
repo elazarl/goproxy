@@ -22,23 +22,23 @@ type RegretableReader struct {
 
 var defaultBufferSize = 500
 
-// Same as RegretableReader, but allows closing the underlying reader
+// Same as RegretableReader, but allows closing the underlying reader.
 type RegretableReaderCloser struct {
 	RegretableReader
 	c io.Closer
 }
 
-// Closes the underlying readCloser, you cannot regret after closing the stream
+// Closes the underlying readCloser, you cannot regret after closing the stream.
 func (rbc *RegretableReaderCloser) Close() error {
 	return rbc.c.Close()
 }
 
-// initialize a RegretableReaderCloser with underlying readCloser rc
+// initialize a RegretableReaderCloser with underlying readCloser rc.
 func NewRegretableReaderCloser(rc io.ReadCloser) *RegretableReaderCloser {
 	return &RegretableReaderCloser{*NewRegretableReader(rc), rc}
 }
 
-// initialize a RegretableReaderCloser with underlying readCloser rc
+// initialize a RegretableReaderCloser with underlying readCloser rc.
 func NewRegretableReaderCloserSize(rc io.ReadCloser, size int) *RegretableReaderCloser {
 	return &RegretableReaderCloser{*NewRegretableReaderSize(rc, size), rc}
 }
@@ -69,12 +69,12 @@ func (rb *RegretableReader) Forget() {
 	rb.w = 0
 }
 
-// initialize a RegretableReader with underlying reader r, whose buffer is size bytes long
+// initialize a RegretableReader with underlying reader r, whose buffer is size bytes long.
 func NewRegretableReaderSize(r io.Reader, size int) *RegretableReader {
 	return &RegretableReader{reader: r, buf: make([]byte, size)}
 }
 
-// initialize a RegretableReader with underlying reader r
+// initialize a RegretableReader with underlying reader r.
 func NewRegretableReader(r io.Reader) *RegretableReader {
 	return NewRegretableReaderSize(r, defaultBufferSize)
 }

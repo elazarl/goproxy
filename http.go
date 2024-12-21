@@ -51,11 +51,11 @@ func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request)
 		if ctx.Error != nil {
 			errorString = "error read response " + r.URL.Host + " : " + ctx.Error.Error()
 			ctx.Logf(errorString)
-			http.Error(w, ctx.Error.Error(), 500)
+			http.Error(w, ctx.Error.Error(), http.StatusInternalServerError)
 		} else {
 			errorString = "error read response " + r.URL.Host
 			ctx.Logf(errorString)
-			http.Error(w, errorString, 500)
+			http.Error(w, errorString, http.StatusInternalServerError)
 		}
 		return
 	}

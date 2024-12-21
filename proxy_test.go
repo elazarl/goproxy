@@ -594,7 +594,7 @@ func writeConnect(w io.Writer) {
 	// here: https://github.com/golang/go/issues/18824
 	validSrvURL := srv.URL[len("http:"):]
 
-	req, err := http.NewRequest("CONNECT", validSrvURL, nil)
+	req, err := http.NewRequest(http.MethodConnect, validSrvURL, nil)
 	panicOnErr(err, "NewRequest")
 	req.Write(w)
 	panicOnErr(err, "req(CONNECT).Write")

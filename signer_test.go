@@ -61,7 +61,10 @@ func testSignerTls(t *testing.T, ca tls.Certificate) {
 	expected := "key verifies with Go"
 	server := httptest.NewUnstartedServer(ConstantHanlder(expected))
 	defer server.Close()
-	server.TLS = &tls.Config{Certificates: []tls.Certificate{*cert, ca}}
+	server.TLS = &tls.Config{
+		Certificates: []tls.Certificate{*cert, ca},
+		MinVersion:   tls.VersionTLS12,
+	}
 	server.TLS.BuildNameToCertificate()
 	server.StartTLS()
 	certpool := x509.NewCertPool()

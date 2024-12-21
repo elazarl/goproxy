@@ -62,7 +62,6 @@ func stripPort(s string) string {
 		if ix == -1 {
 			return s
 		}
-
 	}
 	return s[:ix]
 }
@@ -241,7 +240,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				return
 			}
 			clientTlsReader := bufio.NewReader(rawClientTls)
-			for !isEof(clientTlsReader) {
+			for !isEOF(clientTlsReader) {
 				req, err := http.ReadRequest(clientTlsReader)
 				var ctx = &ProxyCtx{Req: req, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy, UserData: ctx.UserData, RoundTripper: ctx.RoundTripper}
 				if err != nil && err != io.EOF {
