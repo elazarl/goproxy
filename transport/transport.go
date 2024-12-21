@@ -503,7 +503,7 @@ func (cm *connectMethod) tlsHost() string {
 }
 
 // persistConn wraps a connection, usually a persistent one
-// (but may be used for non-keep-alive requests as well)
+// (but may be used for non-keep-alive requests as well).
 type persistConn struct {
 	t        *Transport
 	cacheKey string // its connectMethod.String()
@@ -710,7 +710,7 @@ var portMap = map[string]string{
 	"https": "443",
 }
 
-// canonicalAddr returns url.Host but always with a ":port" suffix
+// canonicalAddr returns url.Host but always with a ":port" suffix.
 func canonicalAddr(url *url.URL) string {
 	addr := url.Host
 	if !hasPort(addr) {

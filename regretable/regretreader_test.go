@@ -2,15 +2,16 @@ package regretable_test
 
 import (
 	"bytes"
-	. "github.com/elazarl/goproxy/regretable"
 	"io"
 	"strings"
 	"testing"
+
+	"github.com/elazarl/goproxy/regretable"
 )
 
 func TestRegretableReader(t *testing.T) {
 	buf := new(bytes.Buffer)
-	mb := NewRegretableReader(buf)
+	mb := regretable.NewRegretableReader(buf)
 	word := "12345678"
 	buf.WriteString(word)
 
@@ -26,7 +27,7 @@ func TestRegretableReader(t *testing.T) {
 
 func TestRegretableEmptyRead(t *testing.T) {
 	buf := new(bytes.Buffer)
-	mb := NewRegretableReader(buf)
+	mb := regretable.NewRegretableReader(buf)
 	word := "12345678"
 	buf.WriteString(word)
 
@@ -42,7 +43,7 @@ func TestRegretableEmptyRead(t *testing.T) {
 
 func TestRegretableAlsoEmptyRead(t *testing.T) {
 	buf := new(bytes.Buffer)
-	mb := NewRegretableReader(buf)
+	mb := regretable.NewRegretableReader(buf)
 	word := "12345678"
 	buf.WriteString(word)
 
@@ -62,7 +63,7 @@ func TestRegretableAlsoEmptyRead(t *testing.T) {
 
 func TestRegretableRegretBeforeRead(t *testing.T) {
 	buf := new(bytes.Buffer)
-	mb := NewRegretableReader(buf)
+	mb := regretable.NewRegretableReader(buf)
 	word := "12345678"
 	buf.WriteString(word)
 
@@ -78,7 +79,7 @@ func TestRegretableRegretBeforeRead(t *testing.T) {
 
 func TestRegretableFullRead(t *testing.T) {
 	buf := new(bytes.Buffer)
-	mb := NewRegretableReader(buf)
+	mb := regretable.NewRegretableReader(buf)
 	word := "12345678"
 	buf.WriteString(word)
 
@@ -108,7 +109,7 @@ func assertReadAll(t *testing.T, r io.Reader) string {
 
 func TestRegretableRegretTwice(t *testing.T) {
 	buf := new(bytes.Buffer)
-	mb := NewRegretableReader(buf)
+	mb := regretable.NewRegretableReader(buf)
 	word := "12345678"
 	buf.WriteString(word)
 
@@ -141,7 +142,7 @@ func TestRegretableCloserSizeRegrets(t *testing.T) {
 	}()
 	buf := new(bytes.Buffer)
 	buf.WriteString("123456")
-	mb := NewRegretableReaderCloserSize(io.NopCloser(buf), 3)
+	mb := regretable.NewRegretableReaderCloserSize(io.NopCloser(buf), 3)
 	_, _ = mb.Read(make([]byte, 4))
 	mb.Regret()
 }
@@ -149,7 +150,7 @@ func TestRegretableCloserSizeRegrets(t *testing.T) {
 func TestRegretableCloserRegretsClose(t *testing.T) {
 	buf := new(bytes.Buffer)
 	cc := &CloseCounter{buf, 0}
-	mb := NewRegretableReaderCloser(cc)
+	mb := regretable.NewRegretableReaderCloser(cc)
 	word := "12345678"
 	buf.WriteString(word)
 

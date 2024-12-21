@@ -36,7 +36,7 @@ var (
 // ConnectAction enables the caller to override the standard connect flow.
 // When Action is ConnectHijack, it is up to the implementer to send the
 // HTTP 200, or any other valid http response back to the client from within the
-// Hijack func
+// Hijack func.
 type ConnectAction struct {
 	Action    ConnectActionLiteral
 	Hijack    func(req *http.Request, client net.Conn, ctx *ProxyCtx)
@@ -46,9 +46,8 @@ type ConnectAction struct {
 func stripPort(s string) string {
 	var ix int
 	if strings.Contains(s, "[") && strings.Contains(s, "]") {
-		//ipv6 : for example : [2606:4700:4700::1111]:443
-
-		//strip '[' and ']'
+		// ipv6 address example: [2606:4700:4700::1111]:443
+		// strip '[' and ']'
 		s = strings.ReplaceAll(s, "[", "")
 		s = strings.ReplaceAll(s, "]", "")
 
@@ -57,7 +56,7 @@ func stripPort(s string) string {
 			return s
 		}
 	} else {
-		//ipv4
+		// ipv4
 		ix = strings.IndexRune(s, ':')
 		if ix == -1 {
 			return s
@@ -232,7 +231,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			}
 		}
 		go func() {
-			//TODO: cache connections to the remote website
+			// TODO: cache connections to the remote website
 			rawClientTls := tls.Server(proxyClient, tlsConfig)
 			defer rawClientTls.Close()
 			if err := rawClientTls.Handshake(); err != nil {
@@ -242,7 +241,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			clientTlsReader := bufio.NewReader(rawClientTls)
 			for !isEOF(clientTlsReader) {
 				req, err := http.ReadRequest(clientTlsReader)
-				var ctx = &ProxyCtx{Req: req, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy, UserData: ctx.UserData, RoundTripper: ctx.RoundTripper}
+				ctx := &ProxyCtx{Req: req, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy, UserData: ctx.UserData, RoundTripper: ctx.RoundTripper}
 				if err != nil && err != io.EOF {
 					return
 				}

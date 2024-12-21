@@ -80,6 +80,7 @@ func (proxy *ProxyHttpServer) filterRequest(r *http.Request, ctx *ProxyCtx) (req
 	}
 	return
 }
+
 func (proxy *ProxyHttpServer) filterResponse(respOrig *http.Response, ctx *ProxyCtx) (resp *http.Response) {
 	resp = respOrig
 	for _, h := range proxy.respHandlers {
@@ -89,7 +90,7 @@ func (proxy *ProxyHttpServer) filterResponse(respOrig *http.Response, ctx *Proxy
 	return
 }
 
-// RemoveProxyHeaders removes all proxy headers which should not propagate to the next hop
+// RemoveProxyHeaders removes all proxy headers which should not propagate to the next hop.
 func RemoveProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 	r.RequestURI = "" // this must be reset when serving a request with the client
 	ctx.Logf("Sending request %v %v", r.Method, r.URL.String())
@@ -138,7 +139,6 @@ func (fw flushWriter) Write(p []byte) (int, error) {
 
 // Standard net/http function. Shouldn't be used directly, http.Serve will use it.
 func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	//r.Header["X-Forwarded-For"] = w.RemoteAddr()
 	if r.Method == http.MethodConnect {
 		proxy.handleHttps(w, r)
 	} else {
@@ -146,7 +146,7 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-// NewProxyHttpServer creates and returns a proxy server, logging to stderr by default
+// NewProxyHttpServer creates and returns a proxy server, logging to stderr by default.
 func NewProxyHttpServer() *ProxyHttpServer {
 	proxy := ProxyHttpServer{
 		Logger: log.New(os.Stderr, "", log.LstdFlags),

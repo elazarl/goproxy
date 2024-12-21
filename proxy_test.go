@@ -23,13 +23,11 @@ import (
 	"github.com/elazarl/goproxy"
 )
 
-var acceptAllCerts = &tls.Config{InsecureSkipVerify: true}
-
-var noProxyClient = &http.Client{Transport: &http.Transport{TLSClientConfig: acceptAllCerts}}
-
-var https = httptest.NewTLSServer(nil)
-var srv = httptest.NewServer(nil)
-var fs = httptest.NewServer(http.FileServer(http.Dir(".")))
+var (
+	https = httptest.NewTLSServer(nil)
+	srv   = httptest.NewServer(nil)
+	fs    = httptest.NewServer(http.FileServer(http.Dir(".")))
+)
 
 type QueryHandler struct{}
 
@@ -95,7 +93,12 @@ func oneShotProxy(proxy *goproxy.ProxyHttpServer, t *testing.T) (client *http.Cl
 	s = httptest.NewServer(proxy)
 
 	proxyUrl, _ := url.Parse(s.URL)
-	tr := &http.Transport{TLSClientConfig: acceptAllCerts, Proxy: http.ProxyURL(proxyUrl)}
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+		Proxy: http.ProxyURL(proxyUrl),
+	}
 	client = &http.Client{Transport: tr}
 	return
 }
@@ -226,6 +229,7 @@ func readAll(r io.Reader, t *testing.T) []byte {
 	}
 	return b
 }
+
 func readFile(file string, t *testing.T) []byte {
 	b, err := os.ReadFile(file)
 	if err != nil {
@@ -233,11 +237,13 @@ func readFile(file string, t *testing.T) []byte {
 	}
 	return b
 }
+
 func fatalOnErr(err error, msg string, t *testing.T) {
 	if err != nil {
 		t.Fatal(msg, err)
 	}
 }
+
 func panicOnErr(err error, msg string) {
 	if err != nil {
 		println(err.Error() + ":-" + msg)
@@ -294,7 +300,7 @@ func TestSimpleMitm(t *testing.T) {
 		t.Fatal("dialing to proxy", err)
 	}
 	creq, err := http.NewRequest("CONNECT", https.URL, nil)
-	//creq,err := http.NewRequest("CONNECT","https://google.com:443",nil)
+	// creq,err := http.NewRequest("CONNECT","https://google.com:443",nil)
 	if err != nil {
 		t.Fatal("create new request", creq)
 	}
@@ -338,7 +344,6 @@ func TestConnectHandler(t *testing.T) {
 
 func TestMitmIsFiltered(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
-	//proxy.Verbose = true
 	proxy.OnRequest(goproxy.ReqHostIs(https.Listener.Addr().String())).HandleConnect(goproxy.AlwaysMitm)
 	proxy.OnRequest(goproxy.UrlIs("/momo")).DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		return nil, goproxy.TextResponse(req, "koko")
@@ -545,7 +550,6 @@ func TestGoproxyThroughProxy(t *testing.T) {
 	if r := string(getOrFail(https.URL+"/bobo", client, t)); r != "bobo bobo" {
 		t.Error("Expected bobo doubled twice, got", r)
 	}
-
 }
 
 func TestGoproxyHijackConnect(t *testing.T) {
@@ -782,7 +786,6 @@ func TestHttpsMitmURLRewrite(t *testing.T) {
 		}
 
 		resp, err := client.Do(req)
-
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -864,7 +867,7 @@ func TestResponseContentLength(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
 		buf := &bytes.Buffer{}
-		buf.Write([]byte("change"))
+		buf.WriteString("change")
 		resp.Body = io.NopCloser(buf)
 		return resp
 	})

@@ -33,7 +33,7 @@ const (
 	ContentTypeHtml = "text/html"
 )
 
-// Alias for NewResponse(r,ContentTypeText,http.StatusAccepted,text)
+// Alias for NewResponse(r,ContentTypeText,http.StatusAccepted,text).
 func TextResponse(r *http.Request, text string) *http.Response {
 	return NewResponse(r, ContentTypeText, http.StatusAccepted, text)
 }
