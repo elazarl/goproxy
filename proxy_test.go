@@ -562,13 +562,16 @@ func TestGoproxyHijackConnect(t *testing.T) {
 	proxy.OnRequest(goproxy.ReqHostIs(srv.Listener.Addr().String())).
 		HijackConnect(func(req *http.Request, client net.Conn, ctx *goproxy.ProxyCtx) {
 			t.Logf("URL %+#v\nSTR %s", req.URL, req.URL.String())
-			req.URL.Scheme = "http"
-			req.URL.Path = "/bobo"
-			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, req.URL.String(), nil)
+			getReq, err := http.NewRequestWithContext(req.Context(), http.MethodGet, (&url.URL{
+				Scheme: "http",
+				Host:   req.URL.Host,
+				Path:   "/bobo",
+			}).String(), nil)
 			if err != nil {
 				t.Fatal("Cannot create request", err)
 			}
-			resp, err := http.DefaultClient.Do(req)
+			httpClient := &http.Client{}
+			resp, err := httpClient.Do(getReq)
 			panicOnErr(err, "http.Get(CONNECT url)")
 			panicOnErr(resp.Write(client), "resp.Write(client)")
 			_ = resp.Body.Close()
@@ -644,7 +647,7 @@ func TestSelfRequest(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
 	_, l := oneShotProxy(proxy)
 	defer l.Close()
-	if !strings.Contains(string(getOrFail(t, l.URL, http.DefaultClient)), "non-proxy") {
+	if !strings.Contains(string(getOrFail(t, l.URL, &http.Client{})), "non-proxy") {
 		t.Fatal("non proxy requests should fail")
 	}
 }
@@ -898,13 +901,14 @@ func TestResponseContentLength(t *testing.T) {
 	defer proxySrv.Close()
 
 	// send request
-	http.DefaultClient.Transport = &http.Transport{
+	client := &http.Client{}
+	client.Transport = &http.Transport{
 		Proxy: func(req *http.Request) (*url.URL, error) {
 			return url.Parse(proxySrv.URL)
 		},
 	}
 	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
-	resp, _ := http.DefaultClient.Do(req)
+	resp, _ := client.Do(req)
 
 	body, _ := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
