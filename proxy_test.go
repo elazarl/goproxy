@@ -38,9 +38,26 @@ func (QueryHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	_, _ = io.WriteString(w, req.Form.Get("result"))
 }
 
+type HeadersHandler struct{}
+
+// This handlers returns a body with a string containing all the request headers it received.
+func (HeadersHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	var sb strings.Builder
+	for name, values := range req.Header {
+		for _, value := range values {
+			sb.WriteString(name)
+			sb.WriteString(": ")
+			sb.WriteString(value)
+			sb.WriteString(";")
+		}
+	}
+	_, _ = io.WriteString(w, sb.String())
+}
+
 func init() {
 	http.DefaultServeMux.Handle("/bobo", ConstantHanlder("bobo"))
 	http.DefaultServeMux.Handle("/query", QueryHandler{})
+	http.DefaultServeMux.Handle("/headers", HeadersHandler{})
 }
 
 type ConstantHanlder string
@@ -336,6 +353,24 @@ func TestSimpleMitm(t *testing.T) {
 	}
 }
 
+func TestMitmMutateRequest(t *testing.T) {
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		// We inject a header in the request
+		req.Header.Set("Mitm-Header-Inject", "true")
+		return req, nil
+	})
+
+	client, l := oneShotProxy(proxy)
+	defer l.Close()
+
+	r := string(getOrFail(t, https.URL+"/headers", client))
+	if !strings.Contains(r, "Mitm-Header-Inject: true") {
+		t.Error("Expected response body to contain the MITM injected header. Got instead: ", r)
+	}
+}
+
 func TestConnectHandler(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
 	althttps := httptest.NewTLSServer(ConstantHanlder("althttps"))
@@ -428,7 +463,6 @@ func TestNoProxyHeaders(t *testing.T) {
 	defer l.Close()
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, s.URL, nil)
 	panicOnErr(err, "bad request")
-	req.Header.Add("Connection", "close")
 	req.Header.Add("Proxy-Connection", "close")
 	req.Header.Add("Proxy-Authenticate", "auth")
 	req.Header.Add("Proxy-Authorization", "auth")
@@ -443,7 +477,6 @@ func TestNoProxyHeadersHttps(t *testing.T) {
 	defer l.Close()
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, s.URL, nil)
 	panicOnErr(err, "bad request")
-	req.Header.Add("Connection", "close")
 	req.Header.Add("Proxy-Connection", "close")
 	_, _ = client.Do(req)
 }
