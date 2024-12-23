@@ -23,7 +23,7 @@ Adding a header to each request
 		return r, nil
 	})
 
-# Note that the function is called before the proxy sends the request to the server
+> Note that the function is called before the proxy sends the request to the server
 
 For printing the content type of all incoming responses
 

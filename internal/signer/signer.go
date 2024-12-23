@@ -15,6 +15,7 @@ import (
 	"net"
 	"runtime"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -25,9 +26,7 @@ func hashSorted(lst []string) []byte {
 	copy(c, lst)
 	sort.Strings(c)
 	h := sha256.New()
-	for _, s := range c {
-		h.Write([]byte(s + ","))
-	}
+	h.Write([]byte(strings.Join(c, ",")))
 	return h.Sum(nil)
 }
 
