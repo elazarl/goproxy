@@ -25,7 +25,13 @@ func isWebSocketRequest(r *http.Request) bool {
 		headerContains(r.Header, "Upgrade", "websocket")
 }
 
-func (proxy *ProxyHttpServer) serveWebsocketTLS(ctx *ProxyCtx, w http.ResponseWriter, req *http.Request, tlsConfig *tls.Config, clientConn *tls.Conn) {
+func (proxy *ProxyHttpServer) serveWebsocketTLS(
+	ctx *ProxyCtx,
+	w http.ResponseWriter,
+	req *http.Request,
+	tlsConfig *tls.Config,
+	clientConn *tls.Conn,
+) {
 	targetURL := url.URL{Scheme: "wss", Host: req.URL.Host, Path: req.URL.Path}
 
 	// Connect to upstream
@@ -46,7 +52,12 @@ func (proxy *ProxyHttpServer) serveWebsocketTLS(ctx *ProxyCtx, w http.ResponseWr
 	proxy.proxyWebsocket(ctx, targetConn, clientConn)
 }
 
-func (proxy *ProxyHttpServer) serveWebsocketHttpOverTLS(ctx *ProxyCtx, w http.ResponseWriter, req *http.Request, clientConn *tls.Conn) {
+func (proxy *ProxyHttpServer) serveWebsocketHttpOverTLS(
+	ctx *ProxyCtx,
+	w http.ResponseWriter,
+	req *http.Request,
+	clientConn *tls.Conn,
+) {
 	targetURL := url.URL{Scheme: "ws", Host: req.URL.Host, Path: req.URL.Path}
 
 	// Connect to upstream
@@ -98,7 +109,12 @@ func (proxy *ProxyHttpServer) serveWebsocket(ctx *ProxyCtx, w http.ResponseWrite
 	proxy.proxyWebsocket(ctx, targetConn, clientConn)
 }
 
-func (proxy *ProxyHttpServer) websocketHandshake(ctx *ProxyCtx, req *http.Request, targetSiteConn io.ReadWriter, clientConn io.ReadWriter) error {
+func (proxy *ProxyHttpServer) websocketHandshake(
+	ctx *ProxyCtx,
+	req *http.Request,
+	targetSiteConn io.ReadWriter,
+	clientConn io.ReadWriter,
+) error {
 	// write handshake request to target
 	err := req.Write(targetSiteConn)
 	if err != nil {

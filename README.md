@@ -53,6 +53,23 @@ we won't merge it... `:D`
 The code for this project is released under the `BSD 3-Clause` license,
 making it useful for `commercial` uses as well.
 
+### Linter
+The codebase uses an automatic lint check over your Pull Request code.
+Before opening it, you should check if your changes respect it, by running
+the linter in your local machine, so you won't have any surprise.
+
+To install the linter:
+```sh
+go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+```
+
+This will create an executable in your `$GOPATH/bin` folder
+(`$GOPATH` is an environment variable, usually
+its value is equivalent to `~/go`, check its value in your machine if you
+aren't sure about it).
+Make sure to include the bin folder in the path of your shell, to be able to
+directly use the `golangci-lint run` command.
+
 ## A taste of GoProxy
 
 To get a taste of `goproxy`, here you are a basic HTTP/HTTPS proxy
