@@ -3,6 +3,7 @@ package goproxy_test
 // build +linux
 
 import (
+        "crypto/tls"
         "fmt"
         "net/http"
         "net/http/httptest"
