@@ -50,14 +50,16 @@ func (h ConstantHanlder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func get(url string, client *http.Client) ([]byte, error) {
-	resp, err := client.Get(url)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	txt, err := io.ReadAll(resp.Body)
-	defer func() {
-		_ = resp.Body.Close()
-	}()
+	defer resp.Body.Close()
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +193,12 @@ func TestOneShotFileServer(t *testing.T) {
 	if err != nil {
 		t.Fatal("Cannot find", file)
 	}
-	if resp, err := client.Get(fs.URL + "/" + file); err == nil {
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, fs.URL+"/"+file, nil)
+	if err != nil {
+		t.Fatal("Cannot create request", err)
+	}
+	if resp, err := client.Do(req); err == nil {
 		b, err := io.ReadAll(resp.Body)
 		if err != nil {
 			t.Fatal("got", string(b))
@@ -215,7 +222,11 @@ func TestContentType(t *testing.T) {
 	defer l.Close()
 
 	for _, file := range []string{"test_data/panda.png", "test_data/football.png"} {
-		if resp, err := client.Get(localFile(file)); err != nil || resp.Header.Get("X-Shmoopi") != "1" {
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, localFile(file), nil)
+		if err != nil {
+			t.Fatal("Cannot create request", err)
+		}
+		if resp, err := client.Do(req); err != nil || resp.Header.Get("X-Shmoopi") != "1" {
 			if err == nil {
 				t.Error("pngs should have X-Shmoopi header = 1, actually", resp.Header.Get("X-Shmoopi"))
 			} else {
@@ -224,8 +235,11 @@ func TestContentType(t *testing.T) {
 		}
 	}
 
-	file := "baby.jpg"
-	if resp, err := client.Get(localFile(file)); err != nil || resp.Header.Get("X-Shmoopi") != "" {
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, localFile("baby.jpg"), nil)
+	if err != nil {
+		t.Fatal("Cannot create request", err)
+	}
+	if resp, err := client.Do(req); err != nil || resp.Header.Get("X-Shmoopi") != "" {
 		if err == nil {
 			t.Error("Non png images should NOT have X-Shmoopi header at all", resp.Header.Get("X-Shmoopi"))
 		} else {
@@ -251,12 +265,20 @@ func TestChangeResp(t *testing.T) {
 	client, l := oneShotProxy(proxy)
 	defer l.Close()
 
-	resp, err := client.Get(localFile("test_data/panda.png"))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, localFile("test_data/panda.png"), nil)
+	if err != nil {
+		t.Fatal("Cannot create request", err)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, _ = io.ReadAll(resp.Body)
-	_, err = client.Get(localFile("/bobo"))
+	req, err = http.NewRequestWithContext(context.Background(), http.MethodGet, localFile("/bobo"), nil)
+	if err != nil {
+		t.Fatal("Cannot create request", err)
+	}
+	_, err = client.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -275,17 +297,17 @@ func TestSimpleMitm(t *testing.T) {
 		t.Fatal("cannot dial to tcp server", err)
 	}
 	origCert := getCert(t, c)
-	c.Close()
+	_ = c.Close()
 
 	c2, err := net.Dial("tcp", l.Listener.Addr().String())
 	if err != nil {
 		t.Fatal("dialing to proxy", err)
 	}
-	creq, err := http.NewRequest(http.MethodConnect, https.URL, nil)
+	creq, err := http.NewRequestWithContext(context.Background(), http.MethodConnect, https.URL, nil)
 	if err != nil {
 		t.Fatal("create new request", creq)
 	}
-	creq.Write(c2)
+	_ = creq.Write(c2)
 	c2buf := bufio.NewReader(c2)
 	resp, err := http.ReadResponse(c2buf, creq)
 	if err != nil || resp.StatusCode != http.StatusOK {
@@ -328,9 +350,11 @@ func TestConnectHandler(t *testing.T) {
 func TestMitmIsFiltered(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.OnRequest(goproxy.ReqHostIs(https.Listener.Addr().String())).HandleConnect(goproxy.AlwaysMitm)
-	proxy.OnRequest(goproxy.UrlIs("/momo")).DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-		return nil, goproxy.TextResponse(req, "koko")
-	})
+	proxy.OnRequest(goproxy.UrlIs("/momo")).DoFunc(
+		func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+			return nil, goproxy.TextResponse(req, "koko")
+		},
+	)
 
 	client, l := oneShotProxy(proxy)
 	defer l.Close()
@@ -398,13 +422,13 @@ func TestNoProxyHeaders(t *testing.T) {
 	s := httptest.NewServer(VerifyNoProxyHeaders{t})
 	client, l := oneShotProxy(goproxy.NewProxyHttpServer())
 	defer l.Close()
-	req, err := http.NewRequest(http.MethodGet, s.URL, nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, s.URL, nil)
 	panicOnErr(err, "bad request")
 	req.Header.Add("Connection", "close")
 	req.Header.Add("Proxy-Connection", "close")
 	req.Header.Add("Proxy-Authenticate", "auth")
 	req.Header.Add("Proxy-Authorization", "auth")
-	client.Do(req)
+	_, _ = client.Do(req)
 }
 
 func TestNoProxyHeadersHttps(t *testing.T) {
@@ -413,18 +437,23 @@ func TestNoProxyHeadersHttps(t *testing.T) {
 	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 	client, l := oneShotProxy(proxy)
 	defer l.Close()
-	req, err := http.NewRequest(http.MethodGet, s.URL, nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, s.URL, nil)
 	panicOnErr(err, "bad request")
 	req.Header.Add("Connection", "close")
 	req.Header.Add("Proxy-Connection", "close")
-	client.Do(req)
+	_, _ = client.Do(req)
 }
 
 func TestHeadReqHasContentLength(t *testing.T) {
 	client, l := oneShotProxy(goproxy.NewProxyHttpServer())
 	defer l.Close()
 
-	resp, err := client.Head(localFile("test_data/panda.png"))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodHead, localFile("test_data/panda.png"), nil)
+	if err != nil {
+		t.Fatal("Cannot create request", err)
+	}
+
+	resp, err := client.Do(req)
 	panicOnErr(err, "resp to HEAD")
 	if resp.Header.Get("Content-Length") == "" {
 		t.Error("Content-Length should exist on HEAD requests")
@@ -441,7 +470,7 @@ func TestChunkedResponse(t *testing.T) {
 			panicOnErr(err, "accept")
 			_, err = http.ReadRequest(bufio.NewReader(c))
 			panicOnErr(err, "readrequest")
-			io.WriteString(c, "HTTP/1.1 200 OK\r\n"+
+			_, _ = io.WriteString(c, "HTTP/1.1 200 OK\r\n"+
 				"Content-Type: text/plain\r\n"+
 				"Transfer-Encoding: chunked\r\n\r\n"+
 				"25\r\n"+
@@ -452,15 +481,15 @@ func TestChunkedResponse(t *testing.T) {
 				"con\r\n"+
 				"8\r\n"+
 				"sequence\r\n0\r\n\r\n")
-			c.Close()
+			_ = c.Close()
 		}
 	}()
 
 	c, err := net.Dial("tcp", "localhost:10234")
 	panicOnErr(err, "dial")
 	defer c.Close()
-	req, _ := http.NewRequest(http.MethodGet, "/", nil)
-	req.Write(c)
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
+	_ = req.Write(c)
 	resp, err := http.ReadResponse(bufio.NewReader(c), req)
 	panicOnErr(err, "readresp")
 	b, err := io.ReadAll(resp.Body)
@@ -474,7 +503,7 @@ func TestChunkedResponse(t *testing.T) {
 	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
 		panicOnErr(ctx.Error, "error reading output")
 		b, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		panicOnErr(err, "readall onresp")
 		if enc := resp.Header.Get("Transfer-Encoding"); enc != "" {
 			t.Fatal("Chunked response should be received as plaintext", enc)
@@ -486,7 +515,12 @@ func TestChunkedResponse(t *testing.T) {
 	client, s := oneShotProxy(proxy)
 	defer s.Close()
 
-	resp, err = client.Get("http://localhost:10234/")
+	req, err = http.NewRequestWithContext(context.Background(), http.MethodGet, "http://localhost:10234/", nil)
+	if err != nil {
+		t.Fatal("Cannot create request", err)
+	}
+
+	resp, err = client.Do(req)
 	panicOnErr(err, "client.Get")
 	b, err = io.ReadAll(resp.Body)
 	panicOnErr(err, "readall proxy")
@@ -524,11 +558,17 @@ func TestGoproxyHijackConnect(t *testing.T) {
 	proxy.OnRequest(goproxy.ReqHostIs(srv.Listener.Addr().String())).
 		HijackConnect(func(req *http.Request, client net.Conn, ctx *goproxy.ProxyCtx) {
 			t.Logf("URL %+#v\nSTR %s", req.URL, req.URL.String())
-			resp, err := http.Get("http:" + req.URL.String() + "/bobo")
+			req.URL.Scheme = "http"
+			req.URL.Path = "/bobo"
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, req.URL.String(), nil)
+			if err != nil {
+				t.Fatal("Cannot create request", err)
+			}
+			resp, err := http.DefaultClient.Do(req)
 			panicOnErr(err, "http.Get(CONNECT url)")
 			panicOnErr(resp.Write(client), "resp.Write(client)")
-			resp.Body.Close()
-			client.Close()
+			_ = resp.Body.Close()
+			_ = client.Close()
 		})
 	client, l := oneShotProxy(proxy)
 	defer l.Close()
@@ -567,7 +607,7 @@ func writeConnect(w io.Writer) {
 
 	req, err := http.NewRequest(http.MethodConnect, validSrvURL, nil)
 	panicOnErr(err, "NewRequest")
-	req.Write(w)
+	_ = req.Write(w)
 	panicOnErr(err, "req(CONNECT).Write")
 }
 
@@ -758,7 +798,7 @@ func TestHttpsMitmURLRewrite(t *testing.T) {
 		}
 
 		b, err := io.ReadAll(resp.Body)
-		defer resp.Body.Close()
+		_ = resp.Body.Close()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -800,13 +840,24 @@ func TestSimpleHttpRequest(t *testing.T) {
 	}
 	client := http.Client{Transport: tr}
 
-	resp, err := client.Get("http://example.com")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.com", nil)
+	if err != nil {
+		t.Fatal("Cannot create request", err)
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Error("Error requesting http site", err)
 	} else if resp.StatusCode != http.StatusOK {
 		t.Error("Non-OK status requesting http site", err)
 	}
-	resp, _ = client.Get("http://example.invalid")
+
+	req, err = http.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.invalid", nil)
+	if err != nil {
+		t.Fatal("Cannot create request", err)
+	}
+
+	resp, _ = client.Do(req)
 	if resp == nil {
 		t.Error("No response requesting invalid http site")
 	}
@@ -816,7 +867,7 @@ func TestSimpleHttpRequest(t *testing.T) {
 	}
 	proxy.OnResponse(goproxy.UrlMatches(regexp.MustCompile(".*"))).DoFunc(returnNil)
 
-	resp, _ = client.Get("http://example.invalid")
+	resp, _ = client.Do(req)
 	if resp == nil {
 		t.Error("No response requesting invalid http site")
 	}
@@ -848,11 +899,11 @@ func TestResponseContentLength(t *testing.T) {
 			return url.Parse(proxySrv.URL)
 		},
 	}
-	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
 	resp, _ := http.DefaultClient.Do(req)
 
 	body, _ := io.ReadAll(resp.Body)
-	defer resp.Body.Close()
+	_ = resp.Body.Close()
 
 	if int64(len(body)) != resp.ContentLength {
 		t.Logf("response body: %s", string(body))

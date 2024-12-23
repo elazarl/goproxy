@@ -392,11 +392,15 @@ func (t *Transport) getConn(cm *connectMethod) (*persistConn, error) {
 	if cm.targetScheme == "https" {
 		// Initiate TLS and check remote host name against certificate.
 		conn = tls.Client(conn, t.TLSClientConfig)
-		if err = conn.(*tls.Conn).Handshake(); err != nil {
+		tlsConn, ok := conn.(*tls.Conn)
+		if !ok {
+			return nil, errors.New("invalid TLS connection")
+		}
+		if err = tlsConn.Handshake(); err != nil {
 			return nil, err
 		}
 		if t.TLSClientConfig == nil || !t.TLSClientConfig.InsecureSkipVerify {
-			if err = conn.(*tls.Conn).VerifyHostname(cm.tlsHost()); err != nil {
+			if err = tlsConn.VerifyHostname(cm.tlsHost()); err != nil {
 				return nil, err
 			}
 		}
@@ -585,9 +589,13 @@ func (pc *persistConn) readLoop() {
 		var waitForBodyRead chan bool
 		if alive {
 			if hasBody {
+				bodyEof, ok := resp.Body.(*bodyEOFSignal)
+				if !ok {
+					alive = false
+				}
 				lastbody = resp.Body
 				waitForBodyRead = make(chan bool)
-				resp.Body.(*bodyEOFSignal).fn = func() {
+				bodyEof.fn = func() {
 					if !pc.t.putIdleConn(pc) {
 						alive = false
 					}

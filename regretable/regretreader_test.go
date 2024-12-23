@@ -138,8 +138,14 @@ func (cc *CloseCounter) Close() error {
 
 func TestRegretableCloserSizeRegrets(t *testing.T) {
 	defer func() {
-		if r := recover(); r == nil || !strings.Contains(r.(string), "regret") {
+		r := recover()
+		if r == nil {
 			t.Error("Did not panic when regretting overread buffer:", r)
+		}
+
+		stringValue, ok := r.(string)
+		if !ok || !strings.Contains(stringValue, "regret") {
+			t.Error("Invalid panic value when regretting overread buffer:", r)
 		}
 	}()
 	buf := new(bytes.Buffer)

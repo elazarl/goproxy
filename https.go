@@ -150,7 +150,8 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			// by the use of a closed network connection.
 			//
 			// 2020/05/28 23:42:17 [001] WARN: Error copying to client: read tcp 127.0.0.1:33742->127.0.0.1:34763: i/o timeout
-			// 2020/05/28 23:42:17 [001] WARN: Error copying to client: read tcp 127.0.0.1:45145->127.0.0.1:60494: use of closed network connection
+			// 2020/05/28 23:42:17 [001] WARN: Error copying to client: read tcp 127.0.0.1:45145->127.0.0.1:60494: use of closed
+			//                                                          network connection
 			//
 			// It's also not possible to synchronize these connection closures due to
 			// TCP connections which are half-closed. When this happens, only the one
@@ -211,9 +212,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					httpError(proxyClient, ctx, err)
 					return
 				}
-				defer func() {
-					_ = resp.Body.Close()
-				}()
+				defer resp.Body.Close()
 			}
 			resp = proxy.filterResponse(resp, ctx)
 			if err := resp.Write(proxyClient); err != nil {
@@ -240,9 +239,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		go func() {
 			// TODO: cache connections to the remote website
 			rawClientTls := tls.Server(proxyClient, tlsConfig)
-			defer func() {
-				_ = rawClientTls.Close()
-			}()
+			defer rawClientTls.Close()
 			if err := rawClientTls.Handshake(); err != nil {
 				ctx.Warnf("Cannot handshake client %v %v", r.Host, err)
 				return
@@ -322,9 +319,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					resp, err = func() (*http.Response, error) {
 						// explicitly discard request body to avoid data races in certain RoundTripper implementations
 						// see https://github.com/golang/go/issues/61596#issuecomment-1652345131
-						defer func() {
-							_ = req.Body.Close()
-						}()
+						defer req.Body.Close()
 						return ctx.RoundTrip(req)
 					}()
 					if err != nil {
@@ -334,9 +329,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					ctx.Logf("resp %v", resp.Status)
 				}
 				resp = proxy.filterResponse(resp, ctx)
-				defer func() {
-					_ = resp.Body.Close()
-				}()
+				defer resp.Body.Close()
 
 				text := resp.Status
 				statusCode := strconv.Itoa(resp.StatusCode) + " "
@@ -496,9 +489,7 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(httpsProxy string
 				_ = c.Close()
 				return nil, err
 			}
-			defer func() {
-				_ = resp.Body.Close()
-			}()
+			defer resp.Body.Close()
 			if resp.StatusCode != http.StatusOK {
 				resp, err := io.ReadAll(io.LimitReader(resp.Body, _errorRespMaxLength))
 				if err != nil {
@@ -539,9 +530,7 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(httpsProxy string
 				_ = c.Close()
 				return nil, err
 			}
-			defer func() {
-				_ = resp.Body.Close()
-			}()
+			defer resp.Body.Close()
 			if resp.StatusCode != http.StatusOK {
 				body, err := io.ReadAll(io.LimitReader(resp.Body, _errorRespMaxLength))
 				if err != nil {
