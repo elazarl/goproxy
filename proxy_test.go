@@ -514,10 +514,14 @@ func TestAcceptEncoding(t *testing.T) {
 			proxy.Tr.DisableCompression = tc.disableCompression
 			client, l := oneShotProxy(proxy)
 			defer l.Close()
-			req, err := http.NewRequest("GET", s.URL, nil)
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, s.URL, nil)
 			panicOnErr(err, "bad request")
 			// fully control the Accept-Encoding header we send to the proxy
-			client.Transport.(*http.Transport).DisableCompression = true
+			tr, ok := client.Transport.(*http.Transport)
+			if !ok {
+				t.Fatal("invalid client transport")
+			}
+			tr.DisableCompression = true
 			if tc.acceptEncoding != "" {
 				req.Header.Add("Accept-Encoding", tc.acceptEncoding)
 			}
@@ -653,7 +657,7 @@ func TestHttpProxyAddrsFromEnv(t *testing.T) {
 	_, l := oneShotProxy(proxy)
 	defer l.Close()
 
-	_ = os.Setenv("https_proxy", l.URL)
+	t.Setenv("https_proxy", l.URL)
 	proxy2 := goproxy.NewProxyHttpServer()
 
 	client, l2 := oneShotProxy(proxy2)
@@ -661,8 +665,6 @@ func TestHttpProxyAddrsFromEnv(t *testing.T) {
 	if r := string(getOrFail(t, https.URL+"/bobo", client)); r != "bobo bobo" {
 		t.Error("Expected bobo doubled twice, got", r)
 	}
-
-	_ = os.Unsetenv("https_proxy")
 }
 
 func TestGoproxyHijackConnect(t *testing.T) {
