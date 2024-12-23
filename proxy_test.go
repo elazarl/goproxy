@@ -610,11 +610,13 @@ func writeConnect(w io.Writer) {
 	// Passing IP address with port alone (without //) will raise error:
 	// "first path segment in URL cannot contain colon" more details on this
 	// here: https://github.com/golang/go/issues/18824
-	validSrvURL := srv.URL[len("http:"):]
-
-	req, err := http.NewRequest(http.MethodConnect, validSrvURL, nil)
-	panicOnErr(err, "NewRequest")
-	_ = req.Write(w)
+	req := &http.Request{
+		Method: http.MethodConnect,
+		URL:    &url.URL{Opaque: srv.Listener.Addr().String()},
+		Host:   srv.Listener.Addr().String(),
+		Header: make(http.Header),
+	}
+	err := req.Write(w)
 	panicOnErr(err, "req(CONNECT).Write")
 }
 
