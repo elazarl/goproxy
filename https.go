@@ -13,6 +13,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/elazarl/goproxy/internal/signer"
@@ -139,8 +140,18 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		targetTCP, targetOK := targetSiteCon.(halfClosable)
 		proxyClientTCP, clientOK := proxyClient.(halfClosable)
 		if targetOK && clientOK {
-			go copyAndClose(ctx, targetTCP, proxyClientTCP)
-			go copyAndClose(ctx, proxyClientTCP, targetTCP)
+			go func() {
+				var wg sync.WaitGroup
+				wg.Add(2)
+				go copyAndClose(ctx, targetTCP, proxyClientTCP, &wg)
+				go copyAndClose(ctx, proxyClientTCP, targetTCP, &wg)
+				wg.Wait()
+				// Make sure to close the underlying TCP socket.
+				// CloseRead() and CloseWrite() keep it open until its timeout,
+				// causing error when there are thousands of requests.
+				proxyClientTCP.Close()
+				targetTCP.Close()
+			}()
 		} else {
 			// There is a race with the runtime here. In the case where the
 			// connection to the target site times out, we cannot control which
@@ -445,7 +456,7 @@ func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader) error {
 	return err
 }
 
-func copyAndClose(ctx *ProxyCtx, dst, src halfClosable) {
+func copyAndClose(ctx *ProxyCtx, dst, src halfClosable, wg *sync.WaitGroup) {
 	_, err := io.Copy(dst, src)
 	if err != nil && !errors.Is(err, net.ErrClosed) {
 		ctx.Warnf("Error copying to client: %s", err.Error())
@@ -453,6 +464,7 @@ func copyAndClose(ctx *ProxyCtx, dst, src halfClosable) {
 
 	_ = dst.CloseWrite()
 	_ = src.CloseRead()
+	wg.Done()
 }
 
 func dialerFromEnv(proxy *ProxyHttpServer) func(network, addr string) (net.Conn, error) {
