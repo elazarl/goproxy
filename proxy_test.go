@@ -630,13 +630,19 @@ func TestCurlMinusP(t *testing.T) {
 	})
 	_, l := oneShotProxy(proxy)
 	defer l.Close()
-	cmd := exec.Command("curl", "-p", "-sS", "--proxy", l.URL, srv.URL+"/bobo")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "curl", "-p", "-sS", "--proxy", l.URL, srv.URL+"/bobo")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
 		t.Fatal(err)
 	}
-	if string(output) != "bobo" {
-		t.Error("Expected bobo, got", string(output))
+
+	if output := out.String(); output != "bobo" {
+		t.Error("Expected bobo, got", output)
 	}
 	if !called {
 		t.Error("handler not called")
