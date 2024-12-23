@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -479,6 +480,54 @@ func TestNoProxyHeadersHttps(t *testing.T) {
 	panicOnErr(err, "bad request")
 	req.Header.Add("Proxy-Connection", "close")
 	_, _ = client.Do(req)
+}
+
+type VerifyAcceptEncodingHeader struct {
+	ReceivedHeaderValue string
+}
+
+func (v *VerifyAcceptEncodingHeader) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	v.ReceivedHeaderValue = r.Header.Get("Accept-Encoding")
+}
+
+func TestAcceptEncoding(t *testing.T) {
+	v := VerifyAcceptEncodingHeader{}
+	s := httptest.NewServer(&v)
+	for i, tc := range []struct {
+		keepAcceptEncoding bool
+		disableCompression bool
+		acceptEncoding     string
+		expectedValue      string
+	}{
+		{false, false, "", "gzip"},
+		{false, false, "identity", "gzip"},
+		{false, true, "", ""},
+		{false, true, "identity", ""},
+		{true, false, "", "gzip"},
+		{true, false, "identity", "identity"},
+		{true, true, "", ""},
+		{true, true, "identity", "identity"},
+	} {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			proxy := goproxy.NewProxyHttpServer()
+			proxy.KeepAcceptEncoding = tc.keepAcceptEncoding
+			proxy.Tr.DisableCompression = tc.disableCompression
+			client, l := oneShotProxy(proxy)
+			defer l.Close()
+			req, err := http.NewRequest("GET", s.URL, nil)
+			panicOnErr(err, "bad request")
+			// fully control the Accept-Encoding header we send to the proxy
+			client.Transport.(*http.Transport).DisableCompression = true
+			if tc.acceptEncoding != "" {
+				req.Header.Add("Accept-Encoding", tc.acceptEncoding)
+			}
+			_, err = client.Do(req)
+			panicOnErr(err, "bad response")
+			if v.ReceivedHeaderValue != tc.expectedValue {
+				t.Errorf("%+v expected Accept-Encoding: %s, got %s", tc, tc.expectedValue, v.ReceivedHeaderValue)
+			}
+		})
+	}
 }
 
 func TestHeadReqHasContentLength(t *testing.T) {
