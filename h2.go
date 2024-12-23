@@ -39,11 +39,15 @@ func (r *H2Transport) RoundTrip(_ *http.Request) (*http.Response, error) {
 	r.TLSConfig.NextProtos = []string{http2.NextProtoTLS}
 	// Initiate TLS and check remote host name against certificate.
 	rawServerTLS = tls.Client(rawServerTLS, r.TLSConfig)
-	if err = rawServerTLS.(*tls.Conn).Handshake(); err != nil {
+	rawTLSConn, ok := rawServerTLS.(*tls.Conn)
+	if !ok {
+		return nil, errors.New("invalid TLS connection")
+	}
+	if err = rawTLSConn.Handshake(); err != nil {
 		return nil, err
 	}
 	if r.TLSConfig == nil || !r.TLSConfig.InsecureSkipVerify {
-		if err = rawServerTLS.(*tls.Conn).VerifyHostname(raddr[:strings.LastIndex(raddr, ":")]); err != nil {
+		if err = rawTLSConn.VerifyHostname(raddr[:strings.LastIndex(raddr, ":")]); err != nil {
 			return nil, err
 		}
 	}
@@ -75,11 +79,11 @@ func (r *H2Transport) RoundTrip(_ *http.Request) (*http.Response, error) {
 	for i := 0; i < 2; i++ {
 		select {
 		case err := <-errSToC:
-			if err != io.EOF {
+			if !errors.Is(err, io.EOF) {
 				return nil, err
 			}
 		case err := <-errCToS:
-			if err != io.EOF {
+			if !errors.Is(err, io.EOF) {
 				return nil, err
 			}
 		}

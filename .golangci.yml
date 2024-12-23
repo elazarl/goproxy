@@ -17,13 +17,10 @@ linters:
     - asasalint
     - asciicheck
     - bidichk
-    - bodyclose
     - containedctx
-    - contextcheck
     - decorder
     - dogsled
     - dupl
-    - dupword
     - durationcheck
     - errchkjson
     - errname
@@ -53,9 +50,7 @@ linters:
     - makezero
     - mirror
     - misspell
-    - mnd
     - nakedret
-    - nestif
     - nilerr
     - noctx
     - nolintlint
@@ -80,10 +75,13 @@ linters:
     - exportloopref
 
   disable:
+    - bodyclose
     - canonicalheader
+    - contextcheck # Re-enable in V2
     - copyloopvar
     - cyclop
     - depguard
+    - dupword
     - err113
     - exhaustruct
     - funlen
@@ -100,7 +98,9 @@ linters:
     - intrange
     - ireturn
     - maintidx
+    - mnd
     - musttag
+    - nestif # TODO: Re-enable in V2
     - nilnil
     - nlreturn
     - nonamedreturns
@@ -132,12 +132,28 @@ linters-settings:
       - G403 # RSA keys should be at least 2048 bits
       - G115 # Integer overflow conversion (uint64 -> int64)
       - G404 # Use of weak random number generator (math/rand)
+      - G204 # Subprocess launched with a potential tainted input or cmd arguments
 
 issues:
   exclude-rules:
+    - linters:
+        - gocritic
+      text: "ifElseChain"
     - linters:
         - revive
       text: "add-constant: "
     - linters:
         - revive
+      text: "unused-parameter: "
+    - linters:
+        - revive
+      text: "empty-block: "
+    - linters:
+        - revive
       text: "var-naming: " # TODO: Re-enable in V2
+    - linters:
+        - stylecheck
+      text: " should be " # TODO: Re-enable in V2
+    - linters:
+        - stylecheck
+      text: "ST1003: should not use ALL_CAPS in Go names; use CamelCase instead" # TODO: Re-enable in V2

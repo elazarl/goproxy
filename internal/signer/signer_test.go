@@ -1,10 +1,9 @@
 package signer_test
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"github.com/elazarl/goproxy"
-	"github.com/elazarl/goproxy/internal/signer"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -13,9 +12,13 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/elazarl/goproxy"
+	"github.com/elazarl/goproxy/internal/signer"
 )
 
-func orFatal(msg string, err error, t *testing.T) {
+func orFatal(t *testing.T, msg string, err error) {
+	t.Helper()
 	if err != nil {
 		t.Fatal(msg, err)
 	}
@@ -23,7 +26,7 @@ func orFatal(msg string, err error, t *testing.T) {
 
 type ConstantHanlder string
 
-func (h ConstantHanlder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h ConstantHanlder) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 	_, _ = io.WriteString(w, string(h))
 }
 
@@ -40,26 +43,28 @@ func getBrowser(args []string) string {
 }
 
 func testSignerX509(t *testing.T, ca tls.Certificate) {
+	t.Helper()
 	cert, err := signer.SignHost(ca, []string{"example.com", "1.1.1.1", "localhost"})
-	orFatal("singHost", err, t)
+	orFatal(t, "singHost", err)
 	cert.Leaf, err = x509.ParseCertificate(cert.Certificate[0])
-	orFatal("ParseCertificate", err, t)
+	orFatal(t, "ParseCertificate", err)
 	certpool := x509.NewCertPool()
 	certpool.AddCert(ca.Leaf)
-	orFatal("VerifyHostname", cert.Leaf.VerifyHostname("example.com"), t)
-	orFatal("CheckSignatureFrom", cert.Leaf.CheckSignatureFrom(ca.Leaf), t)
+	orFatal(t, "VerifyHostname", cert.Leaf.VerifyHostname("example.com"))
+	orFatal(t, "CheckSignatureFrom", cert.Leaf.CheckSignatureFrom(ca.Leaf))
 	_, err = cert.Leaf.Verify(x509.VerifyOptions{
 		DNSName: "example.com",
 		Roots:   certpool,
 	})
-	orFatal("Verify", err, t)
+	orFatal(t, "Verify", err)
 }
 
-func testSignerTls(t *testing.T, ca tls.Certificate) {
+func testSignerTLS(t *testing.T, ca tls.Certificate) {
+	t.Helper()
 	cert, err := signer.SignHost(ca, []string{"example.com", "1.1.1.1", "localhost"})
-	orFatal("singHost", err, t)
+	orFatal(t, "singHost", err)
 	cert.Leaf, err = x509.ParseCertificate(cert.Certificate[0])
-	orFatal("ParseCertificate", err, t)
+	orFatal(t, "ParseCertificate", err)
 	expected := "key verifies with Go"
 	server := httptest.NewUnstartedServer(ConstantHanlder(expected))
 	defer server.Close()
@@ -67,7 +72,6 @@ func testSignerTls(t *testing.T, ca tls.Certificate) {
 		Certificates: []tls.Certificate{*cert, ca},
 		MinVersion:   tls.VersionTLS12,
 	}
-	server.TLS.BuildNameToCertificate()
 	server.StartTLS()
 	certpool := x509.NewCertPool()
 	certpool.AddCert(ca.Leaf)
@@ -75,24 +79,24 @@ func testSignerTls(t *testing.T, ca tls.Certificate) {
 		TLSClientConfig: &tls.Config{RootCAs: certpool},
 	}
 	asLocalhost := strings.ReplaceAll(server.URL, "127.0.0.1", "localhost")
-	req, err := http.NewRequest(http.MethodGet, asLocalhost, nil)
-	orFatal("NewRequest", err, t)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, asLocalhost, nil)
+	orFatal(t, "NewRequest", err)
 	resp, err := tr.RoundTrip(req)
-	orFatal("RoundTrip", err, t)
+	orFatal(t, "RoundTrip", err)
 	txt, err := io.ReadAll(resp.Body)
-	orFatal("io.ReadAll", err, t)
+	orFatal(t, "io.ReadAll", err)
 	if string(txt) != expected {
 		t.Errorf("Expected '%s' got '%s'", expected, string(txt))
 	}
 	browser := getBrowser(os.Args)
 	if browser != "" {
-		exec.Command(browser, asLocalhost).Run()
+		_ = exec.Command(browser, asLocalhost).Run()
 		time.Sleep(10 * time.Second)
 	}
 }
 
 func TestSignerRsaTls(t *testing.T) {
-	testSignerTls(t, goproxy.GoproxyCa)
+	testSignerTLS(t, goproxy.GoproxyCa)
 }
 
 func TestSignerRsaX509(t *testing.T) {
@@ -100,7 +104,7 @@ func TestSignerRsaX509(t *testing.T) {
 }
 
 func TestSignerEcdsaTls(t *testing.T) {
-	testSignerTls(t, EcdsaCa)
+	testSignerTLS(t, EcdsaCa)
 }
 
 func TestSignerEcdsaX509(t *testing.T) {

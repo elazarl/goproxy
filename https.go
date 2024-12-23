@@ -2,10 +2,10 @@ package goproxy
 
 import (
 	"bufio"
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"github.com/elazarl/goproxy/internal/signer"
 	"io"
 	"net"
 	"net/http"
@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+
+	"github.com/elazarl/goproxy/internal/signer"
 )
 
 type ConnectActionLiteral int
@@ -68,16 +70,16 @@ func stripPort(s string) string {
 	return s[:ix]
 }
 
-func (proxy *ProxyHttpServer) dial(network, addr string) (c net.Conn, err error) {
-	if proxy.Tr.Dial != nil {
-		return proxy.Tr.Dial(network, addr)
+func (proxy *ProxyHttpServer) dial(ctx context.Context, network, addr string) (c net.Conn, err error) {
+	if proxy.Tr.DialContext != nil {
+		return proxy.Tr.DialContext(ctx, network, addr)
 	}
 	return net.Dial(network, addr)
 }
 
 func (proxy *ProxyHttpServer) connectDial(ctx *ProxyCtx, network, addr string) (c net.Conn, err error) {
 	if proxy.ConnectDialWithReq == nil && proxy.ConnectDial == nil {
-		return proxy.dial(network, addr)
+		return proxy.dial(ctx.Req.Context(), network, addr)
 	}
 
 	if proxy.ConnectDialWithReq != nil {
@@ -249,7 +251,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			for !isEOF(clientTlsReader) {
 				req, err := http.ReadRequest(clientTlsReader)
 				ctx := &ProxyCtx{Req: req, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy, UserData: ctx.UserData, RoundTripper: ctx.RoundTripper}
-				if err != nil && err != io.EOF {
+				if err != nil && !errors.Is(err, io.EOF) {
 					return
 				}
 				if err != nil {
@@ -338,9 +340,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 
 				text := resp.Status
 				statusCode := strconv.Itoa(resp.StatusCode) + " "
-				if strings.HasPrefix(text, statusCode) {
-					text = text[len(statusCode):]
-				}
+				text = strings.TrimPrefix(text, statusCode)
 				// always use 1.1 to support chunked encoding
 				if _, err := io.WriteString(rawClientTls, "HTTP/1.1"+" "+statusCode+text+"\r\n"); err != nil {
 					ctx.Warnf("Cannot write TLS response HTTP status from mitm'd client: %v", err)
@@ -482,7 +482,7 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(httpsProxy string
 			if connectReqHandler != nil {
 				connectReqHandler(connectReq)
 			}
-			c, err := proxy.dial(network, u.Host)
+			c, err := proxy.dial(context.Background(), network, u.Host)
 			if err != nil {
 				return nil, err
 			}
@@ -515,7 +515,7 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(httpsProxy string
 			u.Host += ":443"
 		}
 		return func(network, addr string) (net.Conn, error) {
-			c, err := proxy.dial(network, u.Host)
+			c, err := proxy.dial(context.Background(), network, u.Host)
 			if err != nil {
 				return nil, err
 			}

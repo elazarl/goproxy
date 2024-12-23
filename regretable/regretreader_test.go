@@ -9,6 +9,22 @@ import (
 	"github.com/elazarl/goproxy/regretable"
 )
 
+func assertEqual(t *testing.T, expected, actual string) {
+	t.Helper()
+	if expected != actual {
+		t.Fatal("Expected", expected, "actual", actual)
+	}
+}
+
+func assertReadAll(t *testing.T, r io.Reader) string {
+	t.Helper()
+	s, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal("error when reading", err)
+	}
+	return string(s)
+}
+
 func TestRegretableReader(t *testing.T) {
 	buf := new(bytes.Buffer)
 	mb := regretable.NewRegretableReader(buf)
@@ -91,20 +107,6 @@ func TestRegretableFullRead(t *testing.T) {
 	if string(s) != word {
 		t.Error("Uncommitted read is gone", string(s), len(string(s)), "expected", word, len(word))
 	}
-}
-
-func assertEqual(t *testing.T, expected, actual string) {
-	if expected != actual {
-		t.Fatal("Expected", expected, "actual", actual)
-	}
-}
-
-func assertReadAll(t *testing.T, r io.Reader) string {
-	s, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatal("error when reading", err)
-	}
-	return string(s)
 }
 
 func TestRegretableRegretTwice(t *testing.T) {

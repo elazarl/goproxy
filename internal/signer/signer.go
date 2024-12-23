@@ -73,25 +73,25 @@ func SignHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err er
 	hash := hashSorted(append(hosts, _goproxySignerVersion, ":"+runtime.Version()))
 	var csprng CounterEncryptorRand
 	if csprng, err = NewCounterEncryptorRandFromKey(ca.PrivateKey, hash); err != nil {
-		return
+		return nil, err
 	}
 
 	var certpriv crypto.Signer
 	switch ca.PrivateKey.(type) {
 	case *rsa.PrivateKey:
 		if certpriv, err = rsa.GenerateKey(&csprng, 2048); err != nil {
-			return
+			return nil, err
 		}
 	case *ecdsa.PrivateKey:
 		if certpriv, err = ecdsa.GenerateKey(elliptic.P256(), &csprng); err != nil {
-			return
+			return nil, err
 		}
 	case ed25519.PrivateKey:
 		if _, certpriv, err = ed25519.GenerateKey(&csprng); err != nil {
-			return
+			return nil, err
 		}
 	default:
-		err = fmt.Errorf("unsupported key type %T", ca.PrivateKey)
+		return nil, fmt.Errorf("unsupported key type %T", ca.PrivateKey)
 	}
 
 	derBytes, err := x509.CreateCertificate(&csprng, &template, x509ca, certpriv.Public(), ca.PrivateKey)

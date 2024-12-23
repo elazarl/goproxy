@@ -94,7 +94,7 @@ func ProxyFromEnvironment(req *http.Request) (*url.URL, error) {
 		proxyURL, err = url.Parse("http://" + proxy)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("invalid proxy address %q: %v", proxy, err)
+		return nil, fmt.Errorf("invalid proxy address %q: %w", proxy, err)
 	}
 	return proxyURL, nil
 }
@@ -264,11 +264,11 @@ func (t *Transport) putIdleConn(pconn *persistConn) bool {
 		return false
 	}
 	key := pconn.cacheKey
-	max := t.MaxIdleConnsPerHost
-	if max == 0 {
-		max = DefaultMaxIdleConnsPerHost
+	maxIdleConns := t.MaxIdleConnsPerHost
+	if maxIdleConns == 0 {
+		maxIdleConns = DefaultMaxIdleConnsPerHost
 	}
-	if len(t.idleConn[key]) >= max {
+	if len(t.idleConn[key]) >= maxIdleConns {
 		pconn.close()
 		return false
 	}
@@ -335,7 +335,7 @@ func (t *Transport) getConn(cm *connectMethod) (*persistConn, error) {
 	conn, raddr, ip, err := t.dial("tcp", cm.addr())
 	if err != nil {
 		if cm.proxyURL != nil {
-			err = fmt.Errorf("http: error connecting to proxy %s: %v", cm.proxyURL, err)
+			err = fmt.Errorf("http: error connecting to proxy %s: %w", cm.proxyURL, err)
 		}
 		return nil, err
 	}
@@ -664,7 +664,7 @@ func (pc *persistConn) roundTrip(req *transportRequest) (resp *http.Response, er
 	}
 	if err != nil {
 		pc.close()
-		return
+		return nil, err
 	}
 	pc.bw.Flush()
 
@@ -702,11 +702,6 @@ func canonicalAddr(url *url.URL) string {
 		return addr + ":" + portMap[url.Scheme]
 	}
 	return addr
-}
-
-func responseIsKeepAlive(res *http.Response) bool {
-	// TODO: implement.  for now just always shutting down the connection.
-	return false
 }
 
 // bodyEOFSignal wraps a ReadCloser but runs fn (if non-nil) at most
