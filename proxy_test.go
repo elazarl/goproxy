@@ -590,6 +590,32 @@ func TestGoproxyThroughProxy(t *testing.T) {
 	}
 }
 
+func TestHttpProxyAddrsFromEnv(t *testing.T) {
+	proxy := goproxy.NewProxyHttpServer()
+	doubleString := func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		b, err := io.ReadAll(resp.Body)
+		panicOnErr(err, "readAll resp")
+		resp.Body = io.NopCloser(bytes.NewBufferString(string(b) + " " + string(b)))
+		return resp
+	}
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	proxy.OnResponse().DoFunc(doubleString)
+
+	_, l := oneShotProxy(proxy)
+	defer l.Close()
+
+	_ = os.Setenv("https_proxy", l.URL)
+	proxy2 := goproxy.NewProxyHttpServer()
+
+	client, l2 := oneShotProxy(proxy2)
+	defer l2.Close()
+	if r := string(getOrFail(t, https.URL+"/bobo", client)); r != "bobo bobo" {
+		t.Error("Expected bobo doubled twice, got", r)
+	}
+
+	_ = os.Unsetenv("https_proxy")
+}
+
 func TestGoproxyHijackConnect(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.OnRequest(goproxy.ReqHostIs(srv.Listener.Addr().String())).
