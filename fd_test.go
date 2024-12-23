@@ -18,7 +18,7 @@ func oneShotProxyNoKeepalive(proxy *goproxy.ProxyHttpServer, t *testing.T) (clie
         s = httptest.NewServer(proxy)
 
         proxyUrl, _ := url.Parse(s.URL)
-        tr := &http.Transport{TLSClientConfig: acceptAllCerts, Proxy: http.ProxyURL(proxyUrl), DisableKeepAlives: true}
+        tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, Proxy: http.ProxyURL(proxyUrl), DisableKeepAlives: true}
         client = &http.Client{Transport: tr}
         return
 }
@@ -58,7 +58,7 @@ func TestFDCountConnect(t *testing.T) {
                 pre := fmt.Sprintf("call %d", i+1)
                 printfds(pre+", before", t)
                 client, l := oneShotProxyNoKeepalive(proxy, t)
-                if resp := string(getOrFail(https.URL+"/alturl", client, t)); resp != "althttps" {
+                if resp := string(getOrFail(t, https.URL+"/alturl", client)); resp != "althttps" {
                         t.Error("Proxy should redirect CONNECT requests to local althttps server, expected 'althttps' got ", resp)
                 }
                 l.Close()
