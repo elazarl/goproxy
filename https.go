@@ -146,6 +146,9 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				go copyAndClose(ctx, targetTCP, proxyClientTCP, &wg)
 				go copyAndClose(ctx, proxyClientTCP, targetTCP, &wg)
 				wg.Wait()
+				// Make sure to close the underlying TCP socket.
+				// CloseRead() and CloseWrite() keep it open until its timeout,
+				// causing error when there are thousands of requests.
 				proxyClientTCP.Close()
 				targetTCP.Close()
 			}()
