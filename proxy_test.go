@@ -647,7 +647,7 @@ func TestSelfRequest(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
 	_, l := oneShotProxy(proxy)
 	defer l.Close()
-	if !strings.Contains(string(getOrFail(t, l.URL, http.DefaultClient)), "non-proxy") {
+	if !strings.Contains(string(getOrFail(t, l.URL, &http.Client{})), "non-proxy") {
 		t.Fatal("non proxy requests should fail")
 	}
 }
@@ -901,13 +901,14 @@ func TestResponseContentLength(t *testing.T) {
 	defer proxySrv.Close()
 
 	// send request
-	http.DefaultClient.Transport = &http.Transport{
+	client := &http.Client{}
+	client.Transport = &http.Transport{
 		Proxy: func(req *http.Request) (*url.URL, error) {
 			return url.Parse(proxySrv.URL)
 		},
 	}
 	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
-	resp, _ := http.DefaultClient.Do(req)
+	resp, _ := client.Do(req)
 
 	body, _ := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
