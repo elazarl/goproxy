@@ -1,4 +1,4 @@
-package goproxy
+package signer
 
 import (
 	"crypto"
@@ -6,7 +6,7 @@ import (
 	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rsa"
-	"crypto/sha1"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -15,29 +15,22 @@ import (
 	"net"
 	"runtime"
 	"sort"
+	"strings"
 	"time"
 )
+
+const _goproxySignerVersion = ":goproxy2"
 
 func hashSorted(lst []string) []byte {
 	c := make([]string, len(lst))
 	copy(c, lst)
 	sort.Strings(c)
-	h := sha1.New()
-	for _, s := range c {
-		h.Write([]byte(s + ","))
-	}
+	h := sha256.New()
+	h.Write([]byte(strings.Join(c, ",")))
 	return h.Sum(nil)
 }
 
-func hashSortedBigInt(lst []string) *big.Int {
-	rv := new(big.Int)
-	rv.SetBytes(hashSorted(lst))
-	return rv
-}
-
-var goproxySignerVersion = ":goroxy1"
-
-func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err error) {
+func SignHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err error) {
 	// Use the provided CA for certificate generation.
 	// Use already parsed Leaf certificate when present.
 	x509ca := ca.Leaf
@@ -47,8 +40,9 @@ func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err er
 		}
 	}
 
-	start := time.Unix(time.Now().Unix()-2592000, 0) // 2592000  = 30 day
-	end := time.Unix(time.Now().Unix()+31536000, 0)  // 31536000 = 365 day
+	now := time.Now()
+	start := now.Add(-30 * 24 * time.Hour) // -30 days
+	end := now.Add(365 * 24 * time.Hour)   // 365 days
 
 	// Always generate a positive int value
 	// (Two complement is not enabled when the first bit is 0)
@@ -75,28 +69,28 @@ func signHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err er
 		}
 	}
 
-	hash := hashSorted(append(hosts, goproxySignerVersion, ":"+runtime.Version()))
+	hash := hashSorted(append(hosts, _goproxySignerVersion, ":"+runtime.Version()))
 	var csprng CounterEncryptorRand
 	if csprng, err = NewCounterEncryptorRandFromKey(ca.PrivateKey, hash); err != nil {
-		return
+		return nil, err
 	}
 
 	var certpriv crypto.Signer
 	switch ca.PrivateKey.(type) {
 	case *rsa.PrivateKey:
 		if certpriv, err = rsa.GenerateKey(&csprng, 2048); err != nil {
-			return
+			return nil, err
 		}
 	case *ecdsa.PrivateKey:
 		if certpriv, err = ecdsa.GenerateKey(elliptic.P256(), &csprng); err != nil {
-			return
+			return nil, err
 		}
 	case ed25519.PrivateKey:
 		if _, certpriv, err = ed25519.GenerateKey(&csprng); err != nil {
-			return
+			return nil, err
 		}
 	default:
-		err = fmt.Errorf("unsupported key type %T", ca.PrivateKey)
+		return nil, fmt.Errorf("unsupported key type %T", ca.PrivateKey)
 	}
 
 	derBytes, err := x509.CreateCertificate(&csprng, &template, x509ca, certpriv.Public(), ca.PrivateKey)

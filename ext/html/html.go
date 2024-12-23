@@ -13,7 +13,24 @@ import (
 	"golang.org/x/text/transform"
 )
 
-var IsHtml = goproxy.ContentTypeIs("text/html")
+var IsHtml goproxy.RespCondition = goproxy.ContentTypeIs("text/html")
+
+var IsCss goproxy.RespCondition = goproxy.ContentTypeIs("text/css")
+
+var IsJavaScript goproxy.RespCondition = goproxy.ContentTypeIs("text/javascript",
+	"application/javascript")
+
+var IsJson goproxy.RespCondition = goproxy.ContentTypeIs("text/json")
+
+var IsXml goproxy.RespCondition = goproxy.ContentTypeIs("text/xml")
+
+var IsWebRelatedText goproxy.RespCondition = goproxy.ContentTypeIs(
+	"text/html",
+	"text/css",
+	"text/javascript", "application/javascript",
+	"text/xml",
+	"text/json",
+)
 
 // HandleString will receive a function that filters a string, and will convert the
 // request body to a utf8 string, according to the charset specified in the Content-Type

@@ -10,7 +10,7 @@ import (
 )
 
 // ReqCondition.HandleReq will decide whether or not to use the ReqHandler on an HTTP request
-// before sending it to the remote server
+// before sending it to the remote server.
 type ReqCondition interface {
 	RespCondition
 	HandleReq(req *http.Request, ctx *ProxyCtx) bool
@@ -23,10 +23,10 @@ type RespCondition interface {
 	HandleResp(resp *http.Response, ctx *ProxyCtx) bool
 }
 
-// ReqConditionFunc.HandleReq(req,ctx) <=> ReqConditionFunc(req,ctx)
+// ReqConditionFunc.HandleReq(req,ctx) <=> ReqConditionFunc(req,ctx).
 type ReqConditionFunc func(req *http.Request, ctx *ProxyCtx) bool
 
-// RespConditionFunc.HandleResp(resp,ctx) <=> RespConditionFunc(resp,ctx)
+// RespConditionFunc.HandleResp(resp,ctx) <=> RespConditionFunc(resp,ctx).
 type RespConditionFunc func(resp *http.Response, ctx *ProxyCtx) bool
 
 func (c ReqConditionFunc) HandleReq(req *http.Request, ctx *ProxyCtx) bool {
@@ -49,9 +49,17 @@ func (c RespConditionFunc) HandleResp(resp *http.Response, ctx *ProxyCtx) bool {
 // requests to url 'http://host/x'
 func UrlHasPrefix(prefix string) ReqConditionFunc {
 	return func(req *http.Request, ctx *ProxyCtx) bool {
+		// Make sure to include the / as the first path character when we do a match
+		// using the host
+		relativePath := req.URL.Path
+		if length := len(relativePath); length == 0 || (length > 0 && relativePath[0] != '/') {
+			relativePath = "/" + relativePath
+		}
+		// We use the original value to distinguish between "" and "/" in the user specified string
 		return strings.HasPrefix(req.URL.Path, prefix) ||
-			strings.HasPrefix(req.URL.Host+req.URL.Path, prefix) ||
-			strings.HasPrefix(req.URL.Scheme+req.URL.Host+req.URL.Path, prefix)
+			strings.HasPrefix(req.URL.Host+relativePath, prefix) ||
+			// Scheme value is something like "https", we must include the :// characters
+			strings.HasPrefix(req.URL.Scheme+"://"+req.URL.Host+relativePath, prefix)
 	}
 }
 
@@ -85,7 +93,7 @@ func ReqHostMatches(regexps ...*regexp.Regexp) ReqConditionFunc {
 }
 
 // ReqHostIs returns a ReqCondition, testing whether the host to which the request is directed to equal
-// to one of the given strings
+// to one of the given strings.
 func ReqHostIs(hosts ...string) ReqConditionFunc {
 	hostSet := make(map[string]bool)
 	for _, h := range hosts {
@@ -116,7 +124,7 @@ var IsLocalHost ReqConditionFunc = func(req *http.Request, ctx *ProxyCtx) bool {
 }
 
 // UrlMatches returns a ReqCondition testing whether the destination URL
-// of the request matches the given regexp, with or without prefix
+// of the request matches the given regexp, with or without prefix.
 func UrlMatches(re *regexp.Regexp) ReqConditionFunc {
 	return func(req *http.Request, ctx *ProxyCtx) bool {
 		return re.MatchString(req.URL.Path) ||
@@ -124,7 +132,7 @@ func UrlMatches(re *regexp.Regexp) ReqConditionFunc {
 	}
 }
 
-// DstHostIs returns a ReqCondition testing wether the host in the request url is the given string
+// DstHostIs returns a ReqCondition testing wether the host in the request url is the given string.
 func DstHostIs(host string) ReqConditionFunc {
 	host = strings.ToLower(host)
 	return func(req *http.Request, ctx *ProxyCtx) bool {
@@ -132,7 +140,7 @@ func DstHostIs(host string) ReqConditionFunc {
 	}
 }
 
-// SrcIpIs returns a ReqCondition testing whether the source IP of the request is one of the given strings
+// SrcIpIs returns a ReqCondition testing whether the source IP of the request is one of the given strings.
 func SrcIpIs(ips ...string) ReqCondition {
 	return ReqConditionFunc(func(req *http.Request, ctx *ProxyCtx) bool {
 		for _, ip := range ips {
@@ -144,7 +152,7 @@ func SrcIpIs(ips ...string) ReqCondition {
 	})
 }
 
-// Not returns a ReqCondition negating the given ReqCondition
+// Not returns a ReqCondition negating the given ReqCondition.
 func Not(r ReqCondition) ReqConditionFunc {
 	return func(req *http.Request, ctx *ProxyCtx) bool {
 		return !r.HandleReq(req, ctx)
@@ -170,7 +178,7 @@ func ContentTypeIs(typ string, types ...string) RespCondition {
 }
 
 // StatusCodeIs returns a RespCondition, testing whether or not the HTTP status
-// code is one of the given ints
+// code is one of the given ints.
 func StatusCodeIs(codes ...int) RespCondition {
 	codeSet := make(map[int]bool)
 	for _, c := range codes {
@@ -195,14 +203,15 @@ func (proxy *ProxyHttpServer) OnRequest(conds ...ReqCondition) *ReqProxyConds {
 	return &ReqProxyConds{proxy, conds}
 }
 
-// ReqProxyConds aggregate ReqConditions for a ProxyHttpServer. Upon calling Do, it will register a ReqHandler that would
+// ReqProxyConds aggregate ReqConditions for a ProxyHttpServer.
+// Upon calling Do, it will register a ReqHandler that would
 // handle the request if all conditions on the HTTP request are met.
 type ReqProxyConds struct {
 	proxy    *ProxyHttpServer
 	reqConds []ReqCondition
 }
 
-// DoFunc is equivalent to proxy.OnRequest().Do(FuncReqHandler(f))
+// DoFunc is equivalent to proxy.OnRequest().Do(FuncReqHandler(f)).
 func (pcond *ReqProxyConds) DoFunc(f func(req *http.Request, ctx *ProxyCtx) (*http.Request, *http.Response)) {
 	pcond.Do(FuncReqHandler(f))
 }
@@ -289,7 +298,7 @@ type ProxyConds struct {
 	respCond []RespCondition
 }
 
-// ProxyConds.DoFunc is equivalent to proxy.OnResponse().Do(FuncRespHandler(f))
+// ProxyConds.DoFunc is equivalent to proxy.OnResponse().Do(FuncRespHandler(f)).
 func (pcond *ProxyConds) DoFunc(f func(resp *http.Response, ctx *ProxyCtx) *http.Response) {
 	pcond.Do(FuncRespHandler(f))
 }

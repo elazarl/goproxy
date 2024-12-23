@@ -1,10 +1,13 @@
-package goproxy
+package goproxy_test
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/elazarl/goproxy"
 )
 
 func TestIsLocalHost(t *testing.T) {
@@ -34,11 +37,11 @@ func TestIsLocalHost(t *testing.T) {
 				addr = net.JoinHostPort(host, port)
 			}
 			t.Run(addr, func(t *testing.T) {
-				req, err := http.NewRequest(http.MethodGet, "http://"+addr, http.NoBody)
+				req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://"+addr, http.NoBody)
 				if err != nil {
 					t.Fatal(err)
 				}
-				if !IsLocalHost(req, nil) {
+				if !goproxy.IsLocalHost(req, nil) {
 					t.Fatal("expected true")
 				}
 			})
