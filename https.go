@@ -247,7 +247,13 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			clientTlsReader := bufio.NewReader(rawClientTls)
 			for !isEOF(clientTlsReader) {
 				req, err := http.ReadRequest(clientTlsReader)
-				ctx := &ProxyCtx{Req: req, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy, UserData: ctx.UserData, RoundTripper: ctx.RoundTripper}
+				ctx := &ProxyCtx{
+					Req:          req,
+					Session:      atomic.AddInt64(&proxy.sess, 1),
+					Proxy:        proxy,
+					UserData:     ctx.UserData,
+					RoundTripper: ctx.RoundTripper,
+				}
 				if err != nil && !errors.Is(err, io.EOF) {
 					return
 				}
@@ -255,7 +261,10 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					ctx.Warnf("Cannot read TLS request from mitm'd client %v %v", r.Host, err)
 					return
 				}
-				req.RemoteAddr = r.RemoteAddr // since we're converting the request, need to carry over the original connecting IP as well
+
+				// since we're converting the request, need to carry over the
+				// original connecting IP as well
+				req.RemoteAddr = r.RemoteAddr
 				ctx.Logf("req %v", r.Host)
 
 				if !strings.HasPrefix(req.URL.String(), "https://") {
@@ -410,7 +419,12 @@ func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
 	if ctx.Proxy.ConnectionErrHandler != nil {
 		ctx.Proxy.ConnectionErrHandler(w, ctx, err)
 	} else {
-		errStr := fmt.Sprintf("HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(err.Error()), err.Error())
+		errorMessage := err.Error()
+		errStr := fmt.Sprintf(
+			"HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s",
+			len(errorMessage),
+			errorMessage,
+		)
 		if _, err := io.WriteString(w, errStr); err != nil {
 			ctx.Warnf("Error responding to client: %s", err)
 		}
@@ -456,7 +470,10 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxy(httpsProxy string) func(netw
 	return proxy.NewConnectDialToProxyWithHandler(httpsProxy, nil)
 }
 
-func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(httpsProxy string, connectReqHandler func(req *http.Request)) func(network, addr string) (net.Conn, error) {
+func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(
+	httpsProxy string,
+	connectReqHandler func(req *http.Request),
+) func(network, addr string) (net.Conn, error) {
 	u, err := url.Parse(httpsProxy)
 	if err != nil {
 		return nil

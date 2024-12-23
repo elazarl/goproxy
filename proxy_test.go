@@ -119,10 +119,12 @@ func oneShotProxy(proxy *goproxy.ProxyHttpServer) (client *http.Client, s *httpt
 
 func TestSimpleHook(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.OnRequest(goproxy.SrcIpIs("127.0.0.1")).DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-		req.URL.Path = "/bobo"
-		return req, nil
-	})
+	proxy.OnRequest(goproxy.SrcIpIs("127.0.0.1")).DoFunc(
+		func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+			req.URL.Path = "/bobo"
+			return req, nil
+		},
+	)
 	client, l := oneShotProxy(proxy)
 	defer l.Close()
 
@@ -213,10 +215,12 @@ func TestOneShotFileServer(t *testing.T) {
 
 func TestContentType(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.OnResponse(goproxy.ContentTypeIs("image/png")).DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
-		resp.Header.Set("X-Shmoopi", "1")
-		return resp
-	})
+	proxy.OnResponse(goproxy.ContentTypeIs("image/png")).DoFunc(
+		func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+			resp.Header.Set("X-Shmoopi", "1")
+			return resp
+		},
+	)
 
 	client, l := oneShotProxy(proxy)
 	defer l.Close()
