@@ -562,13 +562,16 @@ func TestGoproxyHijackConnect(t *testing.T) {
 	proxy.OnRequest(goproxy.ReqHostIs(srv.Listener.Addr().String())).
 		HijackConnect(func(req *http.Request, client net.Conn, ctx *goproxy.ProxyCtx) {
 			t.Logf("URL %+#v\nSTR %s", req.URL, req.URL.String())
-			req.URL.Scheme = "http"
-			req.URL.Path = "/bobo"
-			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, req.URL.String(), nil)
+			getReq, err := http.NewRequestWithContext(req.Context(), http.MethodGet, (&url.URL{
+				Scheme: "http",
+				Host:   req.URL.Host,
+				Path:   "/bobo",
+			}).String(), nil)
 			if err != nil {
 				t.Fatal("Cannot create request", err)
 			}
-			resp, err := http.DefaultClient.Do(req)
+			httpClient := &http.Client{}
+			resp, err := httpClient.Do(getReq)
 			panicOnErr(err, "http.Get(CONNECT url)")
 			panicOnErr(resp.Write(client), "resp.Write(client)")
 			_ = resp.Body.Close()
