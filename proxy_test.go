@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -38,9 +39,26 @@ func (QueryHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	_, _ = io.WriteString(w, req.Form.Get("result"))
 }
 
+type HeadersHandler struct{}
+
+// This handlers returns a body with a string containing all the request headers it received.
+func (HeadersHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	var sb strings.Builder
+	for name, values := range req.Header {
+		for _, value := range values {
+			sb.WriteString(name)
+			sb.WriteString(": ")
+			sb.WriteString(value)
+			sb.WriteString(";")
+		}
+	}
+	_, _ = io.WriteString(w, sb.String())
+}
+
 func init() {
 	http.DefaultServeMux.Handle("/bobo", ConstantHanlder("bobo"))
 	http.DefaultServeMux.Handle("/query", QueryHandler{})
+	http.DefaultServeMux.Handle("/headers", HeadersHandler{})
 }
 
 type ConstantHanlder string
@@ -336,6 +354,24 @@ func TestSimpleMitm(t *testing.T) {
 	}
 }
 
+func TestMitmMutateRequest(t *testing.T) {
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		// We inject a header in the request
+		req.Header.Set("Mitm-Header-Inject", "true")
+		return req, nil
+	})
+
+	client, l := oneShotProxy(proxy)
+	defer l.Close()
+
+	r := string(getOrFail(t, https.URL+"/headers", client))
+	if !strings.Contains(r, "Mitm-Header-Inject: true") {
+		t.Error("Expected response body to contain the MITM injected header. Got instead: ", r)
+	}
+}
+
 func TestConnectHandler(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
 	althttps := httptest.NewTLSServer(ConstantHanlder("althttps"))
@@ -428,7 +464,6 @@ func TestNoProxyHeaders(t *testing.T) {
 	defer l.Close()
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, s.URL, nil)
 	panicOnErr(err, "bad request")
-	req.Header.Add("Connection", "close")
 	req.Header.Add("Proxy-Connection", "close")
 	req.Header.Add("Proxy-Authenticate", "auth")
 	req.Header.Add("Proxy-Authorization", "auth")
@@ -443,9 +478,60 @@ func TestNoProxyHeadersHttps(t *testing.T) {
 	defer l.Close()
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, s.URL, nil)
 	panicOnErr(err, "bad request")
-	req.Header.Add("Connection", "close")
 	req.Header.Add("Proxy-Connection", "close")
 	_, _ = client.Do(req)
+}
+
+type VerifyAcceptEncodingHeader struct {
+	ReceivedHeaderValue string
+}
+
+func (v *VerifyAcceptEncodingHeader) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	v.ReceivedHeaderValue = r.Header.Get("Accept-Encoding")
+}
+
+func TestAcceptEncoding(t *testing.T) {
+	v := VerifyAcceptEncodingHeader{}
+	s := httptest.NewServer(&v)
+	for i, tc := range []struct {
+		keepAcceptEncoding bool
+		disableCompression bool
+		acceptEncoding     string
+		expectedValue      string
+	}{
+		{false, false, "", "gzip"},
+		{false, false, "identity", "gzip"},
+		{false, true, "", ""},
+		{false, true, "identity", ""},
+		{true, false, "", "gzip"},
+		{true, false, "identity", "identity"},
+		{true, true, "", ""},
+		{true, true, "identity", "identity"},
+	} {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			proxy := goproxy.NewProxyHttpServer()
+			proxy.KeepAcceptEncoding = tc.keepAcceptEncoding
+			proxy.Tr.DisableCompression = tc.disableCompression
+			client, l := oneShotProxy(proxy)
+			defer l.Close()
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, s.URL, nil)
+			panicOnErr(err, "bad request")
+			// fully control the Accept-Encoding header we send to the proxy
+			tr, ok := client.Transport.(*http.Transport)
+			if !ok {
+				t.Fatal("invalid client transport")
+			}
+			tr.DisableCompression = true
+			if tc.acceptEncoding != "" {
+				req.Header.Add("Accept-Encoding", tc.acceptEncoding)
+			}
+			_, err = client.Do(req)
+			panicOnErr(err, "bad response")
+			if v.ReceivedHeaderValue != tc.expectedValue {
+				t.Errorf("%+v expected Accept-Encoding: %s, got %s", tc, tc.expectedValue, v.ReceivedHeaderValue)
+			}
+		})
+	}
 }
 
 func TestHeadReqHasContentLength(t *testing.T) {
@@ -557,6 +643,30 @@ func TestGoproxyThroughProxy(t *testing.T) {
 	}
 }
 
+func TestHttpProxyAddrsFromEnv(t *testing.T) {
+	proxy := goproxy.NewProxyHttpServer()
+	doubleString := func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		b, err := io.ReadAll(resp.Body)
+		panicOnErr(err, "readAll resp")
+		resp.Body = io.NopCloser(bytes.NewBufferString(string(b) + " " + string(b)))
+		return resp
+	}
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	proxy.OnResponse().DoFunc(doubleString)
+
+	_, l := oneShotProxy(proxy)
+	defer l.Close()
+
+	t.Setenv("https_proxy", l.URL)
+	proxy2 := goproxy.NewProxyHttpServer()
+
+	client, l2 := oneShotProxy(proxy2)
+	defer l2.Close()
+	if r := string(getOrFail(t, https.URL+"/bobo", client)); r != "bobo bobo" {
+		t.Error("Expected bobo doubled twice, got", r)
+	}
+}
+
 func TestGoproxyHijackConnect(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.OnRequest(goproxy.ReqHostIs(srv.Listener.Addr().String())).
@@ -610,11 +720,13 @@ func writeConnect(w io.Writer) {
 	// Passing IP address with port alone (without //) will raise error:
 	// "first path segment in URL cannot contain colon" more details on this
 	// here: https://github.com/golang/go/issues/18824
-	validSrvURL := srv.URL[len("http:"):]
-
-	req, err := http.NewRequest(http.MethodConnect, validSrvURL, nil)
-	panicOnErr(err, "NewRequest")
-	_ = req.Write(w)
+	req := &http.Request{
+		Method: http.MethodConnect,
+		URL:    &url.URL{Opaque: srv.Listener.Addr().String()},
+		Host:   srv.Listener.Addr().String(),
+		Header: make(http.Header),
+	}
+	err := req.Write(w)
 	panicOnErr(err, "req(CONNECT).Write")
 }
 
@@ -630,13 +742,19 @@ func TestCurlMinusP(t *testing.T) {
 	})
 	_, l := oneShotProxy(proxy)
 	defer l.Close()
-	cmd := exec.Command("curl", "-p", "-sS", "--proxy", l.URL, srv.URL+"/bobo")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "curl", "-p", "-sS", "--proxy", l.URL, srv.URL+"/bobo")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
 		t.Fatal(err)
 	}
-	if string(output) != "bobo" {
-		t.Error("Expected bobo, got", string(output))
+
+	if output := out.String(); output != "bobo" {
+		t.Error("Expected bobo, got", output)
 	}
 	if !called {
 		t.Error("handler not called")
