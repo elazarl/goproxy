@@ -198,6 +198,47 @@ proxy.OnRequest(goproxy.UrlMatches(regexp.MustCompile(`.*gif$`))).HandleConnect(
 proxy.OnRequest(goproxy.UrlMatches(regexp.MustCompile(`.*gif$`))).Do(YourReqHandlerFunc())
 ```
 
+## Error handling
+### Generic error
+If an error occurs while handling a request through the proxy, by default
+the proxy returns HTTP error `500` (Internal Server Error) with the `error
+message` as the `body` content.
+
+If you want to override this behaviour, you can define your own
+`RespHandler` that changes the error response.
+Among the context parameters, `ctx.Error` contains the `error` occurred,
+if any, or the `nil` value, if no error happened.
+
+You can handle it as you wish, including returning a custom JSON as the body.
+Example of an error handler:
+```
+proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+	var dnsError *net.DNSError
+	if errors.As(ctx.Error, &dnsError) {
+		// Do not leak our DNS server's address
+		dnsError.Server = "<server-redacted>"
+		return goproxy.NewResponse(ctx.Req, goproxy.ContentTypeText, http.StatusBadGateway, dnsError.Error())
+	}
+	return resp
+})
+```
+
+### Connection error
+If an error occurs while sending data to the target remote server (or to
+the proxy client), the `proxy.ConnectionErrHandler` is called to handle the
+error, if present, else a `default handler` will be used.
+The error is passed as `function parameter` and not inside the proxy context,
+so you don't have to check the ctx.Error field in this handler.
+
+In this handler you have access to the raw connection with the proxy
+client (as an `io.Writer`), so you could send any HTTP data over it,
+if needed, containing the error data.
+There is no guarantee that the connection hasn't already been closed, so
+the `Write()` could return an error.
+
+The `connection` will be `automatically closed` by the proxy library after the
+error handler call, so you don't have to worry about it.
+
 ## Project Status
 This project has been created `10 years` ago, and has reached a stage of
 `maturity`. It can be safely used in `production`, and many projects
