@@ -47,6 +47,7 @@ type ConnectAction struct {
 	Action    ConnectActionLiteral
 	Hijack    func(req *http.Request, client net.Conn, ctx *ProxyCtx)
 	TLSConfig func(host string, ctx *ProxyCtx) (*tls.Config, error)
+	MitmError func(req *http.Request, ctx *ProxyCtx, err error)
 }
 
 func stripPort(s string) string {
@@ -253,6 +254,9 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			defer rawClientTls.Close()
 			if err := rawClientTls.Handshake(); err != nil {
 				ctx.Warnf("Cannot handshake client %v %v", r.Host, err)
+				if todo.MitmError != nil {
+					todo.MitmError(r, ctx, err)
+				}
 				return
 			}
 			clientTlsReader := bufio.NewReader(rawClientTls)
