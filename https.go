@@ -2,6 +2,7 @@ package goproxy
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -16,6 +17,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/elazarl/goproxy/internal/http1parser"
 	"github.com/elazarl/goproxy/internal/signer"
 )
 
@@ -191,10 +193,12 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 
 		var targetSiteCon net.Conn
 		var remote *bufio.Reader
+		var cloned bytes.Buffer
+
+		client := bufio.NewReader(io.TeeReader(proxyClient, &cloned))
 
 		for {
-			client := bufio.NewReader(proxyClient)
-			req, err := http.ReadRequest(client)
+			req, err := http1parser.ReadRequest(proxy.PreventCanonicalization, client, &cloned)
 			if err != nil && !errors.Is(err, io.EOF) {
 				ctx.Warnf("cannot read request of MITM HTTP client: %+#v", err)
 			}
@@ -255,9 +259,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				ctx.Warnf("Cannot handshake client %v %v", r.Host, err)
 				return
 			}
-			clientTlsReader := bufio.NewReader(rawClientTls)
+			var cloned bytes.Buffer
+			clientTlsReader := bufio.NewReader(io.TeeReader(rawClientTls, &cloned))
+
 			for !isEOF(clientTlsReader) {
-				req, err := http.ReadRequest(clientTlsReader)
+				req, err := http1parser.ReadRequest(proxy.PreventCanonicalization, clientTlsReader, &cloned)
 				ctx := &ProxyCtx{
 					Req:          req,
 					Session:      atomic.AddInt64(&proxy.sess, 1),
@@ -266,10 +272,9 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					RoundTripper: ctx.RoundTripper,
 				}
 				if err != nil && !errors.Is(err, io.EOF) {
-					return
+					ctx.Warnf("Cannot read TLS request from mitm'd client %v %v", r.Host, err)
 				}
 				if err != nil {
-					ctx.Warnf("Cannot read TLS request from mitm'd client %v %v", r.Host, err)
 					return
 				}
 

@@ -39,6 +39,12 @@ type ProxyHttpServer struct {
 	CertStore          CertStorage
 	KeepHeader         bool
 	AllowHTTP2         bool
+	// When PreventCanonicalization is true, the header value passed in
+	// the request are sent as they are to the destination server, instead of
+	// following the HTTP RFC.
+	// This is useful when the header aren't considered case-insensitive
+	// by the target server.
+	PreventCanonicalization bool
 	// KeepAcceptEncoding, if true, prevents the proxy from dropping
 	// Accept-Encoding headers from the client.
 	//
