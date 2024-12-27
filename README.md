@@ -87,6 +87,18 @@ aren't sure about it).
 Make sure to include the bin folder in the path of your shell, to be able to
 directly use the `golangci-lint run` command.
 
+## Versioning
+With GitHub, there are 2 version types: release versions (such as `v1.x`)
+and Go branch default versions (such as `v0.0.0-202412xxx`).
+The latter is `automatically` assigned by Go modules command if the
+master branch contains new commits that aren't present in the last
+GitHub release.
+
+We plan to `periodically` publish stable releases (v1.x), after a while that
+no one reports issues with the fixes merged in the master branch.
+You can `safely use both` version types, since we carefully review
+all the pull requests before merging them.
+
 ## A taste of GoProxy
 
 To get a taste of `goproxy`, here you are a basic HTTP/HTTPS proxy
