@@ -38,6 +38,9 @@ func (proxy *ProxyHttpServer) serveWebsocketTLS(
 	host, port, err := net.SplitHostPort(req.URL.Host)
 	if err != nil || port == "" {
 		host = net.JoinHostPort(req.URL.Host, "443")
+	} else {
+		// We already had a port, just use it
+		host = req.URL.Host
 	}
 	targetURL := url.URL{Scheme: "wss", Host: host, Path: req.URL.Path}
 
@@ -70,6 +73,9 @@ func (proxy *ProxyHttpServer) serveWebsocketHttpOverTLS(
 	host, port, err := net.SplitHostPort(req.URL.Host)
 	if err != nil || port == "" {
 		host = net.JoinHostPort(req.URL.Host, "80")
+	} else {
+		// We already had a port, just use it
+		host = req.URL.Host
 	}
 	targetURL := url.URL{Scheme: "ws", Host: host, Path: req.URL.Path}
 
