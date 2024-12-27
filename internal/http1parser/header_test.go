@@ -13,7 +13,7 @@ func TestHttp1ExtractHeaders_Empty(t *testing.T) {
 		"\r\n"
 	headers, err := http1parser.Http1ExtractHeaders([]byte(http1Data))
 	require.NoError(t, err)
-	assert.Len(t, headers, 0)
+	assert.Empty(t, headers)
 }
 
 func TestHttp1ExtractHeaders(t *testing.T) {
