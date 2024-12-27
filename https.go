@@ -222,7 +222,10 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					httpError(proxyClient, ctx, err)
 					return
 				}
-				resp, err = http.ReadResponse(remote, req)
+				resp, err = func() (*http.Response, error) {
+					defer req.Body.Close()
+					return http.ReadResponse(remote, req)
+				}()
 				if err != nil {
 					httpError(proxyClient, ctx, err)
 					return

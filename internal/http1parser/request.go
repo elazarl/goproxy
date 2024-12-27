@@ -3,7 +3,6 @@ package http1parser
 import (
 	"bufio"
 	"bytes"
-	"io"
 	"net/http"
 	"net/textproto"
 )
@@ -18,8 +17,9 @@ func ReadRequest(preventCanonicalization bool, r *bufio.Reader, cloned *bytes.Bu
 		}
 
 		// Discard the raw bytes related to the current request, we don't care
-		// about them since we don't have to do anything
-		_ = getRequestData(req, r, cloned)
+		// about them since we don't have to do anything.
+		// We call the function to consume the buffer.
+		_ = getRequestData(r, cloned)
 		return req, nil
 	}
 
@@ -28,7 +28,7 @@ func ReadRequest(preventCanonicalization bool, r *bufio.Reader, cloned *bytes.Bu
 		return nil, err
 	}
 
-	httpData := getRequestData(req, r, cloned)
+	httpData := getRequestData(r, cloned)
 	headers, _ := Http1ExtractHeaders(httpData)
 	for _, headerName := range headers {
 		canonicalizedName := textproto.CanonicalMIMEHeaderKey(headerName)
@@ -47,17 +47,7 @@ func ReadRequest(preventCanonicalization bool, r *bufio.Reader, cloned *bytes.Bu
 	return req, nil
 }
 
-func getRequestData(req *http.Request, r *bufio.Reader, cloned *bytes.Buffer) []byte {
-	// We need to read the whole request body here because,
-	// however, body data will remain unread inside the *bufio.Reader,
-	// after the call to http.ReadRequest() and, without the read here,
-	// we would consider them as part of the next request.
-	// Without the body read, we wouldn't be able to know the total
-	// length of data related to the current request.
-	bodyData, _ := io.ReadAll(req.Body)
-	_ = req.Body.Close()
-	req.Body = io.NopCloser(bytes.NewReader(bodyData))
-
+func getRequestData(r *bufio.Reader, cloned *bytes.Buffer) []byte {
 	// "Cloned" buffer uses the raw connection as the data source.
 	// However, the *bufio.Reader can read also bytes of another unrelated
 	// request on the same connection, since it's buffered, so we have to

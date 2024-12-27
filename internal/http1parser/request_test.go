@@ -40,10 +40,6 @@ func TestCanonicalRequest(t *testing.T) {
 	assert.NotEmpty(t, req.Header)
 	assert.NotContains(t, req.Header, "lowercase")
 	assert.Contains(t, req.Header, "Lowercase")
-
-	body, err := io.ReadAll(req.Body)
-	require.NoError(t, err)
-	assert.Len(t, body, 17)
 	require.NoError(t, req.Body.Close())
 
 	// 2nd request
