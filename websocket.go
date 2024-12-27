@@ -33,14 +33,12 @@ func (proxy *ProxyHttpServer) serveWebsocketTLS(
 	tlsConfig *tls.Config,
 	clientConn *tls.Conn,
 ) {
+	host := req.URL.Host
 	// Port is optional in req.URL.Host, in this case SplitHostPort returns
 	// an error, and we add the default port
-	host, port, err := net.SplitHostPort(req.URL.Host)
+	_, port, err := net.SplitHostPort(req.URL.Host)
 	if err != nil || port == "" {
 		host = net.JoinHostPort(req.URL.Host, "443")
-	} else {
-		// We already had a port, just use it
-		host = req.URL.Host
 	}
 	targetURL := url.URL{Scheme: "wss", Host: host, Path: req.URL.Path}
 
@@ -68,14 +66,12 @@ func (proxy *ProxyHttpServer) serveWebsocketHttpOverTLS(
 	req *http.Request,
 	clientConn *tls.Conn,
 ) {
+	host := req.URL.Host
 	// Port is optional in req.URL.Host, in this case SplitHostPort returns
 	// an error, and we add the default port
-	host, port, err := net.SplitHostPort(req.URL.Host)
+	_, port, err := net.SplitHostPort(req.URL.Host)
 	if err != nil || port == "" {
 		host = net.JoinHostPort(req.URL.Host, "80")
-	} else {
-		// We already had a port, just use it
-		host = req.URL.Host
 	}
 	targetURL := url.URL{Scheme: "ws", Host: host, Path: req.URL.Path}
 
