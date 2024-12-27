@@ -14,3 +14,5 @@ updates:
       - /examples
     schedule:
       interval: "daily"
+    ignore:
+      - dependency-name: "github.com/elazarl/goproxy"

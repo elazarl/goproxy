@@ -53,6 +53,23 @@ we won't merge it... `:D`
 The code for this project is released under the `BSD 3-Clause` license,
 making it useful for `commercial` uses as well.
 
+### Submit your case study
+So, you have introduced & integrated GoProxy into one of your personal projects
+or a project inside the company you work for.
+
+We're happy to learn about new `creative solutions` made with this library,
+so feel free to `contact` the maintainer listed above via e-mail, to explaining
+why you found this project useful for your needs.
+
+If you have signed a `Non Disclosure Agreement` with the company, you
+can propose them to write a `blog post` on their official website about
+this topic, so this information will be public by their choice, and you can
+`share the link` of the blog post with us :)
+
+The purpose of case studies is to share with the `community` why all the
+`contributors` to this project are `improving` the world with their help and
+what people are building using it.
+
 ### Linter
 The codebase uses an automatic lint check over your Pull Request code.
 Before opening it, you should check if your changes respect it, by running
@@ -69,6 +86,18 @@ its value is equivalent to `~/go`, check its value in your machine if you
 aren't sure about it).
 Make sure to include the bin folder in the path of your shell, to be able to
 directly use the `golangci-lint run` command.
+
+## Versioning
+With GitHub, there are 2 version types: release versions (such as `v1.x`)
+and Go branch default versions (such as `v0.0.0-202412xxx`).
+The latter is `automatically` assigned by Go modules command if the
+master branch contains new commits that aren't present in the last
+GitHub release.
+
+We plan to `periodically` publish stable releases (v1.x), after a while that
+no one reports issues with the fixes merged in the master branch.
+You can `safely use both` version types, since we carefully review
+all the pull requests before merging them.
 
 ## A taste of GoProxy
 
