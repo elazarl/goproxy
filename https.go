@@ -2,7 +2,6 @@ package goproxy
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -193,12 +192,10 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 
 		var targetSiteCon net.Conn
 		var remote *bufio.Reader
-		var cloned bytes.Buffer
 
-		client := bufio.NewReader(io.TeeReader(proxyClient, &cloned))
-
-		for {
-			req, err := http1parser.ReadRequest(proxy.PreventCanonicalization, client, &cloned)
+		client := http1parser.NewRequestReader(proxy.PreventCanonicalization, proxyClient)
+		for !client.IsEOF() {
+			req, err := client.ReadRequest()
 			if err != nil && !errors.Is(err, io.EOF) {
 				ctx.Warnf("cannot read request of MITM HTTP client: %+#v", err)
 			}
@@ -262,11 +259,10 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				ctx.Warnf("Cannot handshake client %v %v", r.Host, err)
 				return
 			}
-			var cloned bytes.Buffer
-			clientTlsReader := bufio.NewReader(io.TeeReader(rawClientTls, &cloned))
 
-			for !isEOF(clientTlsReader) {
-				req, err := http1parser.ReadRequest(proxy.PreventCanonicalization, clientTlsReader, &cloned)
+			clientTlsReader := http1parser.NewRequestReader(proxy.PreventCanonicalization, rawClientTls)
+			for !clientTlsReader.IsEOF() {
+				req, err := clientTlsReader.ReadRequest()
 				ctx := &ProxyCtx{
 					Req:          req,
 					Session:      atomic.AddInt64(&proxy.sess, 1),
@@ -306,7 +302,8 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						// parse the HTTP Body for PRI requests. This leaves the body of
 						// the http2.ClientPreface ("SM\r\n\r\n") on the wire which we need
 						// to clear before setting up the connection.
-						_, err := clientTlsReader.Discard(6)
+						reader := clientTlsReader.Reader()
+						_, err := reader.Discard(6)
 						if err != nil {
 							ctx.Warnf("Failed to process HTTP2 client preface: %v", err)
 							return
@@ -315,7 +312,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 							ctx.Warnf("HTTP2 connection failed: disallowed")
 							return
 						}
-						tr := H2Transport{clientTlsReader, rawClientTls, tlsConfig.Clone(), host}
+						tr := H2Transport{reader, rawClientTls, tlsConfig.Clone(), host}
 						if _, err := tr.RoundTrip(req); err != nil {
 							ctx.Warnf("HTTP2 connection failed: %v", err)
 						} else {

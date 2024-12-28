@@ -3,32 +3,58 @@ package http1parser
 import (
 	"bufio"
 	"bytes"
+	"errors"
+	"io"
 	"net/http"
 	"net/textproto"
 )
 
-func ReadRequest(preventCanonicalization bool, r *bufio.Reader, cloned *bytes.Buffer) (*http.Request, error) {
-	if !preventCanonicalization {
-		// Just call the HTTP library function if the preventCanonicalization
-		// configuration is disabled
-		req, err := http.ReadRequest(r)
-		if err != nil {
-			return nil, err
-		}
+type RequestReader struct {
+	preventCanonicalization bool
+	reader                  *bufio.Reader
+	// Used only when preventCanonicalization value is true
+	cloned *bytes.Buffer
+}
 
-		// Discard the raw bytes related to the current request, we don't care
-		// about them since we don't have to do anything.
-		// We call the function to consume the buffer.
-		_ = getRequestData(r, cloned)
-		return req, nil
+func NewRequestReader(preventCanonicalization bool, conn io.Reader) *RequestReader {
+	if !preventCanonicalization {
+		return &RequestReader{
+			preventCanonicalization: false,
+			reader:                  bufio.NewReader(conn),
+		}
 	}
 
-	req, err := http.ReadRequest(r)
+	var cloned bytes.Buffer
+	reader := bufio.NewReader(io.TeeReader(conn, &cloned))
+	return &RequestReader{
+		preventCanonicalization: true,
+		reader:                  reader,
+		cloned:                  &cloned,
+	}
+}
+
+func (r *RequestReader) IsEOF() bool {
+	_, err := r.reader.Peek(1)
+	return errors.Is(err, io.EOF)
+}
+
+func (r *RequestReader) Reader() *bufio.Reader {
+	return r.reader
+}
+
+func (r *RequestReader) ReadRequest() (*http.Request, error) {
+	if !r.preventCanonicalization {
+		// Just call the HTTP library function if the preventCanonicalization
+		// configuration is disabled
+		return http.ReadRequest(r.reader)
+	}
+
+	req, err := http.ReadRequest(r.reader)
 	if err != nil {
 		return nil, err
 	}
 
-	httpData := getRequestData(r, cloned)
+	httpData := getRequestData(r.reader, r.cloned)
 	headers, _ := Http1ExtractHeaders(httpData)
 	for _, headerName := range headers {
 		canonicalizedName := textproto.CanonicalMIMEHeaderKey(headerName)

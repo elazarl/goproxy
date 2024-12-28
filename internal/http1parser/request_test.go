@@ -1,7 +1,6 @@
 package http1parser_test
 
 import (
-	"bufio"
 	"bytes"
 	"io"
 	"testing"
@@ -30,12 +29,10 @@ const (
 func TestCanonicalRequest(t *testing.T) {
 	// Here we are simulating two requests on the same connection
 	http1Data := bytes.NewReader(append([]byte(_data), _data2...))
-
-	var cloned bytes.Buffer
-	r := bufio.NewReader(io.TeeReader(http1Data, &cloned))
+	parser := http1parser.NewRequestReader(false, http1Data)
 
 	// 1st request
-	req, err := http1parser.ReadRequest(false, r, &cloned)
+	req, err := parser.ReadRequest()
 	require.NoError(t, err)
 	assert.NotEmpty(t, req.Header)
 	assert.NotContains(t, req.Header, "lowercase")
@@ -43,22 +40,19 @@ func TestCanonicalRequest(t *testing.T) {
 	require.NoError(t, req.Body.Close())
 
 	// 2nd request
-	req, err = http1parser.ReadRequest(false, r, &cloned)
+	req, err = parser.ReadRequest()
 	require.NoError(t, err)
 	assert.NotEmpty(t, req.Header)
 
 	// Make sure that the buffers are empty after all requests have been processed
-	assert.Equal(t, 0, r.Buffered())
-	assert.Equal(t, 0, cloned.Len())
+	assert.True(t, parser.IsEOF())
 }
 
 func TestNonCanonicalRequest(t *testing.T) {
 	http1Data := bytes.NewReader([]byte(_data))
+	parser := http1parser.NewRequestReader(true, http1Data)
 
-	var cloned bytes.Buffer
-	r := bufio.NewReader(io.TeeReader(http1Data, &cloned))
-
-	req, err := http1parser.ReadRequest(true, r, &cloned)
+	req, err := parser.ReadRequest()
 	require.NoError(t, err)
 	assert.NotEmpty(t, req.Header)
 	assert.Contains(t, req.Header, "lowercase")
@@ -67,11 +61,9 @@ func TestNonCanonicalRequest(t *testing.T) {
 
 func TestMultipleNonCanonicalRequests(t *testing.T) {
 	http1Data := bytes.NewReader(append([]byte(_data), _data2...))
+	parser := http1parser.NewRequestReader(true, http1Data)
 
-	var cloned bytes.Buffer
-	r := bufio.NewReader(io.TeeReader(http1Data, &cloned))
-
-	req, err := http1parser.ReadRequest(true, r, &cloned)
+	req, err := parser.ReadRequest()
 	require.NoError(t, err)
 	assert.NotEmpty(t, req.Header)
 	assert.Contains(t, req.Header, "lowercase")
@@ -82,10 +74,9 @@ func TestMultipleNonCanonicalRequests(t *testing.T) {
 	assert.Len(t, body, 17)
 	require.NoError(t, req.Body.Close())
 
-	req, err = http1parser.ReadRequest(true, r, &cloned)
+	req, err = parser.ReadRequest()
 	require.NoError(t, err)
 	assert.NotEmpty(t, req.Header)
 
-	assert.Equal(t, 0, cloned.Len())
-	assert.Equal(t, 0, r.Buffered())
+	assert.True(t, parser.IsEOF())
 }
