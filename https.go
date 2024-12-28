@@ -237,10 +237,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					httpError(proxyClient, ctx, err)
 					return
 				}
-				defer resp.Body.Close()
 			}
 			resp = proxy.filterResponse(resp, ctx)
-			if err := resp.Write(proxyClient); err != nil {
+			err = resp.Write(proxyClient)
+			_ = resp.Body.Close()
+			if err != nil {
 				httpError(proxyClient, ctx, err)
 				return
 			}
@@ -369,61 +370,69 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					ctx.Logf("resp %v", resp.Status)
 				}
 				resp = proxy.filterResponse(resp, ctx)
-				defer resp.Body.Close()
 
-				text := resp.Status
-				statusCode := strconv.Itoa(resp.StatusCode) + " "
-				text = strings.TrimPrefix(text, statusCode)
-				// always use 1.1 to support chunked encoding
-				if _, err := io.WriteString(rawClientTls, "HTTP/1.1"+" "+statusCode+text+"\r\n"); err != nil {
-					ctx.Warnf("Cannot write TLS response HTTP status from mitm'd client: %v", err)
-					return
-				}
+				// Run defer inside a custom function to prevent response body memory leak
+				if ok := func() bool {
+					defer resp.Body.Close()
 
-				if resp.Request.Method == http.MethodHead {
-					// don't change Content-Length for HEAD request
-				} else if (resp.StatusCode >= 100 && resp.StatusCode < 200) ||
-					resp.StatusCode == http.StatusNoContent {
-					// RFC7230: A server MUST NOT send a Content-Length header field in any response
-					// with a status code of 1xx (Informational) or 204 (No Content)
-					resp.Header.Del("Content-Length")
-				} else {
-					// Since we don't know the length of resp, return chunked encoded response
-					// TODO: use a more reasonable scheme
-					resp.Header.Del("Content-Length")
-					resp.Header.Set("Transfer-Encoding", "chunked")
-				}
-				// Force connection close otherwise chrome will keep CONNECT tunnel open forever
-				resp.Header.Set("Connection", "close")
-				if err := resp.Header.Write(rawClientTls); err != nil {
-					ctx.Warnf("Cannot write TLS response header from mitm'd client: %v", err)
-					return
-				}
-				if _, err = io.WriteString(rawClientTls, "\r\n"); err != nil {
-					ctx.Warnf("Cannot write TLS response header end from mitm'd client: %v", err)
-					return
-				}
-
-				if resp.Request.Method == http.MethodHead ||
-					(resp.StatusCode >= 100 && resp.StatusCode < 200) ||
-					resp.StatusCode == http.StatusNoContent ||
-					resp.StatusCode == http.StatusNotModified {
-					// Don't write out a response body, when it's not allowed
-					// in RFC7230
-				} else {
-					chunked := newChunkedWriter(rawClientTls)
-					if _, err := io.Copy(chunked, resp.Body); err != nil {
-						ctx.Warnf("Cannot write TLS response body from mitm'd client: %v", err)
-						return
+					text := resp.Status
+					statusCode := strconv.Itoa(resp.StatusCode) + " "
+					text = strings.TrimPrefix(text, statusCode)
+					// always use 1.1 to support chunked encoding
+					if _, err := io.WriteString(rawClientTls, "HTTP/1.1"+" "+statusCode+text+"\r\n"); err != nil {
+						ctx.Warnf("Cannot write TLS response HTTP status from mitm'd client: %v", err)
+						return false
 					}
-					if err := chunked.Close(); err != nil {
-						ctx.Warnf("Cannot write TLS chunked EOF from mitm'd client: %v", err)
-						return
+
+					if resp.Request.Method == http.MethodHead {
+						// don't change Content-Length for HEAD request
+					} else if (resp.StatusCode >= 100 && resp.StatusCode < 200) ||
+						resp.StatusCode == http.StatusNoContent {
+						// RFC7230: A server MUST NOT send a Content-Length header field in any response
+						// with a status code of 1xx (Informational) or 204 (No Content)
+						resp.Header.Del("Content-Length")
+					} else {
+						// Since we don't know the length of resp, return chunked encoded response
+						// TODO: use a more reasonable scheme
+						resp.Header.Del("Content-Length")
+						resp.Header.Set("Transfer-Encoding", "chunked")
+					}
+					// Force connection close otherwise chrome will keep CONNECT tunnel open forever
+					resp.Header.Set("Connection", "close")
+					if err := resp.Header.Write(rawClientTls); err != nil {
+						ctx.Warnf("Cannot write TLS response header from mitm'd client: %v", err)
+						return false
 					}
 					if _, err = io.WriteString(rawClientTls, "\r\n"); err != nil {
-						ctx.Warnf("Cannot write TLS response chunked trailer from mitm'd client: %v", err)
-						return
+						ctx.Warnf("Cannot write TLS response header end from mitm'd client: %v", err)
+						return false
 					}
+
+					if resp.Request.Method == http.MethodHead ||
+						(resp.StatusCode >= 100 && resp.StatusCode < 200) ||
+						resp.StatusCode == http.StatusNoContent ||
+						resp.StatusCode == http.StatusNotModified {
+						// Don't write out a response body, when it's not allowed
+						// in RFC7230
+					} else {
+						chunked := newChunkedWriter(rawClientTls)
+						if _, err := io.Copy(chunked, resp.Body); err != nil {
+							ctx.Warnf("Cannot write TLS response body from mitm'd client: %v", err)
+							return false
+						}
+						if err := chunked.Close(); err != nil {
+							ctx.Warnf("Cannot write TLS chunked EOF from mitm'd client: %v", err)
+							return false
+						}
+						if _, err = io.WriteString(rawClientTls, "\r\n"); err != nil {
+							ctx.Warnf("Cannot write TLS response chunked trailer from mitm'd client: %v", err)
+							return false
+						}
+					}
+
+					return true
+				}(); !ok {
+					return
 				}
 
 				if closeConn {
