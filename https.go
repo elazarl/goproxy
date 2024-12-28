@@ -202,6 +202,16 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			if err != nil {
 				return
 			}
+
+			// Take the original value before filtering the request
+			closeConn := req.Close
+
+			// since we're converting the request, need to carry over the
+			// original connecting IP as well
+			req.RemoteAddr = r.RemoteAddr
+			ctx.Logf("req %v", r.Host)
+			ctx.Req = req
+
 			req, resp := proxy.filterRequest(req, ctx)
 			if resp == nil {
 				// Establish a connection with the remote server only if the proxy
@@ -232,6 +242,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			resp = proxy.filterResponse(resp, ctx)
 			if err := resp.Write(proxyClient); err != nil {
 				httpError(proxyClient, ctx, err)
+				return
+			}
+
+			if closeConn {
+				ctx.Logf("Non-persistent connection; closing")
 				return
 			}
 		}
