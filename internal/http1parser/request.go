@@ -33,11 +33,17 @@ func NewRequestReader(preventCanonicalization bool, conn io.Reader) *RequestRead
 	}
 }
 
+// IsEOF returns true if there is no more data that can be read from the
+// buffer and the underlying connection is closed.
 func (r *RequestReader) IsEOF() bool {
 	_, err := r.reader.Peek(1)
 	return errors.Is(err, io.EOF)
 }
 
+// Reader is used to take over the buffered connection data
+// (e.g. with HTTP/2 data).
+// After calling this function, make sure to consume all the data related
+// to the current request.
 func (r *RequestReader) Reader() *bufio.Reader {
 	return r.reader
 }
@@ -54,8 +60,9 @@ func (r *RequestReader) ReadRequest() (*http.Request, error) {
 		return nil, err
 	}
 
-	httpData := getRequestData(r.reader, r.cloned)
-	headers, _ := Http1ExtractHeaders(httpData)
+	httpDataReader := getRequestReader(r.reader, r.cloned)
+	headers, _ := Http1ExtractHeaders(httpDataReader)
+
 	for _, headerName := range headers {
 		canonicalizedName := textproto.CanonicalMIMEHeaderKey(headerName)
 		if canonicalizedName == headerName {
@@ -73,12 +80,15 @@ func (r *RequestReader) ReadRequest() (*http.Request, error) {
 	return req, nil
 }
 
-func getRequestData(r *bufio.Reader, cloned *bytes.Buffer) []byte {
+func getRequestReader(r *bufio.Reader, cloned *bytes.Buffer) *textproto.Reader {
 	// "Cloned" buffer uses the raw connection as the data source.
 	// However, the *bufio.Reader can read also bytes of another unrelated
 	// request on the same connection, since it's buffered, so we have to
 	// ignore them before passing the data to our headers parser.
 	// Data related to the next request will remain inside the buffer for
 	// later usage.
-	return cloned.Next(cloned.Len() - r.Buffered())
+	data := cloned.Next(cloned.Len() - r.Buffered())
+	return &textproto.Reader{
+		R: bufio.NewReader(bytes.NewReader(data)),
+	}
 }
