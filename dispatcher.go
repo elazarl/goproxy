@@ -134,8 +134,25 @@ func UrlMatches(re *regexp.Regexp) ReqConditionFunc {
 
 // DstHostIs returns a ReqCondition testing wether the host in the request url is the given string.
 func DstHostIs(host string) ReqConditionFunc {
+	// Make sure to perform a case-insensitive host check
 	host = strings.ToLower(host)
+	var port string
+
+	// Check if the user specified a custom port that we need to match
+	if strings.Contains(host, ":") {
+		hostOnly, portOnly, err := net.SplitHostPort(host)
+		if err == nil {
+			host = hostOnly
+			port = portOnly
+		}
+	}
+
 	return func(req *http.Request, ctx *ProxyCtx) bool {
+		// Check port matching only if it was specified
+		if port != "" && port != req.URL.Port() {
+			return false
+		}
+
 		return strings.ToLower(req.URL.Hostname()) == host
 	}
 }
