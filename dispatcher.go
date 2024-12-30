@@ -136,7 +136,7 @@ func UrlMatches(re *regexp.Regexp) ReqConditionFunc {
 func DstHostIs(host string) ReqConditionFunc {
 	host = strings.ToLower(host)
 	return func(req *http.Request, ctx *ProxyCtx) bool {
-		return strings.ToLower(req.URL.Host) == host
+		return strings.ToLower(req.URL.Hostname()) == host
 	}
 }
 
