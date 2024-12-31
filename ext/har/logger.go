@@ -22,6 +22,7 @@ type Logger struct {
 func NewLogger() *Logger {
 	return &Logger{
 		har: New(),
+		captureContent: true,
 	}
 }
 
@@ -32,7 +33,7 @@ func (l *Logger) OnRequest(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Requ
 		ctx.UserData = time.Now()
 	}
 	return req, nil
-}
+}  
 
 // OnResponse handles HTTP responses
 func (l *Logger) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
@@ -51,7 +52,6 @@ func (l *Logger) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Re
 		Time:           time.Since(startTime).Milliseconds(),
 		Request:        ParseRequest(ctx.Req, l.captureContent),
 		Response:       ParseResponse(resp, l.captureContent),
-		Cache:          Cache{},
 		Timings: Timings{
 			Send:    0,
 			Wait:    time.Since(startTime).Milliseconds(),
@@ -60,7 +60,7 @@ func (l *Logger) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Re
 	}
 
 	// Add server IP
-	entry.FillIPAddress(ctx.Req)
+	entry.fillIPAddress(ctx.Req)
 
 	// Add to HAR log thread-safely
 	l.mu.Lock()
@@ -70,27 +70,23 @@ func (l *Logger) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Re
 	return resp
 }
 
-// SetCaptureContent enables or disables request/response body capture
-func (l *Logger) SetCaptureContent(capture bool) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.captureContent = capture
-}
-
 // SaveToFile writes the current HAR log to a file
 func (l *Logger) SaveToFile(filename string) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-
 	file, err := os.Create(filename)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
-
-	encoder := json.NewEncoder(file)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(l.har)
+	
+	jsonData, err := json.Marshal(l.har)
+	if err != nil {
+		return err
+	}
+	
+	_, err = file.Write(jsonData)
+	return err
 }
 
 // Clear resets the HAR log

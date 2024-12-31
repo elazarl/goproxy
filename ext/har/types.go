@@ -5,7 +5,6 @@ package har
 import (
     "bytes"
     "io"
-    "io/ioutil"
     "log"
     "net"
     "net/http"
@@ -14,7 +13,6 @@ import (
     "time"
 )
 
-var startingEntrySize int = 1000
 
 type Har struct {
 	Log Log `json:"log"`
@@ -35,7 +33,7 @@ func New() *Har {
 			Version: "1.2",
 			Creator: Creator{
 				Name:    "GoProxy",
-				Version: "12345",
+				Version: "1.0",
 			},
 			Pages:   make([]Page, 0, 10),
 			Entries: makeNewEntries(),
@@ -53,6 +51,7 @@ func (har *Har) AppendPage(page ...Page) {
 }
 
 func makeNewEntries() []Entry {
+    const startingEntrySize int = 1000;
 	return make([]Entry, 0, startingEntrySize)
 }
 
@@ -136,80 +135,86 @@ func ParseRequest(req *http.Request, captureContent bool) *Request {
 	return &harRequest
 }
 
-func (harEntry *Entry) FillIPAddress(req *http.Request) {
-	host, _, err := net.SplitHostPort(req.URL.Host)
-	if err != nil {
-		host = req.URL.Host
-	}
-	if ip := net.ParseIP(host); ip != nil {
-		harEntry.ServerIpAddress = string(ip)
-	}
-
-	if ipaddr, err := net.LookupIP(host); err == nil {
-		for _, ip := range ipaddr {
-			if ip.To4() != nil {
-				harEntry.ServerIpAddress = ip.String()
-				return
-			}
-		}
-	}
+func (harEntry *Entry) fillIPAddress(req *http.Request) {
+    host := req.URL.Hostname()
+    
+    if ip := net.ParseIP(host); ip != nil {
+        harEntry.ServerIpAddress = ip.String()
+    }
 }
 
 func calcHeaderSize(header http.Header) int64 {
-	headerSize := 0
-	for headerName, headerValues := range header {
-		headerSize += len(headerName) + 2
-		for _, v := range headerValues {
-			headerSize += len(v)
-		}
-	}
-	return int64(headerSize)
+    // Directly return -1 as per HAR specification
+    return -1
 }
 
 func parsePostData(req *http.Request) *PostData {
-	defer func() {
-		if e := recover(); e != nil {
-			log.Printf("Error parsing request to %v: %v\n", req.URL, e)
-		}
-	}()
-
-	harPostData := new(PostData)
-	contentType := req.Header["Content-Type"]
-	if contentType == nil {
-		panic("Missing content type in request")
-	}
-	harPostData.MimeType = contentType[0]
-
-	if len(req.PostForm) > 0 {
-		for k, vals := range req.PostForm {
-			for _, v := range vals {
-				param := PostDataParam{
-					Name:  k,
-					Value: v,
-				}
-				harPostData.Params = append(harPostData.Params, param)
-			}
-		}
-	} else {
-		str, _ := ioutil.ReadAll(req.Body)
-		harPostData.Text = string(str)
-	}
-	return harPostData
+    harPostData := new(PostData)
+    
+    contentType := req.Header.Get("Content-Type")
+    if contentType == "" {
+        return nil
+    }
+    
+    mediaType, _, err := mime.ParseMediaType(contentType)
+    if err != nil {
+        log.Printf("Error parsing media type: %v", err)
+        return nil
+    }
+    
+    harPostData.MimeType = mediaType
+    
+    if err := req.ParseForm(); err != nil {
+        log.Printf("Error parsing form: %v", err)
+        return nil
+    }
+    
+    if len(req.PostForm) > 0 {
+        for k, vals := range req.PostForm {
+            for _, v := range vals {
+                param := PostDataParam{
+                    Name:  k,
+                    Value: v,
+                }
+                harPostData.Params = append(harPostData.Params, param)
+            }
+        }
+    } else {
+        str, err := io.ReadAll(req.Body)
+        if err != nil {
+            log.Printf("Error reading request body: %v", err)
+            return nil
+        }
+        harPostData.Text = string(str)
+    }
+    
+    return harPostData
 }
 
 func parseStringArrMap(stringArrMap map[string][]string) []NameValuePair {
-	index := 0
-	harQueryString := make([]NameValuePair, len(stringArrMap))
+	harQueryString := make([]NameValuePair, 0, len(stringArrMap))
+	
 	for k, v := range stringArrMap {
-		escapedKey, _ := url.QueryUnescape(k)
-		escapedValues, _ := url.QueryUnescape(strings.Join(v, ","))
+		escapedKey, err := url.QueryUnescape(k)
+		if err != nil {
+			// Use original key if unescaping fails
+			escapedKey = k
+		}
+
+		escapedValues, err := url.QueryUnescape(strings.Join(v, ","))
+		if err != nil {
+			// Use original joined values if unescaping fails
+			escapedValues = strings.Join(v, ",")
+		}
+
 		harNameValuePair := NameValuePair{
 			Name:  escapedKey,
 			Value: escapedValues,
 		}
-		harQueryString[index] = harNameValuePair
-		index++
+		
+		harQueryString = append(harQueryString, harNameValuePair)
 	}
+	
 	return harQueryString
 }
 
@@ -285,28 +290,7 @@ func ParseResponse(resp *http.Response, captureContent bool) *Response {
     return &harResponse
 }
 
-func parseContent(resp *http.Response, harContent *Content) {
-	defer func() {
-		if e := recover(); e != nil {
-			log.Printf("Error parsing response to %v: %v\n", resp.Request.URL, e)
-		}
-	}()
 
-	contentType := resp.Header["Content-Type"]
-	if contentType == nil {
-		panic("Missing content type in response")
-	}
-	harContent.MimeType = contentType[0]
-	if resp.ContentLength == 0 {
-		log.Println("Empty content")
-		return
-	}
-
-	body, _ := ioutil.ReadAll(resp.Body)
-	harContent.Text = string(body)
-	harContent.Size = len(body)
-	return
-}
 
 type Cookie struct {
 	Name     string     `json:"name"`
