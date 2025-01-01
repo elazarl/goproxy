@@ -1,106 +1,185 @@
 package har
 
-
 import (
     "encoding/json"
     "net/http"
     "os"
     "sync"
     "time"
-
     "github.com/elazarl/goproxy"
 )
 
+// ExportFunc is a function type that users can implement to handle exported entries
+type ExportFunc func([]Entry)
+
 // Logger implements a HAR logging extension for goproxy
 type Logger struct {
-	mu             sync.Mutex
-	har            *Har
-	captureContent bool
+    mu             sync.Mutex
+    entries        []Entry
+    captureContent bool
+    exportFunc     ExportFunc
+    exportInterval time.Duration
+    exportCount    int
+    currentCount   int
+    lastExport     time.Time
+    stopChan       chan struct{}
+}
+
+// LoggerOption is a function type for configuring the Logger
+type LoggerOption func(*Logger)
+
+// WithExportInterval sets the time interval for exporting entries
+func WithExportInterval(d time.Duration) LoggerOption {
+    return func(l *Logger) {
+        l.exportInterval = d
+    }
+}
+
+// WithExportCount sets the number of requests after which to export entries
+func WithExportCount(count int) LoggerOption {
+    return func(l *Logger) {
+        l.exportCount = count
+    }
 }
 
 // NewLogger creates a new HAR logger instance
-func NewLogger() *Logger {
-	return &Logger{
-		har: New(),
-		captureContent: true,
-	}
+func NewLogger(exportFunc ExportFunc, opts ...LoggerOption) *Logger {
+    l := &Logger{
+        entries:        make([]Entry, 0),
+        captureContent: true,
+        exportFunc:     exportFunc,
+        stopChan:       make(chan struct{}),
+    }
+
+    for _, opt := range opts {
+        opt(l)
+    }
+
+    go l.exportLoop()
+
+    return l
 }
 
 // OnRequest handles incoming HTTP requests
 func (l *Logger) OnRequest(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-	// Store the start time in context for later use
-	if ctx != nil {
-		ctx.UserData = time.Now()
-	}
-	return req, nil
-}  
+    if ctx != nil {
+        ctx.UserData = time.Now()
+    }
+    return req, nil
+}
 
 // OnResponse handles HTTP responses
 func (l *Logger) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
-	if resp == nil || ctx == nil || ctx.Req == nil || ctx.UserData == nil {
-		return resp
-	}
+    if resp == nil || ctx == nil || ctx.Req == nil || ctx.UserData == nil {
+        return resp
+    }
+    startTime, ok := ctx.UserData.(time.Time)
+    if !ok {
+        return resp
+    }
 
-	startTime, ok := ctx.UserData.(time.Time)
-	if !ok {
-		return resp
-	}
+    entry := Entry{
+        StartedDateTime: startTime,
+        Time:            time.Since(startTime).Milliseconds(),
+        Request:         ParseRequest(ctx.Req, l.captureContent),
+        Response:        ParseResponse(resp, l.captureContent),
+        Timings: Timings{
+            Send:    0,
+            Wait:    time.Since(startTime).Milliseconds(),
+            Receive: 0,
+        },
+    }
+    entry.fillIPAddress(ctx.Req)
 
-	// Create HAR entry
-	entry := Entry{
-		StartedDateTime: startTime,
-		Time:           time.Since(startTime).Milliseconds(),
-		Request:        ParseRequest(ctx.Req, l.captureContent),
-		Response:       ParseResponse(resp, l.captureContent),
-		Timings: Timings{
-			Send:    0,
-			Wait:    time.Since(startTime).Milliseconds(),
-			Receive: 0,
-		},
-	}
+    l.mu.Lock()
+    l.entries = append(l.entries, entry)
+    l.currentCount++
+    l.mu.Unlock()
 
-	// Add server IP
-	entry.fillIPAddress(ctx.Req)
+    return resp
+}
 
-	// Add to HAR log thread-safely
-	l.mu.Lock()
-	l.har.AppendEntry(entry)
-	l.mu.Unlock()
+func (l *Logger) exportLoop() {
+    ticker := time.NewTicker(100 * time.Millisecond) // Check frequently
+    defer ticker.Stop()
 
-	return resp
+    for {
+        select {
+        case <-ticker.C:
+            l.checkAndExport()
+        case <-l.stopChan:
+            return
+        }
+    }
+}
+
+func (l *Logger) checkAndExport() {
+    l.mu.Lock()
+    defer l.mu.Unlock()
+
+    shouldExport := false
+    if l.exportCount > 0 && l.currentCount >= l.exportCount {
+        shouldExport = true
+    } else if l.exportInterval > 0 && time.Since(l.lastExport) >= l.exportInterval {
+        shouldExport = true
+    }
+
+    if shouldExport && len(l.entries) > 0 {
+        l.exportFunc(l.entries)
+        l.entries = make([]Entry, 0)
+        l.currentCount = 0
+        l.lastExport = time.Now()
+    }
+}
+
+// Stop stops the export loop
+func (l *Logger) Stop() {
+    close(l.stopChan)
 }
 
 // SaveToFile writes the current HAR log to a file
 func (l *Logger) SaveToFile(filename string) error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	file, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	
-	jsonData, err := json.Marshal(l.har)
-	if err != nil {
-		return err
-	}
-	
-	_, err = file.Write(jsonData)
-	return err
+    l.mu.Lock()
+    defer l.mu.Unlock()
+    file, err := os.Create(filename)
+    if err != nil {
+        return err
+    }
+    defer file.Close()
+    
+    har := &Har{
+        Log: Log{
+            Version: "1.2",
+            Creator: Creator{
+                Name:    "GoProxy",
+                Version: "1.0",
+            },
+            Entries: l.entries,
+        },
+    }
+    
+    jsonData, err := json.Marshal(har)
+    if err != nil {
+        return err
+    }
+    
+    _, err = file.Write(jsonData)
+    return err
 }
 
 // Clear resets the HAR log
 func (l *Logger) Clear() {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.har = New()
+    l.mu.Lock()
+    defer l.mu.Unlock()
+    l.entries = make([]Entry, 0)
+    l.currentCount = 0
 }
 
 // GetEntries returns a copy of the current HAR entries
 func (l *Logger) GetEntries() []Entry {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	entries := make([]Entry, len(l.har.Log.Entries))
-	copy(entries, l.har.Log.Entries)
-	return entries
+    l.mu.Lock()
+    defer l.mu.Unlock()
+    entries := make([]Entry, len(l.entries))
+    copy(entries, l.entries)
+    return entries
 }

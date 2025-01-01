@@ -9,7 +9,8 @@ import (
     "net/http"
     "net/url"
     "mime"
-
+    "net"
+    "context"
     "strings"
     "time"
 )
@@ -128,7 +129,7 @@ func ParseRequest(req *http.Request, captureContent bool) *Request {
         HttpVersion: req.Proto,
         Cookies:     parseCookies(req.Cookies()),
         Headers:     parseStringArrMap(req.Header),
-        QueryString: parseStringArrMap((req.URL.Query())),
+        QueryString: parseStringArrMap(req.URL.Query()),
         BodySize:    req.ContentLength,
         HeadersSize: -1,
     }
@@ -144,7 +145,22 @@ func ParseRequest(req *http.Request, captureContent bool) *Request {
         var body []byte
         var err error
 
-        if req.Body != nil {
+        if req.GetBody != nil {
+            log.Printf("ParseRequest: using GetBody")
+            bodyReader, err := req.GetBody()
+            if err == nil {
+                body, err = io.ReadAll(bodyReader)
+                if err != nil {
+                    log.Printf("ParseRequest: error reading from GetBody: %v", err)
+                } else {
+                    harRequest.PostData.Text = string(body)
+                    log.Printf("ParseRequest: successfully read from GetBody: %s", string(body))
+                }
+                bodyReader.Close()
+            } else {
+                log.Printf("ParseRequest: error getting fresh body: %v", err)
+            }
+        } else if req.Body != nil {
             log.Printf("ParseRequest: reading from Body")
             body, err = io.ReadAll(req.Body)
             if err != nil {
@@ -156,27 +172,10 @@ func ParseRequest(req *http.Request, captureContent bool) *Request {
                 log.Printf("ParseRequest: successfully read body: %s", string(body))
             }
         }
-
-        // If body is still empty and GetBody is available, try that
-        if len(body) == 0 && req.GetBody != nil {
-            log.Printf("ParseRequest: trying GetBody")
-            if bodyReader, err := req.GetBody(); err == nil {
-                if body, err = io.ReadAll(bodyReader); err == nil {
-                    harRequest.PostData.Text = string(body)
-                    log.Printf("ParseRequest: successfully read from GetBody: %s", string(body))
-                } else {
-                    log.Printf("ParseRequest: error reading from GetBody: %v", err)
-                }
-                bodyReader.Close()
-            } else {
-                log.Printf("ParseRequest: error getting fresh body: %v", err)
-            }
-        }
     }
 
     return &harRequest
 }
-
 
 
 func (entry *Entry) fillIPAddress(req *http.Request) {

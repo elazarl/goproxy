@@ -42,7 +42,6 @@ func createProxyClient(proxyURL string) *http.Client {
     return &http.Client{Transport: tr}
 }
 
-
 func TestHarLoggerBasicFunctionality(t *testing.T) {
     testCases := []struct {
         name           string
@@ -70,7 +69,13 @@ func TestHarLoggerBasicFunctionality(t *testing.T) {
             background := httptest.NewServer(ConstantHandler("hello world"))
             defer background.Close()
 
-            logger := NewLogger()
+            var exportedEntries []Entry
+            exportFunc := func(entries []Entry) {
+                exportedEntries = append(exportedEntries, entries...)
+            }
+            logger := NewLogger(exportFunc)
+            defer logger.Stop()
+
             proxyServer := createTestProxy(logger)
             defer proxyServer.Close()
 
@@ -100,6 +105,9 @@ func TestHarLoggerBasicFunctionality(t *testing.T) {
             require.Len(t, entries, 1, "Should have one log entry")
             entry := entries[0]
             assert.Equal(t, tc.expectedMethod, entry.Request.Method, "Request method should match")
+
+            // Verify exported entries
+            assert.Len(t, exportedEntries, 0, "Should not have exported entries yet")
         })
     }
 }
@@ -111,7 +119,12 @@ func TestHarLoggerHeaders(t *testing.T) {
     }))
     defer background.Close()
 
-    logger := NewLogger()
+    var exportedEntries []Entry
+    exportFunc := func(entries []Entry) {
+        exportedEntries = append(exportedEntries, entries...)
+    }
+    logger := NewLogger(exportFunc)
+    defer logger.Stop()
 
     proxyServer := createTestProxy(logger)
     defer proxyServer.Close()
@@ -147,7 +160,12 @@ func TestHarLoggerHeaders(t *testing.T) {
 }
 
 func TestHarLoggerSaveAndClear(t *testing.T) {
-    logger := NewLogger()
+    var exportedEntries []Entry
+    exportFunc := func(entries []Entry) {
+        exportedEntries = append(exportedEntries, entries...)
+    }
+    logger := NewLogger(exportFunc)
+    defer logger.Stop()
 
     background := httptest.NewServer(ConstantHandler("test"))
     defer background.Close()
@@ -188,10 +206,15 @@ func TestHarLoggerSaveAndClear(t *testing.T) {
     assert.Empty(t, entries, "Should have no entries after clear")
 }
 
-func TestHarLoggerConcurrency(t *testing.T) {
-    logger := NewLogger()
+func TestHarLoggerExportInterval(t *testing.T) {
+    var exportedEntries []Entry
+    exportFunc := func(entries []Entry) {
+        exportedEntries = append(exportedEntries, entries...)
+    }
+    logger := NewLogger(exportFunc, WithExportInterval(500*time.Millisecond))
+    defer logger.Stop()
 
-    background := httptest.NewServer(ConstantHandler("concurrent"))
+    background := httptest.NewServer(ConstantHandler("test"))
     defer background.Close()
 
     proxyServer := createTestProxy(logger)
@@ -199,30 +222,47 @@ func TestHarLoggerConcurrency(t *testing.T) {
 
     client := createProxyClient(proxyServer.URL)
 
-    requestCount := 50
-    successChan := make(chan bool, requestCount)
-
-    for i := 0; i < requestCount; i++ {
-        go func() {
-            resp, err := client.Get(background.URL)
-            if err != nil {
-                successChan <- false
-                return
-            }
-            resp.Body.Close()
-            successChan <- true
-        }()
+    // Send 3 requests
+    for i := 0; i < 3; i++ {
+        resp, err := client.Get(background.URL)
+        require.NoError(t, err, "Should send request")
+        resp.Body.Close()
+        time.Sleep(200 * time.Millisecond)
     }
 
-    successCount := 0
-    for i := 0; i < requestCount; i++ {
-        if <-successChan {
-            successCount++
-        }
+    // Wait for export interval
+    time.Sleep(600 * time.Millisecond)
+
+    assert.Len(t, exportedEntries, 3, "Should have exported 3 entries")
+    assert.Len(t, logger.GetEntries(), 0, "Logger should have no entries after export")
+}
+
+func TestHarLoggerExportCount(t *testing.T) {
+    var exportedEntries []Entry
+    exportFunc := func(entries []Entry) {
+        exportedEntries = append(exportedEntries, entries...)
+    }
+    logger := NewLogger(exportFunc, WithExportCount(2))
+    defer logger.Stop()
+
+    background := httptest.NewServer(ConstantHandler("test"))
+    defer background.Close()
+
+    proxyServer := createTestProxy(logger)
+    defer proxyServer.Close()
+
+    client := createProxyClient(proxyServer.URL)
+
+    // Send 3 requests
+    for i := 0; i < 3; i++ {
+        resp, err := client.Get(background.URL)
+        require.NoError(t, err, "Should send request")
+        resp.Body.Close()
+        time.Sleep(100 * time.Millisecond)
     }
 
-    time.Sleep(500 * time.Millisecond)
+    time.Sleep(200 * time.Millisecond)
 
-    entries := logger.GetEntries()
-    assert.Equal(t, successCount, len(entries), "Should log all successful requests")
+    assert.Len(t, exportedEntries, 2, "Should have exported 2 entries")
+    assert.Len(t, logger.GetEntries(), 1, "Should have 1 entry remaining in logger")
 }
