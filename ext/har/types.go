@@ -181,7 +181,40 @@ func ParseRequest(req *http.Request, captureContent bool) *Request {
 
 func (entry *Entry) fillIPAddress(req *http.Request) {
     host := req.URL.Hostname()
-    entry.ServerIpAddress = host
+    
+    // try to parse the host as an IP address
+    if ip := net.ParseIP(host); ip != nil {
+        entry.ServerIpAddress = ip.String()
+        return
+    }
+    
+    // If it's not an IP address, perform a DNS lookup with a timeout
+    resolver := &net.Resolver{}
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancel()
+    
+    ips, err := resolver.LookupIP(ctx, "ip", host)
+    if err != nil {
+        // If lookup fails, just use the hostname
+        entry.ServerIpAddress = host
+        return
+    }
+    
+    // Prefer IPv4, but fall back to IPv6 if necessary
+    for _, ip := range ips {
+        if ipv4 := ip.To4(); ipv4 != nil {
+            entry.ServerIpAddress = ipv4.String()
+            return
+        }
+    }
+    
+    // If no IPv4 address found, use the first IP (IPv6) in the list
+    if len(ips) > 0 {
+        entry.ServerIpAddress = ips[0].String()
+    } else {
+        // If no IPs found, fall back to the hostname
+        entry.ServerIpAddress = host
+    }
 }
 
 func parsePostData(req *http.Request) *PostData {
