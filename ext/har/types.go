@@ -6,9 +6,10 @@ import (
     "bytes"
     "io"
     "log"
-    "net"
     "net/http"
     "net/url"
+    "mime"
+
     "strings"
     "time"
 )
@@ -114,38 +115,73 @@ type Request struct {
 }
 
 func ParseRequest(req *http.Request, captureContent bool) *Request {
-	if req == nil {
-		return nil
-	}
-	harRequest := Request{
-		Method:      req.Method,
-		Url:         req.URL.String(),
-		HttpVersion: req.Proto,
-		Cookies:     parseCookies(req.Cookies()),
-		Headers:     parseStringArrMap(req.Header),
-		QueryString: parseStringArrMap((req.URL.Query())),
-		BodySize:    req.ContentLength,
-		HeadersSize: calcHeaderSize(req.Header),
-	}
-
-	if captureContent && (req.Method == "POST" || req.Method == "PUT") {
-		harRequest.PostData = parsePostData(req)
-	}
-
-	return &harRequest
-}
-
-func (harEntry *Entry) fillIPAddress(req *http.Request) {
-    host := req.URL.Hostname()
-    
-    if ip := net.ParseIP(host); ip != nil {
-        harEntry.ServerIpAddress = ip.String()
+    if req == nil {
+        log.Printf("ParseRequest: nil request")
+        return nil
     }
+
+    log.Printf("ParseRequest: method=%s, captureContent=%v", req.Method, captureContent)
+
+    harRequest := Request{
+        Method:      req.Method,
+        Url:         req.URL.String(),
+        HttpVersion: req.Proto,
+        Cookies:     parseCookies(req.Cookies()),
+        Headers:     parseStringArrMap(req.Header),
+        QueryString: parseStringArrMap((req.URL.Query())),
+        BodySize:    req.ContentLength,
+        HeadersSize: -1,
+    }
+
+    if captureContent && (req.Method == "POST" || req.Method == "PUT") {
+        log.Printf("ParseRequest: creating PostData, hasBody=%v, hasGetBody=%v", 
+            req.Body != nil, req.GetBody != nil)
+
+        harRequest.PostData = &PostData{
+            MimeType: req.Header.Get("Content-Type"),
+        }
+        
+        var body []byte
+        var err error
+
+        if req.Body != nil {
+            log.Printf("ParseRequest: reading from Body")
+            body, err = io.ReadAll(req.Body)
+            if err != nil {
+                log.Printf("ParseRequest: error reading Body: %v", err)
+            } else {
+                // Restore the body
+                req.Body = io.NopCloser(bytes.NewBuffer(body))
+                harRequest.PostData.Text = string(body)
+                log.Printf("ParseRequest: successfully read body: %s", string(body))
+            }
+        }
+
+        // If body is still empty and GetBody is available, try that
+        if len(body) == 0 && req.GetBody != nil {
+            log.Printf("ParseRequest: trying GetBody")
+            if bodyReader, err := req.GetBody(); err == nil {
+                if body, err = io.ReadAll(bodyReader); err == nil {
+                    harRequest.PostData.Text = string(body)
+                    log.Printf("ParseRequest: successfully read from GetBody: %s", string(body))
+                } else {
+                    log.Printf("ParseRequest: error reading from GetBody: %v", err)
+                }
+                bodyReader.Close()
+            } else {
+                log.Printf("ParseRequest: error getting fresh body: %v", err)
+            }
+        }
+    }
+
+    return &harRequest
 }
 
-func calcHeaderSize(header http.Header) int64 {
-    // Directly return -1 as per HAR specification
-    return -1
+
+
+func (entry *Entry) fillIPAddress(req *http.Request) {
+    host := req.URL.Hostname()
+    entry.ServerIpAddress = host
 }
 
 func parsePostData(req *http.Request) *PostData {
@@ -259,16 +295,16 @@ func ParseResponse(resp *http.Response, captureContent bool) *Response {
     if len(resp.Status) > 4 {
         statusText = resp.Status[4:]
     }
-    redirectURL := resp.Header.Get("Location")
+    
     harResponse := Response{
         Status:      resp.StatusCode,
         StatusText:  statusText,
         HttpVersion: resp.Proto,
         Cookies:     parseCookies(resp.Cookies()),
         Headers:     parseStringArrMap(resp.Header),
-        RedirectUrl: redirectURL,
+        RedirectUrl: resp.Header.Get("Location"),
         BodySize:    resp.ContentLength,
-        HeadersSize: calcHeaderSize(resp.Header),
+        HeadersSize: -1,  // As per HAR spec
     }
 
     if captureContent && resp.Body != nil {
@@ -277,7 +313,6 @@ func ParseResponse(resp *http.Response, captureContent bool) *Response {
             log.Printf("Error reading response body: %v", err)
             return &harResponse
         }
-        // Create a new reader for the response body
         resp.Body = io.NopCloser(bytes.NewBuffer(body))
         
         harResponse.Content = Content{
@@ -289,8 +324,6 @@ func ParseResponse(resp *http.Response, captureContent bool) *Response {
 
     return &harResponse
 }
-
-
 
 type Cookie struct {
 	Name     string     `json:"name"`
