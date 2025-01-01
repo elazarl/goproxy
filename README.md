@@ -26,6 +26,7 @@ proxy is `localhost:8080`, which is the default one in our example.
 - You can specify a `MITM certificates cache`, to reuse them later for other requests to the same host, thus saving CPU. Not enabled by default, but you should use it in production!
 - Redirect normal HTTP traffic to a `custom handler`, when the target is a `relative path` (e.g. `/ping`)
 - You can choose the logger to use, by implementing the `Logger` interface
+- You can `disable` the HTTP request headers `canonicalization`, by setting `PreventCanonicalization` to true
 
 ## Proxy modes
 1. Regular HTTP proxy

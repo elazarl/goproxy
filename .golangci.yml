@@ -20,7 +20,6 @@ linters:
     - containedctx
     - decorder
     - dogsled
-    - dupl
     - durationcheck
     - errchkjson
     - errname
@@ -80,6 +79,7 @@ linters:
     - copyloopvar
     - cyclop
     - depguard
+    - dupl
     - dupword
     - err113
     - exhaustruct
