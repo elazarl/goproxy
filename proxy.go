@@ -1,8 +1,6 @@
 package goproxy
 
 import (
-	"bufio"
-	"errors"
 	"io"
 	"log"
 	"net"
@@ -39,6 +37,12 @@ type ProxyHttpServer struct {
 	CertStore          CertStorage
 	KeepHeader         bool
 	AllowHTTP2         bool
+	// When PreventCanonicalization is true, the header names present in
+	// the request sent through the proxy are directly passed to the destination server,
+	// instead of following the HTTP RFC for their canonicalization.
+	// This is useful when the header name isn't treated as a case-insensitive
+	// value by the target server, because they don't follow the specs.
+	PreventCanonicalization bool
 	// KeepAcceptEncoding, if true, prevents the proxy from dropping
 	// Accept-Encoding headers from the client.
 	//
@@ -61,11 +65,6 @@ func copyHeaders(dst, src http.Header, keepDestHeaders bool) {
 		// direct assignment to avoid canonicalization
 		dst[k] = append([]string(nil), vs...)
 	}
-}
-
-func isEOF(r *bufio.Reader) bool {
-	_, err := r.Peek(1)
-	return errors.Is(err, io.EOF)
 }
 
 func (proxy *ProxyHttpServer) filterRequest(r *http.Request, ctx *ProxyCtx) (req *http.Request, resp *http.Response) {
