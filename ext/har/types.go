@@ -5,16 +5,16 @@ package har
 import (
     "bytes"
     "io"
-    "io/ioutil"
     "log"
-    "net"
     "net/http"
     "net/url"
+    "mime"
+    "net"
+    "context"
     "strings"
     "time"
 )
 
-var startingEntrySize int = 1000
 
 type Har struct {
 	Log Log `json:"log"`
@@ -35,7 +35,7 @@ func New() *Har {
 			Version: "1.2",
 			Creator: Creator{
 				Name:    "GoProxy",
-				Version: "12345",
+				Version: "1.0",
 			},
 			Pages:   make([]Page, 0, 10),
 			Entries: makeNewEntries(),
@@ -53,6 +53,7 @@ func (har *Har) AppendPage(page ...Page) {
 }
 
 func makeNewEntries() []Entry {
+    const startingEntrySize int = 1000;
 	return make([]Entry, 0, startingEntrySize)
 }
 
@@ -115,101 +116,173 @@ type Request struct {
 }
 
 func ParseRequest(req *http.Request, captureContent bool) *Request {
-	if req == nil {
-		return nil
-	}
-	harRequest := Request{
-		Method:      req.Method,
-		Url:         req.URL.String(),
-		HttpVersion: req.Proto,
-		Cookies:     parseCookies(req.Cookies()),
-		Headers:     parseStringArrMap(req.Header),
-		QueryString: parseStringArrMap((req.URL.Query())),
-		BodySize:    req.ContentLength,
-		HeadersSize: calcHeaderSize(req.Header),
-	}
+    if req == nil {
+        log.Printf("ParseRequest: nil request")
+        return nil
+    }
 
-	if captureContent && (req.Method == "POST" || req.Method == "PUT") {
-		harRequest.PostData = parsePostData(req)
-	}
+    log.Printf("ParseRequest: method=%s, captureContent=%v", req.Method, captureContent)
 
-	return &harRequest
+    harRequest := Request{
+        Method:      req.Method,
+        Url:         req.URL.String(),
+        HttpVersion: req.Proto,
+        Cookies:     parseCookies(req.Cookies()),
+        Headers:     parseStringArrMap(req.Header),
+        QueryString: parseStringArrMap(req.URL.Query()),
+        BodySize:    req.ContentLength,
+        HeadersSize: -1,
+    }
+
+    if captureContent && (req.Method == "POST" || req.Method == "PUT") {
+        log.Printf("ParseRequest: creating PostData, hasBody=%v, hasGetBody=%v", 
+            req.Body != nil, req.GetBody != nil)
+
+        harRequest.PostData = &PostData{
+            MimeType: req.Header.Get("Content-Type"),
+        }
+        
+        var body []byte
+        var err error
+
+        if req.GetBody != nil {
+            log.Printf("ParseRequest: using GetBody")
+            bodyReader, err := req.GetBody()
+            if err == nil {
+                body, err = io.ReadAll(bodyReader)
+                if err != nil {
+                    log.Printf("ParseRequest: error reading from GetBody: %v", err)
+                } else {
+                    harRequest.PostData.Text = string(body)
+                    log.Printf("ParseRequest: successfully read from GetBody: %s", string(body))
+                }
+                bodyReader.Close()
+            } else {
+                log.Printf("ParseRequest: error getting fresh body: %v", err)
+            }
+        } else if req.Body != nil {
+            log.Printf("ParseRequest: reading from Body")
+            body, err = io.ReadAll(req.Body)
+            if err != nil {
+                log.Printf("ParseRequest: error reading Body: %v", err)
+            } else {
+                // Restore the body
+                req.Body = io.NopCloser(bytes.NewBuffer(body))
+                harRequest.PostData.Text = string(body)
+                log.Printf("ParseRequest: successfully read body: %s", string(body))
+            }
+        }
+    }
+
+    return &harRequest
 }
 
-func (harEntry *Entry) FillIPAddress(req *http.Request) {
-	host, _, err := net.SplitHostPort(req.URL.Host)
-	if err != nil {
-		host = req.URL.Host
-	}
-	if ip := net.ParseIP(host); ip != nil {
-		harEntry.ServerIpAddress = string(ip)
-	}
 
-	if ipaddr, err := net.LookupIP(host); err == nil {
-		for _, ip := range ipaddr {
-			if ip.To4() != nil {
-				harEntry.ServerIpAddress = ip.String()
-				return
-			}
-		}
-	}
-}
-
-func calcHeaderSize(header http.Header) int64 {
-	headerSize := 0
-	for headerName, headerValues := range header {
-		headerSize += len(headerName) + 2
-		for _, v := range headerValues {
-			headerSize += len(v)
-		}
-	}
-	return int64(headerSize)
+func (entry *Entry) fillIPAddress(req *http.Request) {
+    host := req.URL.Hostname()
+    
+    // try to parse the host as an IP address
+    if ip := net.ParseIP(host); ip != nil {
+        entry.ServerIpAddress = ip.String()
+        return
+    }
+    
+    // If it's not an IP address, perform a DNS lookup with a timeout
+    resolver := &net.Resolver{}
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancel()
+    
+    ips, err := resolver.LookupIP(ctx, "ip", host)
+    if err != nil {
+        // If lookup fails, just use the hostname
+        entry.ServerIpAddress = host
+        return
+    }
+    
+    // Prefer IPv4, but fall back to IPv6 if necessary
+    for _, ip := range ips {
+        if ipv4 := ip.To4(); ipv4 != nil {
+            entry.ServerIpAddress = ipv4.String()
+            return
+        }
+    }
+    
+    // If no IPv4 address found, use the first IP (IPv6) in the list
+    if len(ips) > 0 {
+        entry.ServerIpAddress = ips[0].String()
+    } else {
+        // If no IPs found, fall back to the hostname
+        entry.ServerIpAddress = host
+    }
 }
 
 func parsePostData(req *http.Request) *PostData {
-	defer func() {
-		if e := recover(); e != nil {
-			log.Printf("Error parsing request to %v: %v\n", req.URL, e)
-		}
-	}()
-
-	harPostData := new(PostData)
-	contentType := req.Header["Content-Type"]
-	if contentType == nil {
-		panic("Missing content type in request")
-	}
-	harPostData.MimeType = contentType[0]
-
-	if len(req.PostForm) > 0 {
-		for k, vals := range req.PostForm {
-			for _, v := range vals {
-				param := PostDataParam{
-					Name:  k,
-					Value: v,
-				}
-				harPostData.Params = append(harPostData.Params, param)
-			}
-		}
-	} else {
-		str, _ := ioutil.ReadAll(req.Body)
-		harPostData.Text = string(str)
-	}
-	return harPostData
+    harPostData := new(PostData)
+    
+    contentType := req.Header.Get("Content-Type")
+    if contentType == "" {
+        return nil
+    }
+    
+    mediaType, _, err := mime.ParseMediaType(contentType)
+    if err != nil {
+        log.Printf("Error parsing media type: %v", err)
+        return nil
+    }
+    
+    harPostData.MimeType = mediaType
+    
+    if err := req.ParseForm(); err != nil {
+        log.Printf("Error parsing form: %v", err)
+        return nil
+    }
+    
+    if len(req.PostForm) > 0 {
+        for k, vals := range req.PostForm {
+            for _, v := range vals {
+                param := PostDataParam{
+                    Name:  k,
+                    Value: v,
+                }
+                harPostData.Params = append(harPostData.Params, param)
+            }
+        }
+    } else {
+        str, err := io.ReadAll(req.Body)
+        if err != nil {
+            log.Printf("Error reading request body: %v", err)
+            return nil
+        }
+        harPostData.Text = string(str)
+    }
+    
+    return harPostData
 }
 
 func parseStringArrMap(stringArrMap map[string][]string) []NameValuePair {
-	index := 0
-	harQueryString := make([]NameValuePair, len(stringArrMap))
+	harQueryString := make([]NameValuePair, 0, len(stringArrMap))
+	
 	for k, v := range stringArrMap {
-		escapedKey, _ := url.QueryUnescape(k)
-		escapedValues, _ := url.QueryUnescape(strings.Join(v, ","))
+		escapedKey, err := url.QueryUnescape(k)
+		if err != nil {
+			// Use original key if unescaping fails
+			escapedKey = k
+		}
+
+		escapedValues, err := url.QueryUnescape(strings.Join(v, ","))
+		if err != nil {
+			// Use original joined values if unescaping fails
+			escapedValues = strings.Join(v, ",")
+		}
+
 		harNameValuePair := NameValuePair{
 			Name:  escapedKey,
 			Value: escapedValues,
 		}
-		harQueryString[index] = harNameValuePair
-		index++
+		
+		harQueryString = append(harQueryString, harNameValuePair)
 	}
+	
 	return harQueryString
 }
 
@@ -254,16 +327,16 @@ func ParseResponse(resp *http.Response, captureContent bool) *Response {
     if len(resp.Status) > 4 {
         statusText = resp.Status[4:]
     }
-    redirectURL := resp.Header.Get("Location")
+    
     harResponse := Response{
         Status:      resp.StatusCode,
         StatusText:  statusText,
         HttpVersion: resp.Proto,
         Cookies:     parseCookies(resp.Cookies()),
         Headers:     parseStringArrMap(resp.Header),
-        RedirectUrl: redirectURL,
+        RedirectUrl: resp.Header.Get("Location"),
         BodySize:    resp.ContentLength,
-        HeadersSize: calcHeaderSize(resp.Header),
+        HeadersSize: -1,  // As per HAR spec
     }
 
     if captureContent && resp.Body != nil {
@@ -272,7 +345,6 @@ func ParseResponse(resp *http.Response, captureContent bool) *Response {
             log.Printf("Error reading response body: %v", err)
             return &harResponse
         }
-        // Create a new reader for the response body
         resp.Body = io.NopCloser(bytes.NewBuffer(body))
         
         harResponse.Content = Content{
@@ -283,29 +355,6 @@ func ParseResponse(resp *http.Response, captureContent bool) *Response {
     }
 
     return &harResponse
-}
-
-func parseContent(resp *http.Response, harContent *Content) {
-	defer func() {
-		if e := recover(); e != nil {
-			log.Printf("Error parsing response to %v: %v\n", resp.Request.URL, e)
-		}
-	}()
-
-	contentType := resp.Header["Content-Type"]
-	if contentType == nil {
-		panic("Missing content type in response")
-	}
-	harContent.MimeType = contentType[0]
-	if resp.ContentLength == 0 {
-		log.Println("Empty content")
-		return
-	}
-
-	body, _ := ioutil.ReadAll(resp.Body)
-	harContent.Text = string(body)
-	harContent.Size = len(body)
-	return
 }
 
 type Cookie struct {
