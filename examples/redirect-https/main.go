@@ -16,10 +16,11 @@ func main() {
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-		if req.URL.Scheme == "https" {
-			req.URL.Scheme = "http"
+		if req.URL.Scheme != "https" {
+			return req, nil
 		}
 
+		req.URL.Scheme = "http"
 		resp := &http.Response{
 			StatusCode: http.StatusSeeOther,
 			ProtoMajor: 1,
