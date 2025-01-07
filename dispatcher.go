@@ -9,35 +9,28 @@ import (
 	"strings"
 )
 
-// ReqCondition.HandleReq will decide whether or not to use the ReqHandler on an HTTP request
-// before sending it to the remote server.
-type ReqCondition interface {
-	RespCondition
-	HandleReq(req *http.Request, ctx *ProxyCtx) bool
-}
-
-// RespCondition.HandleReq will decide whether or not to use the RespHandler on an HTTP response
-// before sending it to the proxy client. Note that resp might be nil, in case there was an
-// error sending the request.
-type RespCondition interface {
-	HandleResp(resp *http.Response, ctx *ProxyCtx) bool
-}
-
 // ReqConditionFunc.HandleReq(req,ctx) <=> ReqConditionFunc(req,ctx).
 type ReqConditionFunc func(req *http.Request, ctx *ProxyCtx) bool
-
-// RespConditionFunc.HandleResp(resp,ctx) <=> RespConditionFunc(resp,ctx).
-type RespConditionFunc func(resp *http.Response, ctx *ProxyCtx) bool
 
 func (c ReqConditionFunc) HandleReq(req *http.Request, ctx *ProxyCtx) bool {
 	return c(req, ctx)
 }
 
-// ReqConditionFunc cannot test responses. It only satisfies RespCondition interface so that
-// to be usable as RespCondition.
-func (c ReqConditionFunc) HandleResp(resp *http.Response, ctx *ProxyCtx) bool {
-	return c(ctx.Req, ctx)
+type ReqCondition interface {
+	// HandleReq will decide whether to use the ReqHandler on an HTTP request
+	// before sending it to the remote server.
+	HandleReq(req *http.Request, ctx *ProxyCtx) bool
 }
+
+type RespCondition interface {
+	// HandleResp will decide whether to use the RespHandler on an HTTP response
+	// before sending it to the proxy client.
+	// Note that resp might be nil, in case there was an error sending the request.
+	HandleResp(resp *http.Response, ctx *ProxyCtx) bool
+}
+
+// RespConditionFunc.HandleResp(resp,ctx) <=> RespConditionFunc(resp,ctx).
+type RespConditionFunc func(resp *http.Response, ctx *ProxyCtx) bool
 
 func (c RespConditionFunc) HandleResp(resp *http.Response, ctx *ProxyCtx) bool {
 	return c(resp, ctx)
