@@ -13,13 +13,13 @@ jobs:
     name: Build And Test Go code
     runs-on: ubuntu-latest
     steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.20'
-
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+          go-version-file: go.mod
 
       # https://stackoverflow.com/questions/76269119/github-actions-go-lambda-project-different-sha256sums
       - name: Build
@@ -31,7 +31,9 @@ jobs:
       # Make sure to detect eventual race conditions
       # (CGO must be enabled to use -race detector)
       - name: Test
-        run: go test -race -p 1 -v -shuffle=on ./...
+        # -count=2 ensures that test fixtures cleanup after themselves
+        # because any leftover state will generally cause the second run to fail.
+        run: go test -race -p 1 -v -shuffle=on -count=2 ./...
 
       - name: Linter
         uses: golangci/golangci-lint-action@v6
