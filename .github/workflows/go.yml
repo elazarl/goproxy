@@ -12,8 +12,6 @@ jobs:
   build:
     name: Build And Test Go code
     runs-on: ubuntu-latest
-    env:
-      CGO_ENABLED: 0
     steps:
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -26,9 +24,14 @@ jobs:
       # https://stackoverflow.com/questions/76269119/github-actions-go-lambda-project-different-sha256sums
       - name: Build
         run: go build -v -buildvcs=false ./...
+        env:
+          # Make sure to not use dependencies that rely on CGO
+          CGO_ENABLED: 0
 
+      # Make sure to detect eventual race conditions
+      # (CGO must be enabled to use -race detector)
       - name: Test
-        run: go test -p 1 -v -shuffle=on ./...
+        run: go test -race -p 1 -v -shuffle=on ./...
 
       - name: Linter
         uses: golangci/golangci-lint-action@v6
