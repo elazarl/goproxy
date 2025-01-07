@@ -28,7 +28,9 @@ jobs:
         run: go build -v -buildvcs=false ./...
 
       - name: Test
-        run: go test -p 1 -v -shuffle=on ./...
+        # -count=2 ensures that test fixtures cleanup after themselves
+        # because any leftover state will generally cause the second run to fail.
+        run: go test -p 1 -v -shuffle=on -count=2 ./...
 
       - name: Linter
         uses: golangci/golangci-lint-action@v6
