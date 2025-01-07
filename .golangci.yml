@@ -1,7 +1,6 @@
 run:
   timeout: 5m
   modules-download-mode: readonly
-  go: '1.20'
 
 # List from https://golangci-lint.run/usage/linters/
 linters:
