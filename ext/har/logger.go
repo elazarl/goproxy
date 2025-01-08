@@ -2,7 +2,6 @@ package har
 
 import (
     "net/http"
-    "sync"
     "time"
     "github.com/elazarl/goproxy"
 )
@@ -12,13 +11,13 @@ type ExportFunc func([]Entry)
 
 // Logger implements a HAR logging extension for goproxy
 type Logger struct {
-    mu             sync.Mutex
     entries        []Entry
     captureContent bool
-    exportFunc     ExportFunc
-    exportInterval time.Duration
-    exportThreashold    int
-    stopChan       chan struct{}
+    exportFunc      ExportFunc
+    exportInterval  time.Duration
+    exportThreshold int
+    stopCh          chan struct{}
+    dataCh          chan Entry
 }
 
 // LoggerOption is a function type for configuring the Logger
@@ -27,7 +26,7 @@ type LoggerOption func(*Logger)
 // WithExportCount sets the number of requests after which to export entries
 func WithExportThreshold(threshold int) LoggerOption {
     return func(l *Logger) {
-        l.exportThreashold = threshold
+        l.exportThreshold = threshold
     }
 }
 
@@ -37,15 +36,28 @@ func NewLogger(exportFunc ExportFunc, opts ...LoggerOption) *Logger {
         entries:        make([]Entry, 0),
         captureContent: true,
         exportFunc:     exportFunc,
-        stopChan:       make(chan struct{}),
+        exportThreshold: 100,    // Default threshold
+        exportInterval: 0,       // Default no interval
+        stopCh:         make(chan struct{}),
     }
-
+    
+    // Apply options
     for _, opt := range opts {
         opt(l)
     }
-
+    
+    // Calculate buffer size
+    bufferSize := 100  // minimum default
+    if l.exportInterval > 0 && l.exportThreshold <= 0 {
+        // Interval-only mode: need larger buffer
+        bufferSize = 10000
+    } else if l.exportThreshold > 0 {
+        // Using threshold: buffer = threshold + small safety margin
+        bufferSize = l.exportThreshold + 100
+    }
+    
+    l.dataCh = make(chan Entry, bufferSize)
     go l.exportLoop()
-
     return l
 }
 
@@ -69,9 +81,9 @@ func (l *Logger) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Re
     
     entry := Entry{
         StartedDateTime: startTime,
-        Time:            time.Since(startTime).Milliseconds(),
-        Request:         ParseRequest(ctx.Req, l.captureContent),
-        Response:        ParseResponse(resp, l.captureContent),
+        Time:           time.Since(startTime).Milliseconds(),
+        Request:        ParseRequest(ctx, l.captureContent),
+        Response:       ParseResponse(ctx, l.captureContent),
         Timings: Timings{
             Send:    0,
             Wait:    time.Since(startTime).Milliseconds(),
@@ -80,38 +92,47 @@ func (l *Logger) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Re
     }
     entry.fillIPAddress(ctx.Req)
     
-    l.mu.Lock()
-    l.entries = append(l.entries, entry)
-    l.mu.Unlock()
+    select {
+    case l.dataCh <- entry:
+    default:
+        // Log or handle case where channel is full, just in case 
+        ctx.Proxy.Logger.Printf("Warning: HAR logger channel is full, dropping entry")
+    } 
     
     return resp
 }
 
 func (l *Logger) exportLoop() {
-    ticker := time.NewTicker(100 * time.Millisecond) // Check frequently
-    defer ticker.Stop()
-
+    var tickerC <-chan time.Time
+    if l.exportInterval > 0 {
+        ticker := time.NewTicker(l.exportInterval)
+        defer ticker.Stop()
+        tickerC = ticker.C
+    }
+    
     for {
         select {
-        case <-ticker.C:
-            l.checkAndExport()
-        case <-l.stopChan:
+        case <-l.stopCh:
+            if len(l.entries) > 0 {
+                l.exportFunc(l.entries)
+            }
             return
+        case entry := <-l.dataCh:
+            l.entries = append(l.entries, entry)
+            if l.exportThreshold > 0 && len(l.entries) >= l.exportThreshold {
+                l.exportFunc(l.entries)
+                l.entries = make([]Entry, 0)
+            }
+        case <-tickerC:
+            if len(l.entries) > 0 {
+                l.exportFunc(l.entries)
+                l.entries = make([]Entry, 0)
+            }
         }
-    }
-}
-
-func (l *Logger) checkAndExport() {
-    l.mu.Lock()
-    defer l.mu.Unlock()
-
-    if l.exportThreashold > 0 && len(l.entries) >= l.exportThreashold {
-        l.exportFunc(l.entries)
-        l.entries = make([]Entry, 0)
     }
 }
 
 // Stop stops the export loop
 func (l *Logger) Stop() {
-    close(l.stopChan)
+    close(l.stopCh)
 }
