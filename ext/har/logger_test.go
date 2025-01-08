@@ -1,13 +1,10 @@
 package har
 
 import (
-    "encoding/json"
     "io"
     "net/http"
     "net/http/httptest"
     "net/url"
-    "os"
-    "path/filepath"
     "strings"
     "testing"
     "time"

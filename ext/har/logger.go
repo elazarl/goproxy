@@ -1,9 +1,7 @@
 package har
 
 import (
-    "encoding/json"
     "net/http"
-    "os"
     "sync"
     "time"
     "github.com/elazarl/goproxy"
@@ -19,26 +17,17 @@ type Logger struct {
     captureContent bool
     exportFunc     ExportFunc
     exportInterval time.Duration
-    exportCount    int
-    currentCount   int
-    lastExport     time.Time
+    exportThreashold    int
     stopChan       chan struct{}
 }
 
 // LoggerOption is a function type for configuring the Logger
 type LoggerOption func(*Logger)
 
-// WithExportInterval sets the time interval for exporting entries
-func WithExportInterval(d time.Duration) LoggerOption {
-    return func(l *Logger) {
-        l.exportInterval = d
-    }
-}
-
 // WithExportCount sets the number of requests after which to export entries
-func WithExportCount(count int) LoggerOption {
+func WithExportThreshold(threshold int) LoggerOption {
     return func(l *Logger) {
-        l.exportCount = count
+        l.exportThreashold = threshold
     }
 }
 
@@ -77,7 +66,7 @@ func (l *Logger) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Re
     if !ok {
         return resp
     }
-
+    
     entry := Entry{
         StartedDateTime: startTime,
         Time:            time.Since(startTime).Milliseconds(),
@@ -90,12 +79,11 @@ func (l *Logger) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Re
         },
     }
     entry.fillIPAddress(ctx.Req)
-
+    
     l.mu.Lock()
     l.entries = append(l.entries, entry)
-    l.currentCount++
     l.mu.Unlock()
-
+    
     return resp
 }
 
@@ -117,18 +105,9 @@ func (l *Logger) checkAndExport() {
     l.mu.Lock()
     defer l.mu.Unlock()
 
-    shouldExport := false
-    if l.exportCount > 0 && l.currentCount >= l.exportCount {
-        shouldExport = true
-    } else if l.exportInterval > 0 && time.Since(l.lastExport) >= l.exportInterval {
-        shouldExport = true
-    }
-
-    if shouldExport && len(l.entries) > 0 {
+    if l.exportThreashold > 0 && len(l.entries) >= l.exportThreashold {
         l.exportFunc(l.entries)
         l.entries = make([]Entry, 0)
-        l.currentCount = 0
-        l.lastExport = time.Now()
     }
 }
 
