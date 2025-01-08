@@ -44,14 +44,6 @@ func New() *Har {
 	return har
 }
 
-func (har *Har) AppendEntry(entry ...Entry) {
-	har.Log.Entries = append(har.Log.Entries, entry...)
-}
-
-func (har *Har) AppendPage(page ...Page) {
-	har.Log.Pages = append(har.Log.Pages, page...)
-}
-
 func makeNewEntries() []Entry {
     const startingEntrySize int = 1000;
 	return make([]Entry, 0, startingEntrySize)

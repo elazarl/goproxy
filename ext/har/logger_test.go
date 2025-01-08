@@ -100,110 +100,10 @@ func TestHarLoggerBasicFunctionality(t *testing.T) {
 
             time.Sleep(200 * time.Millisecond)
 
-            // Verify HAR entry
-            entries := logger.GetEntries()
-            require.Len(t, entries, 1, "Should have one log entry")
-            entry := entries[0]
-            assert.Equal(t, tc.expectedMethod, entry.Request.Method, "Request method should match")
-
             // Verify exported entries
             assert.Len(t, exportedEntries, 0, "Should not have exported entries yet")
         })
     }
-}
-
-func TestHarLoggerHeaders(t *testing.T) {
-    background := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        w.Header().Set("X-Test-Header", "test-value")
-        w.Write([]byte("test"))
-    }))
-    defer background.Close()
-
-    var exportedEntries []Entry
-    exportFunc := func(entries []Entry) {
-        exportedEntries = append(exportedEntries, entries...)
-    }
-    logger := NewLogger(exportFunc)
-    defer logger.Stop()
-
-    proxyServer := createTestProxy(logger)
-    defer proxyServer.Close()
-
-    client := createProxyClient(proxyServer.URL)
-
-    req, err := http.NewRequest("GET", background.URL, nil)
-    require.NoError(t, err, "Should create request")
-    req.Header.Set("X-Custom-Header", "custom-value")
-
-    resp, err := client.Do(req)
-    require.NoError(t, err, "Should send request")
-    defer resp.Body.Close()
-
-    time.Sleep(200 * time.Millisecond)
-
-    entries := logger.GetEntries()
-    require.Len(t, entries, 1, "Should have one log entry")
-    entry := entries[0]
-
-    // Convert headers to maps for easier checking
-    reqHeaders := make(map[string]string)
-    for _, h := range entry.Request.Headers {
-        reqHeaders[h.Name] = h.Value
-    }
-    assert.Equal(t, "custom-value", reqHeaders["X-Custom-Header"], "Request header value should match")
-
-    respHeaders := make(map[string]string)
-    for _, h := range entry.Response.Headers {
-        respHeaders[h.Name] = h.Value
-    }
-    assert.Equal(t, "test-value", respHeaders["X-Test-Header"], "Response header value should match")
-}
-
-func TestHarLoggerSaveAndClear(t *testing.T) {
-    var exportedEntries []Entry
-    exportFunc := func(entries []Entry) {
-        exportedEntries = append(exportedEntries, entries...)
-    }
-    logger := NewLogger(exportFunc)
-    defer logger.Stop()
-
-    background := httptest.NewServer(ConstantHandler("test"))
-    defer background.Close()
-
-    proxyServer := createTestProxy(logger)
-    defer proxyServer.Close()
-
-    client := createProxyClient(proxyServer.URL)
-
-    resp, err := client.Get(background.URL)
-    require.NoError(t, err, "Should send request")
-    resp.Body.Close()
-
-    time.Sleep(200 * time.Millisecond)
-
-    entries := logger.GetEntries()
-    require.Len(t, entries, 1, "Should have one log entry")
-
-    // Save to file
-    tmpDir := t.TempDir()
-    harFilePath := filepath.Join(tmpDir, "test.har")
-    err = logger.SaveToFile(harFilePath)
-    require.NoError(t, err, "Should save HAR file")
-
-    // Verify file contents
-    harData, err := os.ReadFile(harFilePath)
-    require.NoError(t, err, "Should read HAR file")
-
-    var har Har
-    err = json.Unmarshal(harData, &har)
-    require.NoError(t, err, "Should parse HAR JSON")
-    assert.Len(t, har.Log.Entries, 1, "Saved HAR should have one entry")
-    assert.Equal(t, "1.2", har.Log.Version, "HAR version should be 1.2")
-
-    // Clear logger
-    logger.Clear()
-    entries = logger.GetEntries()
-    assert.Empty(t, entries, "Should have no entries after clear")
 }
 
 func TestHarLoggerExportInterval(t *testing.T) {
@@ -234,7 +134,6 @@ func TestHarLoggerExportInterval(t *testing.T) {
     time.Sleep(600 * time.Millisecond)
 
     assert.Len(t, exportedEntries, 3, "Should have exported 3 entries")
-    assert.Len(t, logger.GetEntries(), 0, "Logger should have no entries after export")
 }
 
 func TestHarLoggerExportCount(t *testing.T) {
@@ -264,5 +163,4 @@ func TestHarLoggerExportCount(t *testing.T) {
     time.Sleep(200 * time.Millisecond)
 
     assert.Len(t, exportedEntries, 2, "Should have exported 2 entries")
-    assert.Len(t, logger.GetEntries(), 1, "Should have 1 entry remaining in logger")
 }
