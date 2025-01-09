@@ -10,7 +10,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-    "sort"
 	"github.com/elazarl/goproxy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -118,16 +117,13 @@ func TestHarLoggerBasicFunctionality(t *testing.T) {
 func TestLoggerThresholdExport(t *testing.T) {
     var wg sync.WaitGroup
     var exports [][]Entry
-    var mu sync.Mutex
+    var mtx sync.Mutex
     wg.Add(3) // Expect 3 exports (3,3,1)
     
     exportFunc := func(entries []Entry) {
-        entriesCopy := make([]Entry, len(entries))
-        copy(entriesCopy, entries)
-        
-        mu.Lock()
-        exports = append(exports, entriesCopy)
-        mu.Unlock()
+        mtx.Lock()
+        exports = append(exports, entries)
+        mtx.Unlock()
         
         t.Logf("Export occurred with %d entries", len(entries))
         wg.Done()
@@ -161,34 +157,33 @@ func TestLoggerThresholdExport(t *testing.T) {
     logger.Stop()
     wg.Wait()
 
-    // Sort exports by length to ensure consistent checking
-    sort.Slice(exports, func(i, j int) bool {
-        return len(exports[i]) < len(exports[j])
-    })
-
     require.Equal(t, 3, len(exports), "should have 3 export batches")
-    assert.Equal(t, 1, len(exports[0]), "last batch should have remainder")
-    assert.Equal(t, threshold, len(exports[1]), "first full batch should have threshold size")
-    assert.Equal(t, threshold, len(exports[2]), "second full batch should have threshold size")
+
+    // Count batches by size
+    batchCounts := make(map[int]int)
+    for _, batch := range exports {
+        batchCounts[len(batch)]++
+    }
+
+    // Check batch sizes
+    assert.Equal(t, 2, batchCounts[threshold], "should have two batches of threshold size")
+    assert.Equal(t, 1, batchCounts[1], "should have one batch with 1 entry")
 }
 
 func TestHarLoggerExportInterval(t *testing.T) {
     var wg sync.WaitGroup
-    var mu sync.Mutex
+    var mtx sync.Mutex
     var exports [][]Entry
     wg.Add(1) // Expect 1 export with all entries
     
-    exportFunc := func(entries []Entry) {
-        entriesCopy := make([]Entry, len(entries))
-        copy(entriesCopy, entries)
-        
-        mu.Lock()
-        exports = append(exports, entriesCopy)
-        mu.Unlock()
+   exportFunc := func(entries []Entry) {
+        mtx.Lock()
+        exports = append(exports, entries)
+        mtx.Unlock()
         
         t.Logf("Export occurred with %d entries", len(entries))
         wg.Done()
-    }
+    } 
 
     logger := NewLogger(exportFunc, WithExportInterval(time.Second))
     
