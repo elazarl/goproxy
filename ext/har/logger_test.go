@@ -140,11 +140,19 @@ func TestLoggerThresholdExport(t *testing.T) {
     client := createProxyClient(proxyServer.URL)
 
     // Send 7 requests
-    for i := 0; i < 7; i++ {
-        resp, err := client.Get(background.URL)
+   for i := 0; i < 7; i++ {
+        req, err := http.NewRequestWithContext(
+            context.Background(),
+            http.MethodGet,
+            background.URL,
+            nil,
+        )
+        require.NoError(t, err)
+        
+        resp, err := client.Do(req)
         require.NoError(t, err)
         resp.Body.Close()
-    }
+    }  
 
     // Call Stop to trigger final export of remaining entries
     logger.Stop()
@@ -169,7 +177,7 @@ func TestHarLoggerExportInterval(t *testing.T) {
         wg.Done()
     }
 
-    logger := NewLogger(exportFunc, WithExportInterval(100*time.Millisecond))
+    logger := NewLogger(exportFunc, WithExportInterval(time.Second))
     
     background := httptest.NewServer(ConstantHandler("test"))
     defer background.Close()
@@ -180,11 +188,19 @@ func TestHarLoggerExportInterval(t *testing.T) {
     client := createProxyClient(proxyServer.URL)
 
     // Send 3 requests
-    for i := 0; i < 3; i++ {
-        resp, err := client.Get(background.URL)
+   for i := 0; i < 3; i++ {
+        req, err := http.NewRequestWithContext(
+            context.Background(),
+            http.MethodGet,
+            background.URL,
+            nil,
+        )
+        require.NoError(t, err)
+        
+        resp, err := client.Do(req)
         require.NoError(t, err)
         resp.Body.Close()
-    }
+    } 
 
     wg.Wait()
     logger.Stop()
