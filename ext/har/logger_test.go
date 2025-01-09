@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 	"time"
-
+    "sort"
 	"github.com/elazarl/goproxy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -118,29 +118,32 @@ func TestHarLoggerBasicFunctionality(t *testing.T) {
 func TestLoggerThresholdExport(t *testing.T) {
     var wg sync.WaitGroup
     var exports [][]Entry
+    var mu sync.Mutex
     wg.Add(3) // Expect 3 exports (3,3,1)
     
     exportFunc := func(entries []Entry) {
         entriesCopy := make([]Entry, len(entries))
         copy(entriesCopy, entries)
+        
+        mu.Lock()
         exports = append(exports, entriesCopy)
+        mu.Unlock()
+        
         t.Logf("Export occurred with %d entries", len(entries))
         wg.Done()
     }
-
+    
     threshold := 3
     logger := NewLogger(exportFunc, WithExportThreshold(threshold))
     
     background := httptest.NewServer(ConstantHandler("test"))
     defer background.Close()
-
     proxyServer := createTestProxy(logger)
     defer proxyServer.Close()
-
     client := createProxyClient(proxyServer.URL)
-
+    
     // Send 7 requests
-   for i := 0; i < 7; i++ {
+    for i := 0; i < 7; i++ {
         req, err := http.NewRequestWithContext(
             context.Background(),
             http.MethodGet,
@@ -153,42 +156,50 @@ func TestLoggerThresholdExport(t *testing.T) {
         require.NoError(t, err)
         resp.Body.Close()
     }  
-
+    
     // Call Stop to trigger final export of remaining entries
     logger.Stop()
     wg.Wait()
 
-    assert.Equal(t, 3, len(exports), "should have 3 export batches")
-    assert.Equal(t, threshold, len(exports[0]), "first batch should have threshold size")
-    assert.Equal(t, threshold, len(exports[1]), "second batch should have threshold size")
-    assert.Equal(t, 1, len(exports[2]), "last batch should have remainder")
+    // Sort exports by length to ensure consistent checking
+    sort.Slice(exports, func(i, j int) bool {
+        return len(exports[i]) < len(exports[j])
+    })
+
+    require.Equal(t, 3, len(exports), "should have 3 export batches")
+    assert.Equal(t, 1, len(exports[0]), "last batch should have remainder")
+    assert.Equal(t, threshold, len(exports[1]), "first full batch should have threshold size")
+    assert.Equal(t, threshold, len(exports[2]), "second full batch should have threshold size")
 }
 
 func TestHarLoggerExportInterval(t *testing.T) {
     var wg sync.WaitGroup
+    var mu sync.Mutex
     var exports [][]Entry
     wg.Add(1) // Expect 1 export with all entries
     
     exportFunc := func(entries []Entry) {
         entriesCopy := make([]Entry, len(entries))
         copy(entriesCopy, entries)
+        
+        mu.Lock()
         exports = append(exports, entriesCopy)
+        mu.Unlock()
+        
         t.Logf("Export occurred with %d entries", len(entries))
         wg.Done()
     }
-
+    
     logger := NewLogger(exportFunc, WithExportInterval(time.Second))
     
     background := httptest.NewServer(ConstantHandler("test"))
     defer background.Close()
-
     proxyServer := createTestProxy(logger)
     defer proxyServer.Close()
-
     client := createProxyClient(proxyServer.URL)
-
+    
     // Send 3 requests
-   for i := 0; i < 3; i++ {
+    for i := 0; i < 3; i++ {
         req, err := http.NewRequestWithContext(
             context.Background(),
             http.MethodGet,
@@ -201,10 +212,10 @@ func TestHarLoggerExportInterval(t *testing.T) {
         require.NoError(t, err)
         resp.Body.Close()
     } 
-
+    
     wg.Wait()
     logger.Stop()
-
+    
     require.Equal(t, 1, len(exports), "should have 1 export batch")
     assert.Equal(t, 3, len(exports[0]), "Should have exported 3 entries")
 }

@@ -83,8 +83,7 @@ func (l *Logger) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Re
     }
     entry.fillIPAddress(ctx.Req)
     
-   l.dataCh <- entry 
-    
+    l.dataCh <- entry 
     return resp
 }
 
@@ -121,7 +120,6 @@ func (l *Logger) exportLoop() {
         }
     }
 }
-
 
 func (l *Logger) Stop() {
     close(l.dataCh)
