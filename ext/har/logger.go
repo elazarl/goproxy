@@ -23,6 +23,13 @@ type Logger struct {
 // LoggerOption is a function type for configuring the Logger
 type LoggerOption func(*Logger)
 
+// WithExportInterval sets the interval for automatic exports
+func WithExportInterval(d time.Duration) LoggerOption {
+    return func(l *Logger) {
+        l.exportInterval = d
+    }
+}
+
 // WithExportCount sets the number of requests after which to export entries
 func WithExportThreshold(threshold int) LoggerOption {
     return func(l *Logger) {
@@ -39,6 +46,7 @@ func NewLogger(exportFunc ExportFunc, opts ...LoggerOption) *Logger {
         exportThreshold: 100,    // Default threshold
         exportInterval: 0,       // Default no interval
         stopCh:         make(chan struct{}),
+        dataCh:         make(chan Entry, 1000), 
     }
     
     // Apply options
@@ -46,17 +54,6 @@ func NewLogger(exportFunc ExportFunc, opts ...LoggerOption) *Logger {
         opt(l)
     }
     
-    // Calculate buffer size
-    bufferSize := 100  // minimum default
-    if l.exportInterval > 0 && l.exportThreshold <= 0 {
-        // Interval-only mode: need larger buffer
-        bufferSize = 10000
-    } else if l.exportThreshold > 0 {
-        // Using threshold: buffer = threshold + small safety margin
-        bufferSize = l.exportThreshold + 100
-    }
-    
-    l.dataCh = make(chan Entry, bufferSize)
     go l.exportLoop()
     return l
 }
@@ -102,6 +99,32 @@ func (l *Logger) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Re
     return resp
 }
 
+func (l *Logger) processEntry(entry Entry) {
+    l.entries = append(l.entries, entry)
+    if l.exportThreshold > 0 && len(l.entries) >= l.exportThreshold {
+        l.exportFunc(l.entries)
+        l.entries = make([]Entry, 0)
+    }
+}
+
+func (l *Logger) exportIfNeeded() {
+    if len(l.entries) > 0 {
+        l.exportFunc(l.entries)
+        l.entries = make([]Entry, 0)
+    }
+}
+
+func (l *Logger) drainChannel() {
+    for {
+        select {
+        case entry := <-l.dataCh:
+            l.processEntry(entry)
+        default:
+            return
+        }
+    }
+}
+
 func (l *Logger) exportLoop() {
     var tickerC <-chan time.Time
     if l.exportInterval > 0 {
@@ -113,24 +136,20 @@ func (l *Logger) exportLoop() {
     for {
         select {
         case <-l.stopCh:
-            if len(l.entries) > 0 {
-                l.exportFunc(l.entries)
-            }
+            l.drainChannel()
+            l.exportIfNeeded()
             return
         case entry := <-l.dataCh:
             l.entries = append(l.entries, entry)
             if l.exportThreshold > 0 && len(l.entries) >= l.exportThreshold {
-                l.exportFunc(l.entries)
-                l.entries = make([]Entry, 0)
-            }
+                l.exportIfNeeded()
+            } 
         case <-tickerC:
-            if len(l.entries) > 0 {
-                l.exportFunc(l.entries)
-                l.entries = make([]Entry, 0)
-            }
+            l.exportIfNeeded()
         }
     }
 }
+
 
 // Stop stops the export loop
 func (l *Logger) Stop() {
