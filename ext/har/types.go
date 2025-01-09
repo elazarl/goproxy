@@ -11,9 +11,9 @@ import (
     "net"
     "strings"
     "time"
+
     "github.com/elazarl/goproxy"
 )
-
 
 type Har struct {
 	Log Log `json:"log"`
@@ -144,15 +144,15 @@ func parseMediaType(ctx *goproxy.ProxyCtx, header http.Header) string {
 }
 
 func parsePostData(ctx *goproxy.ProxyCtx, req *http.Request) *PostData {
-    harPostData := new(PostData)
-    
     mediaType := parseMediaType(ctx, req.Header)
     if mediaType == "" {
         return nil
     }
     
-    harPostData.MimeType = mediaType
-    
+    harPostData := &PostData{
+        MimeType: mediaType,
+    } 
+
     if err := req.ParseForm(); err != nil {
         ctx.Proxy.Logger.Printf("Error parsing form: %v", err)
         return nil
@@ -191,12 +191,12 @@ type Response struct {
 }
 
 
-func ParseResponse(ctx *goproxy.ProxyCtx, captureContent bool) *Response {
-    resp := ctx.Resp
-    if resp == nil {
+func ParseResponse(ctx *goproxy.ProxyCtx) *Response {
+    if ctx.Resp == nil {
         return nil
     } 
 
+    resp := ctx.Resp
     harResponse := Response{
         Status:      resp.StatusCode,
         StatusText:  http.StatusText(resp.StatusCode),
@@ -208,28 +208,32 @@ func ParseResponse(ctx *goproxy.ProxyCtx, captureContent bool) *Response {
         HeadersSize: -1,
     }
 
-    if captureContent && resp.Body != nil {
-        if body, err := readBody(ctx, resp.Body); err == nil {
-            resp.Body = io.NopCloser(bytes.NewBuffer(body))
-            harResponse.Content = Content{
-                Size:     len(body),
-                Text:     string(body),
-                MimeType: parseMediaType(ctx, resp.Header),
-            }
-        }
+    if resp.Body == nil {
+        return &harResponse
     }
+
+    body, err := readBody(ctx, resp.Body)
+    if err != nil {
+        return &harResponse
+    }
+
+    resp.Body = io.NopCloser(bytes.NewBuffer(body))
+    harResponse.Content = Content{
+        Size:     len(body),
+        Text:     string(body),
+        MimeType: parseMediaType(ctx, resp.Header),
+    }
+
     return &harResponse
 }
 
-func ParseRequest(ctx *goproxy.ProxyCtx, captureContent bool) *Request {
-    req := ctx.Req
-    if req == nil {
+func ParseRequest(ctx *goproxy.ProxyCtx) *Request {
+    if ctx.Req == nil {
         ctx.Proxy.Logger.Printf("ParseRequest: nil request")
         return nil
     }
     
-    ctx.Proxy.Logger.Printf("ParseRequest: method=%s, captureContent=%v", req.Method, captureContent)
-    
+    req := ctx.Req
     harRequest := &Request{
         Method:      req.Method,
         Url:         req.URL.String(),
@@ -240,14 +244,16 @@ func ParseRequest(ctx *goproxy.ProxyCtx, captureContent bool) *Request {
         BodySize:    req.ContentLength,
         HeadersSize: -1,
     }
+    
+    if req.Method != http.MethodPost && req.Method != http.MethodPut {
+        return harRequest
+    }
 
-    if captureContent && (req.Method == "POST" || req.Method == "PUT") {
-        ctx.Proxy.Logger.Printf("ParseRequest: creating PostData, hasBody=%v, hasGetBody=%v", 
-            req.Body != nil, req.GetBody != nil)
-            
-        if postData := parsePostData(ctx, req); postData != nil {
-            harRequest.PostData = postData
-        }
+    ctx.Proxy.Logger.Printf("ParseRequest: creating PostData, hasBody=%v, hasGetBody=%v", 
+        req.Body != nil, req.GetBody != nil)
+        
+    if postData := parsePostData(ctx, req); postData != nil {
+        harRequest.PostData = postData
     }
 
     return harRequest

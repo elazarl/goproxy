@@ -1,17 +1,19 @@
 package har
 
 import (
-    "io"
-    "net/http"
-    "net/http/httptest"
-    "net/url"
-    "strings"
-    "testing"
-    "time"
-    "sync"
-    "github.com/elazarl/goproxy"
-    "github.com/stretchr/testify/assert"
-    "github.com/stretchr/testify/require"
+	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/elazarl/goproxy"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // ConstantHandler is a simple HTTP handler that returns a constant response
@@ -83,18 +85,24 @@ func TestHarLoggerBasicFunctionality(t *testing.T) {
 
             client := createProxyClient(proxyServer.URL)
 
-            req, err := http.NewRequest(tc.method, background.URL, strings.NewReader(tc.body))
+            req, err := http.NewRequestWithContext(
+                context.Background(),
+                tc.method,
+                background.URL,
+                strings.NewReader(tc.body),
+            )
             require.NoError(t, err, "Should create request")
+
             if tc.contentType != "" {
                 req.Header.Set("Content-Type", tc.contentType)
             }
 
             resp, err := client.Do(req)
             require.NoError(t, err, "Should send request successfully")
+            defer resp.Body.Close()
             
             bodyBytes, err := io.ReadAll(resp.Body)
             require.NoError(t, err, "Should read response body")
-            resp.Body.Close()
             
             body := string(bodyBytes)
             assert.Equal(t, "hello world", body, "Response body should match")

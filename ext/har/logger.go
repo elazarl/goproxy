@@ -3,6 +3,7 @@ package har
 import (
     "net/http"
     "time"
+
     "github.com/elazarl/goproxy"
 )
 
@@ -11,12 +12,9 @@ type ExportFunc func([]Entry)
 
 // Logger implements a HAR logging extension for goproxy
 type Logger struct {
-    entries        []Entry
-    captureContent bool
     exportFunc      ExportFunc
     exportInterval  time.Duration
     exportThreshold int
-    stopCh          chan struct{}
     dataCh          chan Entry
 }
 
@@ -40,13 +38,10 @@ func WithExportThreshold(threshold int) LoggerOption {
 // NewLogger creates a new HAR logger instance
 func NewLogger(exportFunc ExportFunc, opts ...LoggerOption) *Logger {
     l := &Logger{
-        entries:        make([]Entry, 0),
-        captureContent: true,
         exportFunc:     exportFunc,
         exportThreshold: 100,    // Default threshold
         exportInterval: 0,       // Default no interval
-        stopCh:         make(chan struct{}),
-        dataCh:         make(chan Entry, 1000), 
+        dataCh:         make(chan Entry), 
     }
     
     // Apply options
@@ -57,7 +52,6 @@ func NewLogger(exportFunc ExportFunc, opts ...LoggerOption) *Logger {
     go l.exportLoop()
     return l
 }
-
 // OnRequest handles incoming HTTP requests
 func (l *Logger) OnRequest(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
     if ctx != nil {
@@ -79,8 +73,8 @@ func (l *Logger) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Re
     entry := Entry{
         StartedDateTime: startTime,
         Time:           time.Since(startTime).Milliseconds(),
-        Request:        ParseRequest(ctx, l.captureContent),
-        Response:       ParseResponse(ctx, l.captureContent),
+        Request:        ParseRequest(ctx),
+        Response:       ParseResponse(ctx),
         Timings: Timings{
             Send:    0,
             Wait:    time.Since(startTime).Milliseconds(),
@@ -89,43 +83,21 @@ func (l *Logger) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Re
     }
     entry.fillIPAddress(ctx.Req)
     
-    select {
-    case l.dataCh <- entry:
-    default:
-        // Log or handle case where channel is full, just in case 
-        ctx.Proxy.Logger.Printf("Warning: HAR logger channel is full, dropping entry")
-    } 
+   l.dataCh <- entry 
     
     return resp
 }
 
-func (l *Logger) processEntry(entry Entry) {
-    l.entries = append(l.entries, entry)
-    if l.exportThreshold > 0 && len(l.entries) >= l.exportThreshold {
-        l.exportFunc(l.entries)
-        l.entries = make([]Entry, 0)
-    }
-}
-
-func (l *Logger) exportIfNeeded() {
-    if len(l.entries) > 0 {
-        l.exportFunc(l.entries)
-        l.entries = make([]Entry, 0)
-    }
-}
-
-func (l *Logger) drainChannel() {
-    for {
-        select {
-        case entry := <-l.dataCh:
-            l.processEntry(entry)
-        default:
-            return
-        }
-    }
-}
-
 func (l *Logger) exportLoop() {
+   var entries []Entry 
+    
+   exportIfNeeded := func() {
+        if len(entries) > 0 {
+            go l.exportFunc(entries)
+            entries = nil 
+        } 
+    } 
+    
     var tickerC <-chan time.Time
     if l.exportInterval > 0 {
         ticker := time.NewTicker(l.exportInterval)
@@ -135,23 +107,22 @@ func (l *Logger) exportLoop() {
     
     for {
         select {
-        case <-l.stopCh:
-            l.drainChannel()
-            l.exportIfNeeded()
-            return
-        case entry := <-l.dataCh:
-            l.entries = append(l.entries, entry)
-            if l.exportThreshold > 0 && len(l.entries) >= l.exportThreshold {
-                l.exportIfNeeded()
+        case entry, ok := <-l.dataCh:
+            if !ok {
+                exportIfNeeded()
+                return
+            }
+            entries = append(entries, entry)
+            if l.exportThreshold > 0 && len(entries) >= l.exportThreshold {
+                exportIfNeeded()
             } 
         case <-tickerC:
-            l.exportIfNeeded()
+            exportIfNeeded()
         }
     }
 }
 
 
-// Stop stops the export loop
 func (l *Logger) Stop() {
-    close(l.stopCh)
+    close(l.dataCh)
 }
