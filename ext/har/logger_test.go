@@ -169,7 +169,7 @@ func TestHarLoggerExportInterval(t *testing.T) {
         wg.Done()
     }
 
-    logger := NewLogger(exportFunc, WithExportInterval(100*time.Millisecond))
+    logger := NewLogger(exportFunc, WithExportInterval(time.Second))
     
     background := httptest.NewServer(ConstantHandler("test"))
     defer background.Close()
