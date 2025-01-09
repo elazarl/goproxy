@@ -5,12 +5,10 @@ package har
 import (
     "bytes"
     "io"
-    "log"
     "net/http"
     "net/url"
     "mime"
     "net"
-    "context"
     "strings"
     "time"
     "github.com/elazarl/goproxy"
