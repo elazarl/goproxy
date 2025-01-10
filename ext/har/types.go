@@ -106,7 +106,6 @@ type Request struct {
 	HeadersSize int64           `json:"headersSize"`
 }
 
-
 func (entry *Entry) fillIPAddress(req *http.Request) {
     host := req.URL.Hostname()
     
@@ -116,7 +115,6 @@ func (entry *Entry) fillIPAddress(req *http.Request) {
         return
     } 
 }
-
 
 // Shared utility function for reading body content
 func readBody(ctx *goproxy.ProxyCtx, body io.ReadCloser) ([]byte, error) {
@@ -176,7 +174,6 @@ func parsePostData(ctx *goproxy.ProxyCtx, req *http.Request) *PostData {
     return harPostData
 }
 
-
 type Response struct {
 	Status      int             `json:"status"`
 	StatusText  string          `json:"statusText"`
@@ -190,8 +187,7 @@ type Response struct {
 	Comment     string          `json:"comment,omitempty"`
 }
 
-
-func ParseResponse(ctx *goproxy.ProxyCtx) *Response {
+func parseResponse(ctx *goproxy.ProxyCtx) *Response {
     if ctx.Resp == nil {
         return nil
     } 
@@ -227,7 +223,7 @@ func ParseResponse(ctx *goproxy.ProxyCtx) *Response {
     return &harResponse
 }
 
-func ParseRequest(ctx *goproxy.ProxyCtx) *Request {
+func parseRequest(ctx *goproxy.ProxyCtx) *Request {
     if ctx.Req == nil {
         ctx.Proxy.Logger.Printf("ParseRequest: nil request")
         return nil
