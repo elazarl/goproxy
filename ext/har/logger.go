@@ -71,8 +71,8 @@ func (l *Logger) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Re
     entry := Entry{
         StartedDateTime: startTime,
         Time:           time.Since(startTime).Milliseconds(),
-        Request:        ParseRequest(ctx),
-        Response:       ParseResponse(ctx),
+        Request:        parseRequest(ctx),
+        Response:       parseResponse(ctx),
         Timings: Timings{
             Send:    0,
             Wait:    time.Since(startTime).Milliseconds(),
