@@ -54,15 +54,13 @@ func NewLogger(exportFunc ExportFunc, opts ...LoggerOption) *Logger {
 }
 // OnRequest handles incoming HTTP requests
 func (l *Logger) OnRequest(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-    if ctx != nil {
-        ctx.UserData = time.Now()
-    }
+    ctx.UserData = time.Now()
     return req, nil
 }
 
 // OnResponse handles HTTP responses
 func (l *Logger) OnResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
-    if resp == nil || ctx == nil || ctx.Req == nil || ctx.UserData == nil {
+    if resp == nil || ctx.Req == nil || ctx.UserData == nil {
         return resp
     }
     startTime, ok := ctx.UserData.(time.Time)
