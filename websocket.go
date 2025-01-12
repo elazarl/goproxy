@@ -6,7 +6,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"strings"
 )
 
@@ -40,10 +39,9 @@ func (proxy *ProxyHttpServer) serveWebsocketTLS(
 	if err != nil || port == "" {
 		host = net.JoinHostPort(req.URL.Host, "443")
 	}
-	targetURL := url.URL{Scheme: "wss", Host: host, Path: req.URL.Path}
 
 	// Connect to upstream
-	targetConn, err := tls.Dial("tcp", targetURL.Host, tlsConfig)
+	targetConn, err := tls.Dial("tcp", host, tlsConfig)
 	if err != nil {
 		ctx.Warnf("Error dialing target site: %v", err)
 		return
