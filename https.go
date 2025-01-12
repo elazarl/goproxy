@@ -576,7 +576,7 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(
 				return nil, err
 			}
 
-			c, err = proxy.initializeTLSconnection(ctx, c, proxy.Tr.TLSClientConfig)
+			c, err = proxy.initializeTLSconnection(ctx, c, proxy.Tr.TLSClientConfig, u.Host)
 			if err != nil {
 				return nil, err
 			}
@@ -647,7 +647,21 @@ func (proxy *ProxyHttpServer) initializeTLSconnection(
 	ctx *ProxyCtx,
 	targetConn net.Conn,
 	tlsConfig *tls.Config,
+	addr string,
 ) (net.Conn, error) {
+	// Infer target ServerName, it's a copy of implementation inside tls.Dial()
+	if tlsConfig.ServerName == "" {
+		colonPos := strings.LastIndex(addr, ":")
+		if colonPos == -1 {
+			colonPos = len(addr)
+		}
+		hostname := addr[:colonPos]
+		// Make a copy to avoid polluting argument or default.
+		c := tlsConfig.Clone()
+		c.ServerName = hostname
+		tlsConfig = c
+	}
+
 	if ctx.InitializeTLS != nil {
 		return ctx.InitializeTLS(targetConn, tlsConfig)
 	}

@@ -49,7 +49,7 @@ func (proxy *ProxyHttpServer) serveWebsocketTLS(
 	defer targetConn.Close()
 
 	// Add TLS to the raw TCP connection
-	targetConn, err = proxy.initializeTLSconnection(ctx, targetConn, tlsConfig)
+	targetConn, err = proxy.initializeTLSconnection(ctx, targetConn, tlsConfig, host)
 	if err != nil {
 		ctx.Warnf("Websocket TLS connection error: %v", err)
 		return
