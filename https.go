@@ -76,7 +76,7 @@ func (proxy *ProxyHttpServer) dial(ctx *ProxyCtx, network, addr string) (c net.C
 		return ctx.Dialer(ctx.Req.Context(), network, addr)
 	}
 
-	if proxy.Tr.DialContext != nil {
+	if proxy.Tr != nil && proxy.Tr.DialContext != nil {
 		return proxy.Tr.DialContext(ctx.Req.Context(), network, addr)
 	}
 
