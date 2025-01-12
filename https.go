@@ -2,7 +2,6 @@ package goproxy
 
 import (
 	"bufio"
-	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -72,16 +71,23 @@ func stripPort(s string) string {
 	return s[:ix]
 }
 
-func (proxy *ProxyHttpServer) dial(ctx context.Context, network, addr string) (c net.Conn, err error) {
-	if proxy.Tr.DialContext != nil {
-		return proxy.Tr.DialContext(ctx, network, addr)
+func (proxy *ProxyHttpServer) dial(ctx *ProxyCtx, network, addr string) (c net.Conn, err error) {
+	if ctx.Dialer != nil {
+		return ctx.Dialer(ctx.Req.Context(), network, addr)
 	}
+
+	if proxy.Tr.DialContext != nil {
+		return proxy.Tr.DialContext(ctx.Req.Context(), network, addr)
+	}
+
+	// if the user didn't specify any dialer, we just use the default one,
+	// provided by net package
 	return net.Dial(network, addr)
 }
 
 func (proxy *ProxyHttpServer) connectDial(ctx *ProxyCtx, network, addr string) (c net.Conn, err error) {
 	if proxy.ConnectDialWithReq == nil && proxy.ConnectDial == nil {
-		return proxy.dial(ctx.Req.Context(), network, addr)
+		return proxy.dial(ctx, network, addr)
 	}
 
 	if proxy.ConnectDialWithReq != nil {
@@ -533,7 +539,7 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(
 			if connectReqHandler != nil {
 				connectReqHandler(connectReq)
 			}
-			c, err := proxy.dial(context.Background(), network, u.Host)
+			c, err := proxy.dial(&ProxyCtx{Req: &http.Request{}}, network, u.Host)
 			if err != nil {
 				return nil, err
 			}
@@ -564,7 +570,7 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(
 			u.Host += ":443"
 		}
 		return func(network, addr string) (net.Conn, error) {
-			c, err := proxy.dial(context.Background(), network, u.Host)
+			c, err := proxy.dial(&ProxyCtx{Req: &http.Request{}}, network, u.Host)
 			if err != nil {
 				return nil, err
 			}
