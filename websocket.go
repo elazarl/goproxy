@@ -40,13 +40,15 @@ func (proxy *ProxyHttpServer) serveWebsocketTLS(
 		host = net.JoinHostPort(req.URL.Host, "443")
 	}
 
-	// Connect to upstream
-	targetConn, err := tls.Dial("tcp", host, tlsConfig)
+	targetConn, err := proxy.connectDial(ctx, "tcp", host)
 	if err != nil {
 		ctx.Warnf("Error dialing target site: %v", err)
 		return
 	}
 	defer targetConn.Close()
+
+	// Add TLS to the opened raw TCP connection
+	targetConn = tls.Client(targetConn, tlsConfig)
 
 	// Perform handshake
 	if err := proxy.websocketHandshake(ctx, req, targetConn, clientConn); err != nil {
