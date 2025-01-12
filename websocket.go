@@ -78,13 +78,6 @@ func (proxy *ProxyHttpServer) hijackConnection(ctx *ProxyCtx, w http.ResponseWri
 	return clientConn, nil
 }
 
-func (proxy *ProxyHttpServer) initializeTLSconnection(ctx *ProxyCtx, targetConn net.Conn, tlsConfig *tls.Config) (net.Conn, error) {
-	if ctx.InitializeTLS != nil {
-		return ctx.InitializeTLS(targetConn, tlsConfig)
-	}
-	return tls.Client(targetConn, tlsConfig), nil
-}
-
 func (proxy *ProxyHttpServer) serveWebsocket(ctx *ProxyCtx, clientConn net.Conn, req *http.Request) {
 	// ws
 	host := req.URL.Host
