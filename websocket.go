@@ -3,6 +3,7 @@ package goproxy
 import (
 	"bufio"
 	"crypto/tls"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -48,7 +49,7 @@ func (proxy *ProxyHttpServer) serveWebsocketTLS(
 	defer targetConn.Close()
 
 	// Add TLS to the raw TCP connection
-	targetConn, err = proxy.initializeTLSconnection(ctx, targetConn, tlsConfig)
+	targetConn, err = proxy.initializeTLSconnection(ctx, targetConn, tlsConfig, host)
 	if err != nil {
 		ctx.Warnf("Websocket TLS connection error: %v", err)
 		return
@@ -143,7 +144,9 @@ func (proxy *ProxyHttpServer) proxyWebsocket(ctx *ProxyCtx, dest io.ReadWriter, 
 	errChan := make(chan error, 2)
 	cp := func(dst io.Writer, src io.Reader) {
 		_, err := io.Copy(dst, src)
-		ctx.Warnf("Websocket error: %v", err)
+		if err != nil && !errors.Is(err, net.ErrClosed) {
+			ctx.Warnf("Websocket error: %v", err)
+		}
 		errChan <- err
 	}
 
