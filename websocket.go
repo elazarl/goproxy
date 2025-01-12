@@ -6,7 +6,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"strings"
 )
 
@@ -28,11 +27,11 @@ func isWebSocketRequest(r *http.Request) bool {
 
 func (proxy *ProxyHttpServer) serveWebsocketTLS(
 	ctx *ProxyCtx,
-	w http.ResponseWriter,
 	req *http.Request,
 	tlsConfig *tls.Config,
 	clientConn *tls.Conn,
 ) {
+	// wss
 	host := req.URL.Host
 	// Port is optional in req.URL.Host, in this case SplitHostPort returns
 	// an error, and we add the default port
@@ -40,15 +39,20 @@ func (proxy *ProxyHttpServer) serveWebsocketTLS(
 	if err != nil || port == "" {
 		host = net.JoinHostPort(req.URL.Host, "443")
 	}
-	targetURL := url.URL{Scheme: "wss", Host: host, Path: req.URL.Path}
 
-	// Connect to upstream
-	targetConn, err := tls.Dial("tcp", targetURL.Host, tlsConfig)
+	targetConn, err := proxy.connectDial(ctx, "tcp", host)
 	if err != nil {
 		ctx.Warnf("Error dialing target site: %v", err)
 		return
 	}
 	defer targetConn.Close()
+
+	// Add TLS to the raw TCP connection
+	targetConn, err = proxy.initializeTLSconnection(ctx, targetConn, tlsConfig)
+	if err != nil {
+		ctx.Warnf("Websocket TLS connection error: %v", err)
+		return
+	}
 
 	// Perform handshake
 	if err := proxy.websocketHandshake(ctx, req, targetConn, clientConn); err != nil {
@@ -60,49 +64,7 @@ func (proxy *ProxyHttpServer) serveWebsocketTLS(
 	proxy.proxyWebsocket(ctx, targetConn, clientConn)
 }
 
-func (proxy *ProxyHttpServer) serveWebsocketHttpOverTLS(
-	ctx *ProxyCtx,
-	w http.ResponseWriter,
-	req *http.Request,
-	clientConn *tls.Conn,
-) {
-	host := req.URL.Host
-	// Port is optional in req.URL.Host, in this case SplitHostPort returns
-	// an error, and we add the default port
-	_, port, err := net.SplitHostPort(req.URL.Host)
-	if err != nil || port == "" {
-		host = net.JoinHostPort(req.URL.Host, "80")
-	}
-	targetURL := url.URL{Scheme: "ws", Host: host, Path: req.URL.Path}
-
-	// Connect to upstream
-	targetConn, err := proxy.connectDial(ctx, "tcp", targetURL.Host)
-	if err != nil {
-		ctx.Warnf("Error dialing target site: %v", err)
-		return
-	}
-	defer targetConn.Close()
-
-	// Perform handshake
-	if err := proxy.websocketHandshake(ctx, req, targetConn, clientConn); err != nil {
-		ctx.Warnf("Websocket handshake error: %v", err)
-		return
-	}
-
-	// Proxy wss connection
-	proxy.proxyWebsocket(ctx, targetConn, clientConn)
-}
-
-func (proxy *ProxyHttpServer) serveWebsocket(ctx *ProxyCtx, w http.ResponseWriter, req *http.Request) {
-	targetURL := url.URL{Scheme: "ws", Host: req.URL.Host, Path: req.URL.Path}
-
-	targetConn, err := proxy.connectDial(ctx, "tcp", targetURL.Host)
-	if err != nil {
-		ctx.Warnf("Error dialing target site: %v", err)
-		return
-	}
-	defer targetConn.Close()
-
+func (proxy *ProxyHttpServer) hijackConnection(ctx *ProxyCtx, w http.ResponseWriter) (net.Conn, error) {
 	// Connect to Client
 	hj, ok := w.(http.Hijacker)
 	if !ok {
@@ -111,8 +73,27 @@ func (proxy *ProxyHttpServer) serveWebsocket(ctx *ProxyCtx, w http.ResponseWrite
 	clientConn, _, err := hj.Hijack()
 	if err != nil {
 		ctx.Warnf("Hijack error: %v", err)
+		return nil, err
+	}
+	return clientConn, nil
+}
+
+func (proxy *ProxyHttpServer) serveWebsocket(ctx *ProxyCtx, clientConn net.Conn, req *http.Request) {
+	// ws
+	host := req.URL.Host
+	// Port is optional in req.URL.Host, in this case SplitHostPort returns
+	// an error, and we add the default port
+	_, port, err := net.SplitHostPort(req.URL.Host)
+	if err != nil || port == "" {
+		host = net.JoinHostPort(req.URL.Host, "80")
+	}
+
+	targetConn, err := proxy.connectDial(ctx, "tcp", host)
+	if err != nil {
+		ctx.Warnf("Error dialing target site: %v", err)
 		return
 	}
+	defer targetConn.Close()
 
 	// Perform handshake
 	if err := proxy.websocketHandshake(ctx, req, targetConn, clientConn); err != nil {

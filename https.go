@@ -2,7 +2,6 @@ package goproxy
 
 import (
 	"bufio"
-	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -72,16 +71,23 @@ func stripPort(s string) string {
 	return s[:ix]
 }
 
-func (proxy *ProxyHttpServer) dial(ctx context.Context, network, addr string) (c net.Conn, err error) {
-	if proxy.Tr.DialContext != nil {
-		return proxy.Tr.DialContext(ctx, network, addr)
+func (proxy *ProxyHttpServer) dial(ctx *ProxyCtx, network, addr string) (c net.Conn, err error) {
+	if ctx.Dialer != nil {
+		return ctx.Dialer(ctx.Req.Context(), network, addr)
 	}
+
+	if proxy.Tr.DialContext != nil {
+		return proxy.Tr.DialContext(ctx.Req.Context(), network, addr)
+	}
+
+	// if the user didn't specify any dialer, we just use the default one,
+	// provided by net package
 	return net.Dial(network, addr)
 }
 
 func (proxy *ProxyHttpServer) connectDial(ctx *ProxyCtx, network, addr string) (c net.Conn, err error) {
 	if proxy.ConnectDialWithReq == nil && proxy.ConnectDial == nil {
-		return proxy.dial(ctx.Req.Context(), network, addr)
+		return proxy.dial(ctx, network, addr)
 	}
 
 	if proxy.ConnectDialWithReq != nil {
@@ -340,9 +346,9 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						ctx.Logf("Request looks like websocket upgrade.")
 						if req.URL.Scheme == "http" {
 							ctx.Logf("Enforced HTTP websocket forwarding over TLS")
-							proxy.serveWebsocketHttpOverTLS(ctx, w, req, rawClientTls)
+							proxy.serveWebsocket(ctx, rawClientTls, req)
 						} else {
-							proxy.serveWebsocketTLS(ctx, w, req, tlsConfig, rawClientTls)
+							proxy.serveWebsocketTLS(ctx, req, tlsConfig, rawClientTls)
 						}
 						return
 					}
@@ -533,7 +539,7 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(
 			if connectReqHandler != nil {
 				connectReqHandler(connectReq)
 			}
-			c, err := proxy.dial(context.Background(), network, u.Host)
+			c, err := proxy.dial(&ProxyCtx{Req: &http.Request{}}, network, u.Host)
 			if err != nil {
 				return nil, err
 			}
@@ -564,11 +570,17 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(
 			u.Host += ":443"
 		}
 		return func(network, addr string) (net.Conn, error) {
-			c, err := proxy.dial(context.Background(), network, u.Host)
+			ctx := &ProxyCtx{Req: &http.Request{}}
+			c, err := proxy.dial(ctx, network, u.Host)
 			if err != nil {
 				return nil, err
 			}
-			c = tls.Client(c, proxy.Tr.TLSClientConfig)
+
+			c, err = proxy.initializeTLSconnection(ctx, c, proxy.Tr.TLSClientConfig)
+			if err != nil {
+				return nil, err
+			}
+
 			connectReq := &http.Request{
 				Method: http.MethodConnect,
 				URL:    &url.URL{Opaque: addr},
@@ -629,4 +641,15 @@ func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls
 		config.Certificates = append(config.Certificates, *cert)
 		return config, nil
 	}
+}
+
+func (proxy *ProxyHttpServer) initializeTLSconnection(
+	ctx *ProxyCtx,
+	targetConn net.Conn,
+	tlsConfig *tls.Config,
+) (net.Conn, error) {
+	if ctx.InitializeTLS != nil {
+		return ctx.InitializeTLS(targetConn, tlsConfig)
+	}
+	return tls.Client(targetConn, tlsConfig), nil
 }

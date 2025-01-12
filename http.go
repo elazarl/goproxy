@@ -21,7 +21,9 @@ func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request)
 	if resp == nil {
 		if isWebSocketRequest(r) {
 			ctx.Logf("Request looks like websocket upgrade.")
-			proxy.serveWebsocket(ctx, w, r)
+			if conn, err := proxy.hijackConnection(ctx, w); err == nil {
+				proxy.serveWebsocket(ctx, conn, r)
+			}
 		}
 
 		if !proxy.KeepHeader {
