@@ -651,5 +651,9 @@ func (proxy *ProxyHttpServer) initializeTLSconnection(
 	if ctx.InitializeTLS != nil {
 		return ctx.InitializeTLS(targetConn, tlsConfig)
 	}
-	return tls.Client(targetConn, tlsConfig), nil
+	tlsConn := tls.Client(targetConn, tlsConfig)
+	if err := tlsConn.Handshake(); err != nil {
+		return nil, err
+	}
+	return tlsConn, nil
 }
