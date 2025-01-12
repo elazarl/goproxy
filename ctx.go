@@ -18,7 +18,8 @@ type ProxyCtx struct {
 	RoundTripper RoundTripper
 	// Specify a custom connection dialer that will be used only for the current
 	// request, including WebSocket connection upgrades
-	Dialer func(ctx context.Context, network string, addr string) (net.Conn, error)
+	Dialer        func(ctx context.Context, network string, addr string) (net.Conn, error)
+	InitializeTLS func(rawConn net.Conn, cfg *tls.Config) (net.Conn, error)
 	// will contain the recent error that occurred while trying to send receive or parse traffic
 	Error error
 	// A handle for the user to keep data in the context, from the call of ReqHandler to the

@@ -47,8 +47,12 @@ func (proxy *ProxyHttpServer) serveWebsocketTLS(
 	}
 	defer targetConn.Close()
 
-	// Add TLS to the opened raw TCP connection
-	targetConn = tls.Client(targetConn, tlsConfig)
+	// Add TLS to the raw TCP connection
+	targetConn, err = proxy.initializeTLSconnection(ctx, targetConn, tlsConfig)
+	if err != nil {
+		ctx.Warnf("Websocket TLS connection error: %v", err)
+		return
+	}
 
 	// Perform handshake
 	if err := proxy.websocketHandshake(ctx, req, targetConn, clientConn); err != nil {
@@ -72,6 +76,13 @@ func (proxy *ProxyHttpServer) hijackConnection(ctx *ProxyCtx, w http.ResponseWri
 		return nil, err
 	}
 	return clientConn, nil
+}
+
+func (proxy *ProxyHttpServer) initializeTLSconnection(ctx *ProxyCtx, targetConn net.Conn, tlsConfig *tls.Config) (net.Conn, error) {
+	if ctx.InitializeTLS != nil {
+		return ctx.InitializeTLS(targetConn, tlsConfig)
+	}
+	return tls.Client(targetConn, tlsConfig), nil
 }
 
 func (proxy *ProxyHttpServer) serveWebsocket(ctx *ProxyCtx, clientConn net.Conn, req *http.Request) {

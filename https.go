@@ -570,11 +570,17 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(
 			u.Host += ":443"
 		}
 		return func(network, addr string) (net.Conn, error) {
-			c, err := proxy.dial(&ProxyCtx{Req: &http.Request{}}, network, u.Host)
+			ctx := &ProxyCtx{Req: &http.Request{}}
+			c, err := proxy.dial(ctx, network, u.Host)
 			if err != nil {
 				return nil, err
 			}
-			c = tls.Client(c, proxy.Tr.TLSClientConfig)
+
+			c, err = proxy.initializeTLSconnection(ctx, c, proxy.Tr.TLSClientConfig)
+			if err != nil {
+				return nil, err
+			}
+
 			connectReq := &http.Request{
 				Method: http.MethodConnect,
 				URL:    &url.URL{Opaque: addr},
