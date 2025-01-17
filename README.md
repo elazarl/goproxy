@@ -18,6 +18,8 @@ Here is how you do that in [Chrome](https://www.wikihow.com/Connect-to-a-Proxy-S
 and in [Firefox](http://www.wikihow.com/Enter-Proxy-Settings-in-Firefox).
 If you decide to start with the `base` example, the URL you should use as
 proxy is `localhost:8080`, which is the default one in our example.
+You also have to [trust](https://github.com/elazarl/goproxy/blob/master/examples/customca/README.md)
+the proxy CA certificate, to avoid any certificate issue in the clients.
 
 ## Features
 - Perform certain actions only on `specific hosts`,  with a single equality comparison or with regex evaluation
