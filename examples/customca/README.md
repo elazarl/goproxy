@@ -20,10 +20,14 @@ the connection, since it's not recognized.
 ## Trust CA certificate
 The default CA certificate used by GoProxy is in the root folder of this
 project (in files `ca.pem`, and its private key `key.pem`).
-You can trust this certificate or use your own with GoProxy, as shown in
-this example, and trust it in your browser instead of the provided `ca.pem`.
+
+### Use your certificate
+You can trust the default certificate or use your own with GoProxy, and
+trust it instead of the provided `ca.pem`.
 If you want to do this, just replace the occurrences of this file in the next
-lines with your CA certificate filename.
+paragraphs with your CA certificate filename.
+You can generate your own self-signed certificate with
+[openssl](https://stackoverflow.com/questions/10175812/how-to-generate-a-self-signed-ssl-certificate-using-openssl).
 
 ### Firefox
 You have to reach the certificate manager configuration in order to add
