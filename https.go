@@ -329,70 +329,75 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				// information URL in the context when does HTTPS MITM
 				ctx.Req = req
 
-				req, resp := proxy.filterRequest(req, ctx)
-				if resp == nil {
-					if req.Method == "PRI" {
-						// Handle HTTP/2 connections.
+				if continueLoop := func(req *http.Request) bool {
+					// Since we handled the request parsing by our own, we manually
+					// need to set a cancellable context when we finished the request
+					// processing (same behaviour of the stdlib)
+					requestContext, finishRequest := context.WithCancel(req.Context())
+					req = req.WithContext(requestContext)
+					defer finishRequest()
 
-						// NOTE: As of 1.22, golang's http module will not recognize or
-						// parse the HTTP Body for PRI requests. This leaves the body of
-						// the http2.ClientPreface ("SM\r\n\r\n") on the wire which we need
-						// to clear before setting up the connection.
-						reader := clientTlsReader.Reader()
-						_, err := reader.Discard(6)
+					req, resp := proxy.filterRequest(req, ctx)
+					if resp == nil {
+						if req.Method == "PRI" {
+							// Handle HTTP/2 connections.
+
+							// NOTE: As of 1.22, golang's http module will not recognize or
+							// parse the HTTP Body for PRI requests. This leaves the body of
+							// the http2.ClientPreface ("SM\r\n\r\n") on the wire which we need
+							// to clear before setting up the connection.
+							reader := clientTlsReader.Reader()
+							_, err := reader.Discard(6)
+							if err != nil {
+								ctx.Warnf("Failed to process HTTP2 client preface: %v", err)
+								return false
+							}
+							if !proxy.AllowHTTP2 {
+								ctx.Warnf("HTTP2 connection failed: disallowed")
+								return false
+							}
+							tr := H2Transport{reader, rawClientTls, tlsConfig.Clone(), host}
+							if _, err := tr.RoundTrip(req); err != nil {
+								ctx.Warnf("HTTP2 connection failed: %v", err)
+							} else {
+								ctx.Logf("Exiting on EOF")
+							}
+							return false
+						}
+						if isWebSocketRequest(req) {
+							ctx.Logf("Request looks like websocket upgrade.")
+							if req.URL.Scheme == "http" {
+								ctx.Logf("Enforced HTTP websocket forwarding over TLS")
+								proxy.serveWebsocket(ctx, rawClientTls, req)
+							} else {
+								proxy.serveWebsocketTLS(ctx, req, tlsConfig, rawClientTls)
+							}
+							return false
+						}
 						if err != nil {
-							ctx.Warnf("Failed to process HTTP2 client preface: %v", err)
-							return
+							if req.URL != nil {
+								ctx.Warnf("Illegal URL %s", "https://"+r.Host+req.URL.Path)
+							} else {
+								ctx.Warnf("Illegal URL %s", "https://"+r.Host)
+							}
+							return false
 						}
-						if !proxy.AllowHTTP2 {
-							ctx.Warnf("HTTP2 connection failed: disallowed")
-							return
+						if !proxy.KeepHeader {
+							RemoveProxyHeaders(ctx, req)
 						}
-						tr := H2Transport{reader, rawClientTls, tlsConfig.Clone(), host}
-						if _, err := tr.RoundTrip(req); err != nil {
-							ctx.Warnf("HTTP2 connection failed: %v", err)
-						} else {
-							ctx.Logf("Exiting on EOF")
+						resp, err = func() (*http.Response, error) {
+							// explicitly discard request body to avoid data races in certain RoundTripper implementations
+							// see https://github.com/golang/go/issues/61596#issuecomment-1652345131
+							defer req.Body.Close()
+							return ctx.RoundTrip(req)
+						}()
+						if err != nil {
+							ctx.Warnf("Cannot read TLS response from mitm'd server %v", err)
+							return false
 						}
-						return
+						ctx.Logf("resp %v", resp.Status)
 					}
-					if isWebSocketRequest(req) {
-						ctx.Logf("Request looks like websocket upgrade.")
-						if req.URL.Scheme == "http" {
-							ctx.Logf("Enforced HTTP websocket forwarding over TLS")
-							proxy.serveWebsocket(ctx, rawClientTls, req)
-						} else {
-							proxy.serveWebsocketTLS(ctx, req, tlsConfig, rawClientTls)
-						}
-						return
-					}
-					if err != nil {
-						if req.URL != nil {
-							ctx.Warnf("Illegal URL %s", "https://"+r.Host+req.URL.Path)
-						} else {
-							ctx.Warnf("Illegal URL %s", "https://"+r.Host)
-						}
-						return
-					}
-					if !proxy.KeepHeader {
-						RemoveProxyHeaders(ctx, req)
-					}
-					resp, err = func() (*http.Response, error) {
-						// explicitly discard request body to avoid data races in certain RoundTripper implementations
-						// see https://github.com/golang/go/issues/61596#issuecomment-1652345131
-						defer req.Body.Close()
-						return ctx.RoundTrip(req)
-					}()
-					if err != nil {
-						ctx.Warnf("Cannot read TLS response from mitm'd server %v", err)
-						return
-					}
-					ctx.Logf("resp %v", resp.Status)
-				}
-				resp = proxy.filterResponse(resp, ctx)
-
-				// Run defer inside a custom function to prevent response body memory leak
-				if ok := func() bool {
+					resp = proxy.filterResponse(resp, ctx)
 					defer resp.Body.Close()
 
 					text := resp.Status
@@ -451,7 +456,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					}
 
 					return true
-				}(); !ok {
+				}(req); !continueLoop {
 					return
 				}
 
