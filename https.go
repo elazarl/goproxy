@@ -254,8 +254,9 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					}
 				}
 				resp = proxy.filterResponse(resp, ctx)
+				defer resp.Body.Close()
+
 				err = resp.Write(proxyClient)
-				_ = resp.Body.Close()
 				if err != nil {
 					httpError(proxyClient, ctx, err)
 					return false
@@ -364,16 +365,6 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 							}
 							return false
 						}
-						if isWebSocketRequest(req) {
-							ctx.Logf("Request looks like websocket upgrade.")
-							if req.URL.Scheme == "http" {
-								ctx.Logf("Enforced HTTP websocket forwarding over TLS")
-								proxy.serveWebsocket(ctx, rawClientTls, req)
-							} else {
-								proxy.serveWebsocketTLS(ctx, req, tlsConfig, rawClientTls)
-							}
-							return false
-						}
 						if err != nil {
 							if req.URL != nil {
 								ctx.Warnf("Illegal URL %s", "https://"+r.Host+req.URL.Path)
@@ -409,7 +400,8 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						return false
 					}
 
-					if resp.Request.Method == http.MethodHead {
+					isWebsocket := isWebSocketHandshake(resp.Header)
+					if isWebsocket || resp.Request.Method == http.MethodHead {
 						// don't change Content-Length for HEAD request
 					} else if (resp.StatusCode >= 100 && resp.StatusCode < 200) ||
 						resp.StatusCode == http.StatusNoContent {
@@ -423,13 +415,33 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						resp.Header.Set("Transfer-Encoding", "chunked")
 					}
 					// Force connection close otherwise chrome will keep CONNECT tunnel open forever
-					resp.Header.Set("Connection", "close")
+					if !isWebsocket {
+						resp.Header.Set("Connection", "close")
+					}
 					if err := resp.Header.Write(rawClientTls); err != nil {
 						ctx.Warnf("Cannot write TLS response header from mitm'd client: %v", err)
 						return false
 					}
 					if _, err = io.WriteString(rawClientTls, "\r\n"); err != nil {
 						ctx.Warnf("Cannot write TLS response header end from mitm'd client: %v", err)
+						return false
+					}
+
+					if isWebsocket {
+						ctx.Logf("Response looks like websocket upgrade.")
+
+						// According to resp.Body documentation:
+						// As of Go 1.12, the Body will also implement io.Writer
+						// on a successful "101 Switching Protocols" response,
+						// as used by WebSockets and HTTP/2's "h2c" mode.
+						wsConn, ok := resp.Body.(io.ReadWriter)
+						if !ok {
+							ctx.Warnf("Unable to use Websocket connection")
+							return false
+						}
+						proxy.proxyWebsocket(ctx, wsConn, rawClientTls)
+						// We can't reuse connection after WebSocket handshake,
+						// by returning false here, the underlying connection will be closed
 						return false
 					}
 
