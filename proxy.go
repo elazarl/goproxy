@@ -119,7 +119,14 @@ func RemoveProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 	if r.Header.Get("Connection") == "close" {
 		r.Close = false
 	}
-	r.Header.Del("Connection")
+
+	// We need to keep "Connection: upgrade" header, since it's part of
+	// the WebSocket handshake, and it won't work without it.
+	// For all the other cases (close, keep-alive), we already handle them, by
+	// setting the r.Close variable in the previous lines.
+	if !isWebSocketHandshake(r.Header) {
+		r.Header.Del("Connection")
+	}
 }
 
 type flushWriter struct {
