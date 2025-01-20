@@ -2,6 +2,7 @@ package goproxy
 
 import (
 	"bufio"
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -212,49 +213,62 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			// Take the original value before filtering the request
 			closeConn := req.Close
 
-			// since we're converting the request, need to carry over the
-			// original connecting IP as well
-			req.RemoteAddr = r.RemoteAddr
-			ctx.Logf("req %v", r.Host)
-			ctx.Req = req
+			if requestOk := func(req *http.Request) bool {
+				// Since we handled the request parsing by our own, we manually
+				// need to set a cancellable context when we finished the request
+				// processing (same behaviour of the stdlib)
+				requestContext, finishRequest := context.WithCancel(req.Context())
+				req = req.WithContext(requestContext)
+				defer finishRequest()
 
-			req, resp := proxy.filterRequest(req, ctx)
-			if resp == nil {
-				// Establish a connection with the remote server only if the proxy
-				// doesn't produce a response
-				if targetSiteCon == nil {
-					targetSiteCon, err = proxy.connectDial(ctx, "tcp", host)
-					if err != nil {
-						ctx.Warnf("Error dialing to %s: %s", host, err.Error())
-						return
+				// since we're converting the request, need to carry over the
+				// original connecting IP as well
+				req.RemoteAddr = r.RemoteAddr
+				ctx.Logf("req %v", r.Host)
+				ctx.Req = req
+
+				req, resp := proxy.filterRequest(req, ctx)
+				if resp == nil {
+					// Establish a connection with the remote server only if the proxy
+					// doesn't produce a response
+					if targetSiteCon == nil {
+						targetSiteCon, err = proxy.connectDial(ctx, "tcp", host)
+						if err != nil {
+							ctx.Warnf("Error dialing to %s: %s", host, err.Error())
+							return false
+						}
+						remote = bufio.NewReader(targetSiteCon)
 					}
-					remote = bufio.NewReader(targetSiteCon)
-				}
 
-				if err := req.Write(targetSiteCon); err != nil {
-					httpError(proxyClient, ctx, err)
-					return
+					if err := req.Write(targetSiteCon); err != nil {
+						httpError(proxyClient, ctx, err)
+						return false
+					}
+					resp, err = func() (*http.Response, error) {
+						defer req.Body.Close()
+						return http.ReadResponse(remote, req)
+					}()
+					if err != nil {
+						httpError(proxyClient, ctx, err)
+						return false
+					}
 				}
-				resp, err = func() (*http.Response, error) {
-					defer req.Body.Close()
-					return http.ReadResponse(remote, req)
-				}()
+				resp = proxy.filterResponse(resp, ctx)
+				err = resp.Write(proxyClient)
+				_ = resp.Body.Close()
 				if err != nil {
 					httpError(proxyClient, ctx, err)
-					return
+					return false
 				}
-			}
-			resp = proxy.filterResponse(resp, ctx)
-			err = resp.Write(proxyClient)
-			_ = resp.Body.Close()
-			if err != nil {
-				httpError(proxyClient, ctx, err)
-				return
+
+				return true
+			}(req); !requestOk {
+				break
 			}
 
 			if closeConn {
 				ctx.Logf("Non-persistent connection; closing")
-				return
+				break
 			}
 		}
 	case ConnectMitm:
