@@ -325,10 +325,6 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				// Take the original value before filtering the request
 				closeConn := req.Close
 
-				// Bug fix which goproxy fails to provide request
-				// information URL in the context when does HTTPS MITM
-				ctx.Req = req
-
 				if continueLoop := func(req *http.Request) bool {
 					// Since we handled the request parsing by our own, we manually
 					// need to set a cancellable context when we finished the request
@@ -336,6 +332,10 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					requestContext, finishRequest := context.WithCancel(req.Context())
 					req = req.WithContext(requestContext)
 					defer finishRequest()
+
+					// Bug fix which goproxy fails to provide request
+					// information URL in the context when does HTTPS MITM
+					ctx.Req = req
 
 					req, resp := proxy.filterRequest(req, ctx)
 					if resp == nil {
