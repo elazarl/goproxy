@@ -21,6 +21,8 @@ proxy is `localhost:8080`, which is the default one in our example.
 You also have to [trust](https://github.com/elazarl/goproxy/blob/master/examples/customca/README.md)
 the proxy CA certificate, to avoid any certificate issue in the clients.
 
+> [✈️ Telegram Group](https://telegram.me/goproxygroup)
+
 ## Features
 - Perform certain actions only on `specific hosts`,  with a single equality comparison or with regex evaluation
 - Manipulate `requests` and `responses` before sending them to the browser
