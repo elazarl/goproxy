@@ -1,7 +1,6 @@
 package goproxy
 
 import (
-	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -38,18 +37,20 @@ func (proxy *ProxyHttpServer) hijackConnection(ctx *ProxyCtx, w http.ResponseWri
 	return clientConn, nil
 }
 
-func (proxy *ProxyHttpServer) proxyWebsocket(ctx *ProxyCtx, dest io.ReadWriter, source io.ReadWriter) {
-	errChan := make(chan error, 2)
-	cp := func(dst io.Writer, src io.Reader) {
-		_, err := io.Copy(dst, src)
-		if err != nil && !errors.Is(err, net.ErrClosed) {
-			ctx.Warnf("Websocket error: %v", err)
-		}
-		errChan <- err
-	}
+func (proxy *ProxyHttpServer) proxyWebsocket(ctx *ProxyCtx, remoteConn io.ReadWriter, proxyClient io.ReadWriter) {
+	// 2 is the number of goroutines, this code is implemented according to
+	// https://stackoverflow.com/questions/52031332/wait-for-one-goroutine-to-finish
+	waitChan := make(chan struct{}, 2)
+	go func() {
+		_ = copyOrWarn(ctx, remoteConn, proxyClient)
+		waitChan <- struct{}{}
+	}()
 
-	// Start proxying websocket data
-	go cp(dest, source)
-	go cp(source, dest)
-	<-errChan
+	go func() {
+		_ = copyOrWarn(ctx, proxyClient, remoteConn)
+		waitChan <- struct{}{}
+	}()
+
+	// Wait until one end closes the connection
+	<-waitChan
 }
