@@ -1,7 +1,11 @@
 # GoProxy
 
-[![GoDoc](https://pkg.go.dev/badge/github.com/elazarl/goproxy)](https://pkg.go.dev/github.com/elazarl/goproxy)
 ![Status](https://github.com/elazarl/goproxy/workflows/Go/badge.svg)
+[![GoDoc](https://pkg.go.dev/badge/github.com/elazarl/goproxy)](https://pkg.go.dev/github.com/elazarl/goproxy)
+[![Go Report](https://goreportcard.com/badge/github.com/elazarl/goproxy)](https://goreportcard.com/report/github.com/elazarl/goproxy)
+[![BSD-3 License](https://img.shields.io/badge/License-BSD%203--Clause-orange.svg)](https://opensource.org/licenses/BSD-3-Clause)
+[![Pull Requests](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](https://makeapullrequest.com)
+[![Awesome Go](https://awesome.re/mentioned-badge.svg)](https://github.com/avelino/awesome-go?tab=readme-ov-file#networking)
 
 GoProxy is a library to create a `customized` HTTP/HTTPS `proxy server` using
 Go (aka Golang), with several configurable settings available.
