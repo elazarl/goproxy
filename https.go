@@ -210,9 +210,6 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				return
 			}
 
-			// Take the original value before filtering the request
-			closeConn := req.Close
-
 			if requestOk := func(req *http.Request) bool {
 				// Since we handled the request parsing by our own, we manually
 				// need to set a cancellable context when we finished the request
@@ -266,11 +263,6 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			}(req); !requestOk {
 				break
 			}
-
-			if closeConn {
-				ctx.Logf("Non-persistent connection; closing")
-				break
-			}
 		}
 	case ConnectMitm:
 		_, _ = proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
@@ -322,9 +314,6 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				if !strings.HasPrefix(req.URL.String(), "https://") {
 					req.URL, err = url.Parse("https://" + r.Host + req.URL.String())
 				}
-
-				// Take the original value before filtering the request
-				closeConn := req.Close
 
 				if continueLoop := func(req *http.Request) bool {
 					// Since we handled the request parsing by our own, we manually
@@ -469,11 +458,6 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 
 					return true
 				}(req); !continueLoop {
-					return
-				}
-
-				if closeConn {
-					ctx.Logf("Non-persistent connection; closing")
 					return
 				}
 			}

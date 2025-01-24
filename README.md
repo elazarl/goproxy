@@ -1,7 +1,11 @@
 # GoProxy
 
-[![GoDoc](https://pkg.go.dev/badge/github.com/elazarl/goproxy)](https://pkg.go.dev/github.com/elazarl/goproxy)
 ![Status](https://github.com/elazarl/goproxy/workflows/Go/badge.svg)
+[![GoDoc](https://pkg.go.dev/badge/github.com/elazarl/goproxy)](https://pkg.go.dev/github.com/elazarl/goproxy)
+[![Go Report](https://goreportcard.com/badge/github.com/elazarl/goproxy)](https://goreportcard.com/report/github.com/elazarl/goproxy)
+[![BSD-3 License](https://img.shields.io/badge/License-BSD%203--Clause-orange.svg)](https://opensource.org/licenses/BSD-3-Clause)
+[![Pull Requests](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](https://makeapullrequest.com)
+[![Awesome Go](https://awesome.re/mentioned-badge.svg)](https://github.com/avelino/awesome-go?tab=readme-ov-file#networking)
 
 GoProxy is a library to create a `customized` HTTP/HTTPS `proxy server` using
 Go (aka Golang), with several configurable settings available.
@@ -21,6 +25,8 @@ proxy is `localhost:8080`, which is the default one in our example.
 You also have to [trust](https://github.com/elazarl/goproxy/blob/master/examples/customca/README.md)
 the proxy CA certificate, to avoid any certificate issue in the clients.
 
+> [✈️ Telegram Group](https://telegram.me/goproxygroup)
+
 ## Features
 - Perform certain actions only on `specific hosts`,  with a single equality comparison or with regex evaluation
 - Manipulate `requests` and `responses` before sending them to the browser
@@ -36,9 +42,29 @@ the proxy CA certificate, to avoid any certificate issue in the clients.
 3. HTTPS MITM ("Man in the Middle") proxy server, in which the server generate TLS certificates to parse request/response data and perform actions on them
 4. "Hijacked" proxy connection, where the configured handler can access the raw net.Conn data
 
+## Sponsors
+Does your company use GoProxy? Ask your manager or marketing team
+if your company would be interested in supporting our project.
+Supporting this project will allow the maintainers to dedicate more time
+for maintenance and new features for everyone.
+This will also benefit you, because maintainers will fix problems that will occur
+and keep GoProxy up to date for your projects.
+Moreover, your company logo will be shown on GitHub, in this README section.
+> [Apply Here](https://opencollective.com/goproxy)
+
+[![GoProxy Sponsor](https://opencollective.com/goproxy/tiers/sponsor/0/avatar)](https://opencollective.com/goproxy/tiers/sponsor/0/website)
+[![GoProxy Sponsor](https://opencollective.com/goproxy/tiers/sponsor/1/avatar)](https://opencollective.com/goproxy/tiers/sponsor/1/website)
+[![GoProxy Sponsor](https://opencollective.com/goproxy/tiers/sponsor/2/avatar)](https://opencollective.com/goproxy/tiers/sponsor/2/website)
+[![GoProxy Sponsor](https://opencollective.com/goproxy/tiers/sponsor/3/avatar)](https://opencollective.com/goproxy/tiers/sponsor/3/website)
+
 ## Maintainers
 - [Elazar Leibovich](https://github.com/elazarl): Creator of the project, Software Engineer
 - [Erik Pellizzon](https://github.com/ErikPelli): Maintainer, Freelancer (open to collaborations!)
+
+If you need to integrate GoProxy into your project, or you need some custom
+features to maintain in your fork, you can contact [Erik](mailto:erikpelli@tutamail.com)
+(the current maintainer) by email, and you can discuss together how he
+can help you as a paid independent consultant.
 
 ## Contributions
 If you have any trouble, suggestion, or if you find a bug, feel free to reach
