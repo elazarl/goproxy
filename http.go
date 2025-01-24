@@ -10,7 +10,6 @@ import (
 func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request) {
 	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy}
 
-	var err error
 	ctx.Logf("Got request %v %v %v %v", r.URL.Path, r.Host, r.Method, r.URL.String())
 	if !r.URL.IsAbs() {
 		proxy.NonproxyHandler.ServeHTTP(w, r)
@@ -25,17 +24,14 @@ func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request)
 				proxy.serveWebsocket(ctx, conn, r)
 			}
 		}
-
 		if !proxy.KeepHeader {
 			RemoveProxyHeaders(ctx, r)
 		}
+
+		var err error
 		resp, err = ctx.RoundTrip(r)
 		if err != nil {
 			ctx.Error = err
-			resp = proxy.filterResponse(nil, ctx)
-		}
-		if resp != nil {
-			ctx.Logf("Received response %v", resp.Status)
 		}
 	}
 
