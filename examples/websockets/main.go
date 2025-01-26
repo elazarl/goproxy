@@ -1,9 +1,10 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
+	"github.com/coder/websocket"
 	"github.com/elazarl/goproxy"
-	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
 	"net/url"
@@ -12,26 +13,23 @@ import (
 	"time"
 )
 
-var _upgrader = websocket.Upgrader{
-	HandshakeTimeout: 10 * time.Second,
-}
-
 func echo(w http.ResponseWriter, r *http.Request) {
-	c, err := _upgrader.Upgrade(w, r, nil)
+	c, err := websocket.Accept(w, r, nil)
 	if err != nil {
 		log.Printf("upgrade: %v\n", err)
 		return
 	}
-	defer c.Close()
+	defer c.Close(websocket.StatusNormalClosure, "")
 
+	ctx := context.Background()
 	for {
-		mt, message, err := c.ReadMessage()
+		mt, message, err := c.Read(ctx)
 		if err != nil {
 			log.Printf("read: %v\n", err)
 			break
 		}
 		log.Printf("recv: %s\n", message)
-		if err := c.WriteMessage(mt, message); err != nil {
+		if err := c.Write(ctx, mt, message); err != nil {
 			log.Printf("write: %v\n", err)
 			break
 		}
@@ -74,27 +72,30 @@ func main() {
 		log.Fatal("unable to parse proxy URL")
 	}
 
-	dialer := websocket.Dialer{
-		Subprotocols: []string{"p1"},
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
-		},
-		Proxy: http.ProxyURL(parsedProxy),
-	}
-
+	ctx := context.Background()
 	endpointUrl := "wss://localhost:12345"
-	c, _, err := dialer.Dial(endpointUrl, nil)
+
+	c, _, err := websocket.Dial(ctx, endpointUrl, &websocket.DialOptions{
+		HTTPClient: &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+				Proxy: http.ProxyURL(parsedProxy),
+			},
+		},
+		Subprotocols: []string{"p1"},
+	})
 	if err != nil {
 		log.Fatal("dial:", err)
 	}
-	defer c.Close()
 
 	done := make(chan struct{})
 
 	go func() {
 		defer close(done)
 		for {
-			_, message, err := c.ReadMessage()
+			_, message, err := c.Read(ctx)
 			if err != nil {
 				log.Println("read:", err)
 				return
@@ -110,7 +111,7 @@ func main() {
 		select {
 		case t := <-ticker.C: // Message send
 			// Write current time to the websocket client every 1 second
-			if err := c.WriteMessage(websocket.TextMessage, []byte(t.String())); err != nil {
+			if err := c.Write(ctx, websocket.MessageText, []byte(t.String())); err != nil {
 				log.Println("write:", err)
 				return
 			}
@@ -118,7 +119,7 @@ func main() {
 			log.Println("interrupt")
 			// To cleanly close a connection, a client should send a close
 			// frame and wait for the server to close the connection.
-			err := c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+			err := c.Close(websocket.StatusNormalClosure, "")
 			if err != nil {
 				log.Println("write close:", err)
 				return

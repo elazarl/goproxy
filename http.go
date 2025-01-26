@@ -18,12 +18,6 @@ func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request)
 	r, resp := proxy.filterRequest(r, ctx)
 
 	if resp == nil {
-		if isWebSocketRequest(r) {
-			ctx.Logf("Request looks like websocket upgrade.")
-			if conn, err := proxy.hijackConnection(ctx, w); err == nil {
-				proxy.serveWebsocket(ctx, conn, r)
-			}
-		}
 		if !proxy.KeepHeader {
 			RemoveProxyHeaders(ctx, r)
 		}
@@ -69,6 +63,23 @@ func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request)
 	}
 	copyHeaders(w.Header(), resp.Header, proxy.KeepDestinationHeaders)
 	w.WriteHeader(resp.StatusCode)
+
+	if isWebSocketHandshake(resp.Header) {
+		ctx.Logf("Response looks like websocket upgrade.")
+
+		// We have already written the "101 Switching Protocols" response,
+		// now we hijack the connection to send WebSocket data
+		if clientConn, err := proxy.hijackConnection(ctx, w); err == nil {
+			wsConn, ok := resp.Body.(io.ReadWriter)
+			if !ok {
+				ctx.Warnf("Unable to use Websocket connection")
+				return
+			}
+			proxy.proxyWebsocket(ctx, wsConn, clientConn)
+		}
+		return
+	}
+
 	var copyWriter io.Writer = w
 	// Content-Type header may also contain charset definition, so here we need to check the prefix.
 	// Transfer-Encoding can be a list of comma separated values, so we use Contains() for it.
