@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"github.com/elazarl/goproxy"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -1036,5 +1038,52 @@ func TestResponseContentLength(t *testing.T) {
 		t.Logf("response body Length: %d", len(body))
 		t.Logf("response Content-Length: %d", resp.ContentLength)
 		t.Fatalf("Wrong response Content-Length.")
+	}
+}
+
+func TestMITMRequestCancel(t *testing.T) {
+	// target server
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("hello world"))
+	}))
+	defer srv.Close()
+
+	// proxy server
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	var request *http.Request
+	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		request = req
+		return req, nil
+	})
+	proxySrv := httptest.NewServer(proxy)
+	defer proxySrv.Close()
+
+	// send request
+	client := &http.Client{}
+	client.Transport = &http.Transport{
+		Proxy: func(req *http.Request) (*url.URL, error) {
+			return url.Parse(proxySrv.URL)
+		},
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	require.NoError(t, err)
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+
+	assert.Equal(t, "hello world", string(body))
+	assert.NotNil(t, request)
+
+	select {
+	case _, ok := <-request.Context().Done():
+		assert.False(t, ok)
+	default:
+		assert.Fail(t, "request hasn't been cancelled")
 	}
 }
