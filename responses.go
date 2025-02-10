@@ -2,7 +2,7 @@ package goproxy
 
 import (
 	"bytes"
-	"io/ioutil"
+	"io"
 	"net/http"
 )
 
@@ -24,7 +24,7 @@ func NewResponse(r *http.Request, contentType string, status int, body string) *
 	resp.Status = http.StatusText(status)
 	buf := bytes.NewBufferString(body)
 	resp.ContentLength = int64(buf.Len())
-	resp.Body = ioutil.NopCloser(buf)
+	resp.Body = io.NopCloser(buf)
 	return resp
 }
 
@@ -33,7 +33,7 @@ const (
 	ContentTypeHtml = "text/html"
 )
 
-// Alias for NewResponse(r,ContentTypeText,http.StatusAccepted,text)
+// Alias for NewResponse(r,ContentTypeText,http.StatusAccepted,text).
 func TextResponse(r *http.Request, text string) *http.Response {
 	return NewResponse(r, ContentTypeText, http.StatusAccepted, text)
 }

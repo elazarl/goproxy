@@ -1,0 +1,18 @@
+version: 2
+updates:
+  # GitHub Actions Pipeline
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
+
+  # Go packages
+  - package-ecosystem: "gomod"
+    directories:
+      - /
+      - /ext
+      - /examples
+    schedule:
+      interval: "daily"
+    ignore:
+      - dependency-name: "github.com/elazarl/goproxy"

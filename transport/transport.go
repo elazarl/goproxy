@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -92,13 +91,10 @@ func ProxyFromEnvironment(req *http.Request) (*url.URL, error) {
 	}
 	proxyURL, err := url.Parse(proxy)
 	if err != nil || proxyURL.Scheme == "" {
-		if u, err := url.Parse("http://" + proxy); err == nil {
-			proxyURL = u
-			err = nil
-		}
+		proxyURL, err = url.Parse("http://" + proxy)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("invalid proxy address %q: %v", proxy, err)
+		return nil, fmt.Errorf("invalid proxy address %q: %w", proxy, err)
 	}
 	return proxyURL, nil
 }
@@ -268,11 +264,11 @@ func (t *Transport) putIdleConn(pconn *persistConn) bool {
 		return false
 	}
 	key := pconn.cacheKey
-	max := t.MaxIdleConnsPerHost
-	if max == 0 {
-		max = DefaultMaxIdleConnsPerHost
+	maxIdleConns := t.MaxIdleConnsPerHost
+	if maxIdleConns == 0 {
+		maxIdleConns = DefaultMaxIdleConnsPerHost
 	}
-	if len(t.idleConn[key]) >= max {
+	if len(t.idleConn[key]) >= maxIdleConns {
 		pconn.close()
 		return false
 	}
@@ -339,7 +335,7 @@ func (t *Transport) getConn(cm *connectMethod) (*persistConn, error) {
 	conn, raddr, ip, err := t.dial("tcp", cm.addr())
 	if err != nil {
 		if cm.proxyURL != nil {
-			err = fmt.Errorf("http: error connecting to proxy %s: %v", cm.proxyURL, err)
+			err = fmt.Errorf("http: error connecting to proxy %s: %w", cm.proxyURL, err)
 		}
 		return nil, err
 	}
@@ -367,7 +363,7 @@ func (t *Transport) getConn(cm *connectMethod) (*persistConn, error) {
 		}
 	case cm.targetScheme == "https":
 		connectReq := &http.Request{
-			Method: "CONNECT",
+			Method: http.MethodConnect,
 			URL:    &url.URL{Opaque: cm.targetAddr},
 			Host:   cm.targetAddr,
 			Header: make(http.Header),
@@ -375,7 +371,7 @@ func (t *Transport) getConn(cm *connectMethod) (*persistConn, error) {
 		if pa != "" {
 			connectReq.Header.Set("Proxy-Authorization", pa)
 		}
-		connectReq.Write(conn)
+		_ = connectReq.Write(conn)
 
 		// Read response.
 		// Okay to use and discard buffered reader here, because
@@ -386,7 +382,7 @@ func (t *Transport) getConn(cm *connectMethod) (*persistConn, error) {
 			conn.Close()
 			return nil, err
 		}
-		if resp.StatusCode != 200 {
+		if resp.StatusCode != http.StatusOK {
 			f := strings.SplitN(resp.Status, " ", 2)
 			conn.Close()
 			return nil, errors.New(f[1])
@@ -396,11 +392,15 @@ func (t *Transport) getConn(cm *connectMethod) (*persistConn, error) {
 	if cm.targetScheme == "https" {
 		// Initiate TLS and check remote host name against certificate.
 		conn = tls.Client(conn, t.TLSClientConfig)
-		if err = conn.(*tls.Conn).Handshake(); err != nil {
+		tlsConn, ok := conn.(*tls.Conn)
+		if !ok {
+			return nil, errors.New("invalid TLS connection")
+		}
+		if err = tlsConn.Handshake(); err != nil {
 			return nil, err
 		}
 		if t.TLSClientConfig == nil || !t.TLSClientConfig.InsecureSkipVerify {
-			if err = conn.(*tls.Conn).VerifyHostname(cm.tlsHost()); err != nil {
+			if err = tlsConn.VerifyHostname(cm.tlsHost()); err != nil {
 				return nil, err
 			}
 		}
@@ -471,7 +471,6 @@ func useProxy(addr string) bool {
 // http://proxy.com|http           http to proxy, http to anywhere after that
 //
 // Note: no support to https to the proxy yet.
-//
 type connectMethod struct {
 	proxyURL     *url.URL // nil for no proxy, else full proxy URL
 	targetScheme string   // "http" or "https"
@@ -505,7 +504,7 @@ func (cm *connectMethod) tlsHost() string {
 }
 
 // persistConn wraps a connection, usually a persistent one
-// (but may be used for non-keep-alive requests as well)
+// (but may be used for non-keep-alive requests as well).
 type persistConn struct {
 	t        *Transport
 	cacheKey string // its connectMethod.String()
@@ -532,18 +531,6 @@ func (pc *persistConn) isBroken() bool {
 	pc.lk.Lock()
 	defer pc.lk.Unlock()
 	return pc.broken
-}
-
-var remoteSideClosedFunc func(error) bool // or nil to use default
-
-func remoteSideClosed(err error) bool {
-	if err == io.EOF {
-		return true
-	}
-	if remoteSideClosedFunc != nil {
-		return remoteSideClosedFunc(err)
-	}
-	return false
 }
 
 func (pc *persistConn) readLoop() {
@@ -578,7 +565,7 @@ func (pc *persistConn) readLoop() {
 		if err != nil {
 			pc.close()
 		} else {
-			hasBody := rc.req.Method != "HEAD" && resp.ContentLength != 0
+			hasBody := rc.req.Method != http.MethodHead && resp.ContentLength != 0
 			if rc.addedGzip && hasBody && resp.Header.Get("Content-Encoding") == "gzip" {
 				resp.Header.Del("Content-Encoding")
 				resp.Header.Del("Content-Length")
@@ -602,9 +589,13 @@ func (pc *persistConn) readLoop() {
 		var waitForBodyRead chan bool
 		if alive {
 			if hasBody {
+				bodyEof, ok := resp.Body.(*bodyEOFSignal)
+				if !ok {
+					alive = false
+				}
 				lastbody = resp.Body
 				waitForBodyRead = make(chan bool)
-				resp.Body.(*bodyEOFSignal).fn = func() {
+				bodyEof.fn = func() {
 					if !pc.t.putIdleConn(pc) {
 						alive = false
 					}
@@ -681,7 +672,7 @@ func (pc *persistConn) roundTrip(req *transportRequest) (resp *http.Response, er
 	}
 	if err != nil {
 		pc.close()
-		return
+		return nil, err
 	}
 	pc.bw.Flush()
 
@@ -712,18 +703,13 @@ var portMap = map[string]string{
 	"https": "443",
 }
 
-// canonicalAddr returns url.Host but always with a ":port" suffix
+// canonicalAddr returns url.Host but always with a ":port" suffix.
 func canonicalAddr(url *url.URL) string {
 	addr := url.Host
 	if !hasPort(addr) {
 		return addr + ":" + portMap[url.Scheme]
 	}
 	return addr
-}
-
-func responseIsKeepAlive(res *http.Response) bool {
-	// TODO: implement.  for now just always shutting down the connection.
-	return false
 }
 
 // bodyEOFSignal wraps a ReadCloser but runs fn (if non-nil) at most
@@ -740,7 +726,7 @@ func (es *bodyEOFSignal) Read(p []byte) (n int, err error) {
 	if es.isClosed && n > 0 {
 		panic("http: unexpected bodyEOFSignal Read after Close; see issue 1725")
 	}
-	if err == io.EOF && es.fn != nil {
+	if errors.Is(err, io.EOF) && es.fn != nil {
 		es.fn()
 		es.fn = nil
 	}
@@ -782,6 +768,6 @@ type discardOnCloseReadCloser struct {
 }
 
 func (d *discardOnCloseReadCloser) Close() error {
-	io.Copy(ioutil.Discard, d.ReadCloser) // ignore errors; likely invalid or already closed
+	_, _ = io.Copy(io.Discard, d.ReadCloser) // ignore errors; likely invalid or already closed
 	return d.ReadCloser.Close()
 }

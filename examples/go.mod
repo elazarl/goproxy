@@ -1,8 +1,17 @@
 module github.com/elazarl/goproxy/examples/goproxy-transparent
 
+go 1.20
+
 require (
-	github.com/elazarl/goproxy v0.0.0-20181111060418-2ce16c963a8a
-	github.com/inconshreveable/go-vhost v0.0.0-20160627193104-06d84117953b
+	github.com/coder/websocket v1.8.12
+	github.com/elazarl/goproxy v1.5.0
+	github.com/elazarl/goproxy/ext v0.0.0-20250117123040-e9229c451ab8
+	github.com/inconshreveable/go-vhost v1.0.0
+)
+
+require (
+	golang.org/x/net v0.34.0 // indirect
+	golang.org/x/text v0.21.0 // indirect
 )
 
 replace github.com/elazarl/goproxy => ../

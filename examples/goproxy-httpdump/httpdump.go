@@ -56,7 +56,7 @@ type Meta struct {
 	from     string
 }
 
-func fprintf(nr *int64, err *error, w io.Writer, pat string, a ...interface{}) {
+func fprintf(nr *int64, err *error, w io.Writer, pat string, a ...any) {
 	if *err != nil {
 		return
 	}

@@ -1,70 +1,44 @@
 package main
 
 import (
+	"crypto/subtle"
 	"encoding/base64"
-	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
-	"github.com/elazarl/goproxy/ext/auth"
-
 	"github.com/elazarl/goproxy"
+	"github.com/elazarl/goproxy/ext/auth"
 )
 
-const (
-	ProxyAuthHeader = "Proxy-Authorization"
-)
+const _proxyAuthHeader = "Proxy-Authorization"
 
 func SetBasicAuth(username, password string, req *http.Request) {
-	req.Header.Set(ProxyAuthHeader, fmt.Sprintf("Basic %s", basicAuth(username, password)))
-}
-
-func basicAuth(username, password string) string {
-	return base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
-}
-
-func GetBasicAuth(req *http.Request) (username, password string, ok bool) {
-	auth := req.Header.Get(ProxyAuthHeader)
-	if auth == "" {
-		return
-	}
-
-	const prefix = "Basic "
-	if !strings.HasPrefix(auth, prefix) {
-		return
-	}
-	c, err := base64.StdEncoding.DecodeString(auth[len(prefix):])
-	if err != nil {
-		return
-	}
-	cs := string(c)
-	s := strings.IndexByte(cs, ':')
-	if s < 0 {
-		return
-	}
-	return cs[:s], cs[s+1:], true
+	req.Header.Set(_proxyAuthHeader, "Basic "+base64.StdEncoding.EncodeToString([]byte(username+":"+password)))
 }
 
 func main() {
 	username, password := "foo", "bar"
 
-	// start end proxy server
+	// Start end proxy server
 	endProxy := goproxy.NewProxyHttpServer()
 	endProxy.Verbose = true
 	auth.ProxyBasic(endProxy, "my_realm", func(user, pwd string) bool {
-		return user == username && password == pwd
+		return subtle.ConstantTimeCompare([]byte(user), []byte(username)) == 1 &&
+			subtle.ConstantTimeCompare([]byte(pwd), []byte(password)) == 1
 	})
 	log.Println("serving end proxy server at localhost:8082")
 	go http.ListenAndServe("localhost:8082", endProxy)
 
-	// start middle proxy server
+	// Start middle proxy server
 	middleProxy := goproxy.NewProxyHttpServer()
 	middleProxy.Verbose = true
 	middleProxy.Tr.Proxy = func(req *http.Request) (*url.URL, error) {
+		// Here we specify the proxy URL of the other server.
+		// If it was a socks5 proxy, we would have used an url like
+		// socks5://localhost:8082
 		return url.Parse("http://localhost:8082")
 	}
 	connectReqHandler := func(req *http.Request) error {
@@ -72,6 +46,7 @@ func main() {
 		return nil
 	}
 	middleProxy.ConnectDial = middleProxy.NewConnectDialToProxyWithHandler("http://localhost:8082", connectReqHandler)
+
 	middleProxy.OnRequest().Do(goproxy.FuncReqHandler(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		SetBasicAuth(username, password, req)
 		return req, nil
@@ -81,25 +56,29 @@ func main() {
 
 	time.Sleep(1 * time.Second)
 
-	// fire a http request: client --> middle proxy --> end proxy --> internet
-	proxyUrl := "http://localhost:8081"
-	request, err := http.NewRequest("GET", "https://ip.cn", nil)
+	// Make a single HTTP request, from client to internet, through the 2 proxies
+	middleProxyUrl := "http://localhost:8081"
+	request, err := http.NewRequest(http.MethodGet, "https://ip.cn", nil)
 	if err != nil {
 		log.Fatalf("new request failed:%v", err)
 	}
-	tr := &http.Transport{Proxy: func(req *http.Request) (*url.URL, error) { return url.Parse(proxyUrl) }}
-	client := &http.Client{Transport: tr}
-	rsp, err := client.Do(request)
+	client := &http.Client{
+		Transport: &http.Transport{
+			Proxy: func(req *http.Request) (*url.URL, error) {
+				return url.Parse(middleProxyUrl)
+			},
+		},
+	}
+	resp, err := client.Do(request)
 	if err != nil {
-		log.Fatalf("get rsp failed:%v", err)
-
+		log.Fatalf("get resp failed: %v", err)
 	}
-	defer rsp.Body.Close()
-	data, _ := ioutil.ReadAll(rsp.Body)
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(resp.Body)
 
-	if rsp.StatusCode != http.StatusOK {
-		log.Fatalf("status %d, data %s", rsp.StatusCode, data)
+	if resp.StatusCode != http.StatusOK {
+		log.Fatalf("status %d, data %s", resp.StatusCode, data)
 	}
 
-	log.Printf("rsp:%s", data)
+	log.Printf("resp: %s", data)
 }
