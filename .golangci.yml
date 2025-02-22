@@ -69,7 +69,6 @@ linters:
     - usestdlibvars
     - wastedassign
     - whitespace
-    - exportloopref
 
   disable:
     - bodyclose
