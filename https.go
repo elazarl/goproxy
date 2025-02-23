@@ -146,7 +146,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		if todo.Hijack != nil {
 			todo.Hijack(r, proxyClient, ctx)
 		} else {
-  		_, _ = proxyClient.Write([]byte("HTTP/1.0 200 Connection established\r\n\r\n"))
+			_, _ = proxyClient.Write([]byte("HTTP/1.0 200 Connection established\r\n\r\n"))
 		}
 
 		targetTCP, targetOK := targetSiteCon.(halfClosable)
@@ -201,7 +201,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		if todo.Hijack != nil {
 			todo.Hijack(r, proxyClient, ctx)
 		} else {
-  		_, _ = proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+			_, _ = proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 		}
 		ctx.Logf("Assuming CONNECT is plain HTTP tunneling, mitm proxying it")
 
@@ -276,7 +276,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		if todo.Hijack != nil {
 			todo.Hijack(r, proxyClient, ctx)
 		} else {
-  		_, _ = proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+			_, _ = proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 		}
 		ctx.Logf("Assuming CONNECT is TLS, mitm proxying it")
 		// this goes in a separate goroutine, so that the net/http server won't think we're
@@ -545,18 +545,18 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxy(httpsProxy string) func(netw
 }
 
 func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(
-  https_proxy string,
+  httpsProxy string,
   connectReqHandler func(req *http.Request) error,
 ) func(network, addr string) (net.Conn, error) {
-	return proxy.NewConnectDialToProxyWithMoreHandlers(https_proxy, nil, nil)
+	return proxy.NewConnectDialToProxyWithMoreHandlers(httpsProxy, connectReqHandler, nil)
 }
 
 func (proxy *ProxyHttpServer) NewConnectDialToProxyWithMoreHandlers(
-  https_proxy string,
+  httpsProxy string,
   connectReqHandler func(req *http.Request) error,
   connectRespHandler func(req *http.Response) error,
 ) func(network, addr string) (net.Conn, error) {
-	u, err := url.Parse(https_proxy)
+	u, err := url.Parse(httpsProxy)
 	if err != nil {
 		return nil
 	}
