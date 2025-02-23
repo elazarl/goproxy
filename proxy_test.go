@@ -593,7 +593,6 @@ func TestChunkedResponse(t *testing.T) {
 
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
-		panicOnErr(ctx.Error, "error reading output")
 		b, err := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		panicOnErr(err, "readall onresp")

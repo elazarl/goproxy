@@ -103,7 +103,7 @@ type halfClosable interface {
 var _ halfClosable = (*net.TCPConn)(nil)
 
 func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request) {
-	ctx := &ProxyCtx{Req: r, Session: proxy.sess.Add(1), Proxy: proxy, certStore: proxy.CertStore}
+	ctx := &ProxyCtx{Req: r, Session: proxy.sess.Add(1), Proxy: proxy}
 
 	hij, ok := w.(http.Hijacker)
 	if !ok {
@@ -680,8 +680,8 @@ func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls
 		genCert := func() (*tls.Certificate, error) {
 			return signer.SignHost(*ca, []string{hostname})
 		}
-		if ctx.certStore != nil {
-			cert, err = ctx.certStore.Fetch(hostname, genCert)
+		if ctx.Proxy.CertStore != nil {
+			cert, err = ctx.Proxy.CertStore.Fetch(hostname, genCert)
 		} else {
 			cert, err = genCert()
 		}
