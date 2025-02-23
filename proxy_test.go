@@ -513,7 +513,7 @@ func TestAcceptEncoding(t *testing.T) {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			proxy := goproxy.NewProxyHttpServer()
 			proxy.KeepAcceptEncoding = tc.keepAcceptEncoding
-			proxy.Tr.DisableCompression = tc.disableCompression
+			proxy.Transport.DisableCompression = tc.disableCompression
 			client, l := oneShotProxy(proxy)
 			defer l.Close()
 			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, s.URL, nil)

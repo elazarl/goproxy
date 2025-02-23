@@ -14,7 +14,7 @@ func main() {
 	addr := flag.String("addr", ":8080", "proxy listen address")
 	flag.Parse()
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.Tr.DialContext = func(ctx context.Context, network, addr string) (c net.Conn, err error) {
+	proxy.Transport.DialContext = func(ctx context.Context, network, addr string) (c net.Conn, err error) {
 		var d net.Dialer
 		c, err = d.DialContext(ctx, network, addr)
 		if c, ok := c.(*net.TCPConn); err == nil && ok {

@@ -34,7 +34,7 @@ func main() {
 		log.Printf("Server starting up! - configured to listen on http interface %s and https interface %s", *http_addr, *https_addr)
 	}
 
-	proxy.NonproxyHandler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+	proxy.NonProxyHandler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if req.Host == "" {
 			fmt.Fprintln(w, "Cannot handle requests without Host header, e.g., HTTP 1.0")
 			return
@@ -113,8 +113,8 @@ func main() {
 
 // copied/converted from https.go
 func dial(ctx context.Context, proxy *goproxy.ProxyHttpServer, network, addr string) (c net.Conn, err error) {
-	if proxy.Tr.DialContext != nil {
-		return proxy.Tr.DialContext(ctx, network, addr)
+	if proxy.Transport.DialContext != nil {
+		return proxy.Transport.DialContext(ctx, network, addr)
 	}
 	var d net.Dialer
 	return d.DialContext(ctx, network, addr)
@@ -125,7 +125,7 @@ func connectDial(ctx context.Context, proxy *goproxy.ProxyHttpServer, network, a
 	if proxy.ConnectDial == nil {
 		return dial(ctx, proxy, network, addr)
 	}
-	return proxy.ConnectDial(network, addr)
+	return proxy.ConnectDial(ctx, network, addr)
 }
 
 type dumbResponseWriter struct {

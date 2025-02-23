@@ -48,7 +48,7 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 	if ctx.RoundTripper != nil {
 		return ctx.RoundTripper.RoundTrip(req, ctx)
 	}
-	return ctx.Proxy.Tr.RoundTrip(req)
+	return ctx.Proxy.Transport.RoundTrip(req)
 }
 
 func (ctx *ProxyCtx) printf(msg string, argv ...any) {

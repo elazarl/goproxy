@@ -4,21 +4,20 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"sync/atomic"
 )
 
 func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request) {
-	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy}
+	ctx := &ProxyCtx{Req: r, Session: proxy.sess.Add(1), Proxy: proxy}
 
 	ctx.Logf("Got request %v %v %v %v", r.URL.Path, r.Host, r.Method, r.URL.String())
 	if !r.URL.IsAbs() {
-		proxy.NonproxyHandler.ServeHTTP(w, r)
+		proxy.NonProxyHandler.ServeHTTP(w, r)
 		return
 	}
 	r, resp := proxy.filterRequest(r, ctx)
 
 	if resp == nil {
-		if !proxy.KeepHeader {
+		if !proxy.KeepProxyHeaders {
 			RemoveProxyHeaders(ctx, r)
 		}
 
