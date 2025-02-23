@@ -32,11 +32,10 @@ type ProxyHttpServer struct {
 	ConnectionErrHandler func(conn io.Writer, ctx *ProxyCtx, err error)
 	// ConnectDial will be used to create TCP connections for CONNECT requests
 	// if nil Tr.Dial will be used
-	ConnectDial        func(network string, addr string) (net.Conn, error)
-	ConnectDialWithReq func(req *http.Request, network string, addr string) (net.Conn, error)
-	CertStore          CertStorage
-	KeepHeader         bool
-	AllowHTTP2         bool
+	ConnectDial func(network string, addr string) (net.Conn, error)
+	CertStore   CertStorage
+	KeepHeader  bool
+	AllowHTTP2  bool
 	// When PreventCanonicalization is true, the header names present in
 	// the request sent through the proxy are directly passed to the destination server,
 	// instead of following the HTTP RFC for their canonicalization.

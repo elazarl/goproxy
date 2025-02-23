@@ -87,12 +87,8 @@ func (proxy *ProxyHttpServer) dial(ctx *ProxyCtx, network, addr string) (c net.C
 }
 
 func (proxy *ProxyHttpServer) connectDial(ctx *ProxyCtx, network, addr string) (c net.Conn, err error) {
-	if proxy.ConnectDialWithReq == nil && proxy.ConnectDial == nil {
+	if proxy.ConnectDial == nil {
 		return proxy.dial(ctx, network, addr)
-	}
-
-	if proxy.ConnectDialWithReq != nil {
-		return proxy.ConnectDialWithReq(ctx.Req, network, addr)
 	}
 
 	return proxy.ConnectDial(network, addr)
