@@ -9,7 +9,6 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"fmt"
 	"math/big"
 	"math/rand"
@@ -53,11 +52,9 @@ func SignHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err er
 	template := x509.Certificate{
 		SerialNumber: big.NewInt(int64(generated)),
 		Issuer:       x509ca.Subject,
-		Subject: pkix.Name{
-			Organization: []string{"GoProxy untrusted MITM proxy Inc"},
-		},
-		NotBefore: start,
-		NotAfter:  end,
+		Subject:      x509ca.Subject,
+		NotBefore:    start,
+		NotAfter:     end,
 
 		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
