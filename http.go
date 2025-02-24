@@ -8,18 +8,18 @@ import (
 )
 
 func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request) {
-	ctx := &ProxyCtx{Req: r, Session: proxy.sess.Add(1), Proxy: proxy}
+	ctx := &ProxyCtx{Req: r, Session: proxy.sess.Add(1), Proxy: proxy, Options: proxy.opt}
 
-	ctx.Logf("Got request %v %v %v %v", r.URL.Path, r.Host, r.Method, r.URL.String())
+	ctx.Options.Infof(ctx, "Got request %s %s %s %s", r.URL.Path, r.Host, r.Method, r.URL.String())
 	if !r.URL.IsAbs() {
-		proxy.NonProxyHandler.ServeHTTP(w, r)
+		proxy.opt.NonProxyHandler.ServeHTTP(w, r)
 		return
 	}
 	r, resp := proxy.filterRequest(r, ctx)
 
 	var responseError error
 	if resp == nil {
-		if !proxy.KeepProxyHeaders {
+		if !proxy.opt.KeepProxyHeaders {
 			RemoveProxyHeaders(ctx, r)
 		}
 
@@ -39,19 +39,19 @@ func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request)
 		if responseError == nil {
 			responseError = errors.New("error read response " + r.URL.Host)
 		}
-		ctx.Logf(responseError.Error())
+		ctx.Options.Infof(ctx, responseError.Error())
 
-		if ctx.Proxy.ConnectionErrHandler != nil {
-			resp := ctx.Proxy.ConnectionErrHandler(ctx, responseError)
+		if ctx.Proxy.opt.ErrorHandler != nil {
+			resp := ctx.Proxy.opt.ErrorHandler(ctx, responseError)
 			if err := resp.Write(w); err != nil {
-				ctx.Warnf("Error responding to client: %s", err)
+				ctx.Options.Warnf(ctx, "Error responding to client: %s", err)
 			}
 		} else {
 			http.Error(w, responseError.Error(), http.StatusInternalServerError)
 		}
 		return
 	}
-	ctx.Logf("Copying response to client %v [%d]", resp.Status, resp.StatusCode)
+	ctx.Options.Infof(ctx, "Copying response to client %v [%d]", resp.Status, resp.StatusCode)
 	// http.ResponseWriter will take care of filling the correct response length
 	// Setting it now, might impose wrong value, contradicting the actual new
 	// body the user returned.
@@ -61,18 +61,18 @@ func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request)
 	if origBody != resp.Body {
 		resp.Header.Del("Content-Length")
 	}
-	copyHeaders(w.Header(), resp.Header, proxy.KeepDestinationHeaders)
+	copyHeaders(w.Header(), resp.Header, proxy.opt.KeepDestinationHeaders)
 	w.WriteHeader(resp.StatusCode)
 
 	if isWebSocketHandshake(resp.Header) {
-		ctx.Logf("Response looks like websocket upgrade.")
+		ctx.Options.Infof(ctx, "Response looks like websocket upgrade.")
 
 		// We have already written the "101 Switching Protocols" response,
 		// now we hijack the connection to send WebSocket data
 		if clientConn, err := proxy.hijackConnection(ctx, w); err == nil {
 			wsConn, ok := resp.Body.(io.ReadWriter)
 			if !ok {
-				ctx.Warnf("Unable to use Websocket connection")
+				ctx.Options.Warnf(ctx, "Unable to use Websocket connection")
 				return
 			}
 			proxy.proxyWebsocket(ctx, wsConn, clientConn)
@@ -91,7 +91,7 @@ func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request)
 
 	nr, err := io.Copy(copyWriter, resp.Body)
 	if err := resp.Body.Close(); err != nil {
-		ctx.Warnf("Can't close response body %v", err)
+		ctx.Options.Warnf(ctx, "Can't close response body %v", err)
 	}
-	ctx.Logf("Copied %v bytes to client error=%v", nr, err)
+	ctx.Options.Infof(ctx, "Copied %d bytes to client error=%v", nr, err)
 }

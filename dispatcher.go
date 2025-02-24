@@ -371,7 +371,7 @@ func HandleBytes(f func(b []byte, ctx *ProxyCtx) []byte) RespHandler {
 	return FuncRespHandler(func(resp *http.Response, ctx *ProxyCtx) *http.Response {
 		b, err := io.ReadAll(resp.Body)
 		if err != nil {
-			ctx.Warnf("Cannot read response %s", err)
+			ctx.Options.Warnf(ctx, "Cannot read response %v", err)
 			return resp
 		}
 		resp.Body.Close()

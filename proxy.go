@@ -1,60 +1,27 @@
 package goproxy
 
 import (
-	"context"
+	"crypto/tls"
 	"io"
-	"log"
-	"net"
 	"net/http"
-	"os"
-	"regexp"
 	"sync/atomic"
 )
 
-// The basic proxy type. Implements http.Handler.
-type ProxyHttpServer struct {
-	sess atomic.Int64
-	// setting Verbose to true will log information on each request sent to the proxy
-	Verbose         bool
-	Logger          Logger
-	NonProxyHandler http.Handler
-	reqHandlers     []ReqHandler
-	respHandlers    []RespHandler
-	httpsHandlers   []HttpsHandler
-	Transport       *http.Transport
-	// ConnectionErrHandler will be invoked to return a custom response
-	// to clients, when an error occurs inside goproxy request handling
-	// (e.g. failure to connect to the remote server).
-	ConnectionErrHandler func(ctx *ProxyCtx, err error) *http.Response
-	// ConnectDial will be used to create TCP connections for CONNECT requests
-	// If it's not specified, we rely on ctx.Dialer or Transport.DialContext.
-	ConnectDial func(ctx context.Context, network string, addr string) (net.Conn, error)
-	CertStore   CertStorage
-	// TODO: Remove AllowHTTP2 and always allow it, when we have a proper logic to parse HTTP2 requests, always allowing it
-	AllowHTTP2 bool
-	// When PreventCanonicalization is true, the header names present in
-	// the request sent through the proxy are directly passed to the destination server,
-	// instead of following the HTTP RFC for their canonicalization.
-	// This is useful when the header name isn't treated as a case-insensitive
-	// value by the target server, because they don't follow the specs.
-	PreventCanonicalization bool
-	// KeepAcceptEncoding, if true, prevents the proxy from dropping
-	// Accept-Encoding headers from the client.
-	//
-	// Note that the outbound http.Transport may still choose to add
-	// Accept-Encoding: gzip if the client did not explicitly send an
-	// Accept-Encoding header. To disable this behavior, set
-	// Transport.DisableCompression to true.
-	KeepAcceptEncoding bool
-	// KeepProxyHeaders indicates when the proxy should forward also the proxy specific headers (e.g. Proxy-Authorization)
-	// to the destination server. Usually, this should be false.
-	KeepProxyHeaders bool
-	// KeepDestinationHeaders indicates when the proxy should retain any headers present in the http.Response
-	// before proxying
-	KeepDestinationHeaders bool
+type CertStorage interface {
+	Fetch(hostname string, gen func() (*tls.Certificate, error)) (*tls.Certificate, error)
 }
 
-var hasPort = regexp.MustCompile(`:\d+$`)
+// ProxyHttpServer is the proxy server implementation that implements http.Handler.
+// You can directly add it to your net/http request router and use it as a normal HTTP handler.
+type ProxyHttpServer struct {
+	sess          atomic.Int64
+	reqHandlers   []ReqHandler
+	respHandlers  []RespHandler
+	httpsHandlers []HttpsHandler
+	opt           Options
+}
+
+var _ http.Handler = (*ProxyHttpServer)(nil)
 
 func copyHeaders(dst, src http.Header, keepDestHeaders bool) {
 	if !keepDestHeaders {
@@ -93,8 +60,8 @@ func (proxy *ProxyHttpServer) filterResponse(respOrig *http.Response, ctx *Proxy
 // RemoveProxyHeaders removes all proxy headers which should not propagate to the next hop.
 func RemoveProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 	r.RequestURI = "" // this must be reset when serving a request with the client
-	ctx.Logf("Sending request %v %v", r.Method, r.URL.String())
-	if !ctx.Proxy.KeepAcceptEncoding {
+	ctx.Options.Infof(ctx, "Sending request %v %v", r.Method, r.URL.String())
+	if !ctx.Proxy.opt.KeepAcceptEncoding {
 		// If no Accept-Encoding header exists, Transport will add the headers it can accept
 		// and would wrap the response body with the relevant reader.
 		r.Header.Del("Accept-Encoding")
@@ -144,14 +111,9 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 }
 
 // NewProxyHttpServer creates and returns a proxy server, logging to stderr by default.
-func NewProxyHttpServer() *ProxyHttpServer {
+func NewProxyHttpServer(opt Options) *ProxyHttpServer {
 	proxy := ProxyHttpServer{
-		Logger: log.New(os.Stderr, "", log.LstdFlags),
-		NonProxyHandler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			http.Error(w, "This is a proxy server. Does not respond to non-proxy requests.", http.StatusInternalServerError)
-		}),
-		Transport: &http.Transport{TLSClientConfig: tlsClientSkipVerify, Proxy: http.ProxyFromEnvironment},
+		opt: opt,
 	}
-	proxy.ConnectDial = dialerFromEnv(&proxy)
 	return &proxy
 }

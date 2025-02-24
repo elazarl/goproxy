@@ -31,7 +31,7 @@ func (proxy *ProxyHttpServer) hijackConnection(ctx *ProxyCtx, w http.ResponseWri
 	}
 	clientConn, _, err := hj.Hijack()
 	if err != nil {
-		ctx.Warnf("Hijack error: %v", err)
+		ctx.Options.Warnf(ctx, "Hijack error: %v", err)
 		return nil, err
 	}
 	return clientConn, nil
