@@ -143,7 +143,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			return
 		}
 		ctx.Logf("Accepting CONNECT to %s", host)
-		_, _ = proxyClient.Write([]byte("HTTP/1.0 200 Connection established\r\n\r\n"))
+		if todo.Hijack != nil {
+			todo.Hijack(r, proxyClient, ctx)
+		} else {
+			_, _ = proxyClient.Write([]byte("HTTP/1.0 200 Connection established\r\n\r\n"))
+		}
 
 		targetTCP, targetOK := targetSiteCon.(halfClosable)
 		proxyClientTCP, clientOK := proxyClient.(halfClosable)
@@ -194,7 +198,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 	case ConnectHijack:
 		todo.Hijack(r, proxyClient, ctx)
 	case ConnectHTTPMitm:
-		_, _ = proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+		if todo.Hijack != nil {
+			todo.Hijack(r, proxyClient, ctx)
+		} else {
+			_, _ = proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+		}
 		ctx.Logf("Assuming CONNECT is plain HTTP tunneling, mitm proxying it")
 
 		var targetSiteCon net.Conn
@@ -265,7 +273,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			}
 		}
 	case ConnectMitm:
-		_, _ = proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+		if todo.Hijack != nil {
+			todo.Hijack(r, proxyClient, ctx)
+		} else {
+			_, _ = proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+		}
 		ctx.Logf("Assuming CONNECT is TLS, mitm proxying it")
 		// this goes in a separate goroutine, so that the net/http server won't think we're
 		// still handling the request even after hijacking the connection. Those HTTP CONNECT
@@ -534,7 +546,15 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxy(httpsProxy string) func(netw
 
 func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(
 	httpsProxy string,
-	connectReqHandler func(req *http.Request),
+	connectReqHandler func(req *http.Request) error,
+) func(network, addr string) (net.Conn, error) {
+	return proxy.NewConnectDialToProxyWithMoreHandlers(httpsProxy, connectReqHandler, nil)
+}
+
+func (proxy *ProxyHttpServer) NewConnectDialToProxyWithMoreHandlers(
+	httpsProxy string,
+	connectReqHandler func(req *http.Request) error,
+	connectRespHandler func(req *http.Response) error,
 ) func(network, addr string) (net.Conn, error) {
 	u, err := url.Parse(httpsProxy)
 	if err != nil {
@@ -552,7 +572,9 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(
 				Header: make(http.Header),
 			}
 			if connectReqHandler != nil {
-				connectReqHandler(connectReq)
+				if err := connectReqHandler(connectReq); err != nil {
+					return nil, err
+				}
 			}
 			c, err := proxy.dial(&ProxyCtx{Req: &http.Request{}}, network, u.Host)
 			if err != nil {
@@ -569,7 +591,12 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(
 				return nil, err
 			}
 			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusOK {
+			if connectRespHandler != nil {
+				if err := connectRespHandler(resp); err != nil {
+					c.Close()
+					return nil, err
+				}
+			} else if resp.StatusCode != http.StatusOK {
 				resp, err := io.ReadAll(io.LimitReader(resp.Body, _errorRespMaxLength))
 				if err != nil {
 					return nil, err
@@ -603,7 +630,9 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(
 				Header: make(http.Header),
 			}
 			if connectReqHandler != nil {
-				connectReqHandler(connectReq)
+				if err := connectReqHandler(connectReq); err != nil {
+					return nil, err
+				}
 			}
 			_ = connectReq.Write(c)
 			// Read response.
@@ -616,7 +645,12 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(
 				return nil, err
 			}
 			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusOK {
+			if connectRespHandler != nil {
+				if err := connectRespHandler(resp); err != nil {
+					c.Close()
+					return nil, err
+				}
+			} else if resp.StatusCode != http.StatusOK {
 				body, err := io.ReadAll(io.LimitReader(resp.Body, _errorRespMaxLength))
 				if err != nil {
 					return nil, err
