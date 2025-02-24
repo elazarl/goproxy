@@ -545,16 +545,16 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxy(httpsProxy string) func(netw
 }
 
 func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(
-  httpsProxy string,
-  connectReqHandler func(req *http.Request) error,
+	httpsProxy string,
+	connectReqHandler func(req *http.Request) error,
 ) func(network, addr string) (net.Conn, error) {
 	return proxy.NewConnectDialToProxyWithMoreHandlers(httpsProxy, connectReqHandler, nil)
 }
 
 func (proxy *ProxyHttpServer) NewConnectDialToProxyWithMoreHandlers(
-  httpsProxy string,
-  connectReqHandler func(req *http.Request) error,
-  connectRespHandler func(req *http.Response) error,
+	httpsProxy string,
+	connectReqHandler func(req *http.Request) error,
+	connectRespHandler func(req *http.Response) error,
 ) func(network, addr string) (net.Conn, error) {
 	u, err := url.Parse(httpsProxy)
 	if err != nil {
