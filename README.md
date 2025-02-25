@@ -169,10 +169,10 @@ local timezone:
 proxy.OnRequest(goproxy.DstHostIs("www.reddit.com")).DoFunc(
     func(req *http.Request,ctx *goproxy.ProxyCtx)(*http.Request,*http.Response) {
         if h,_,_ := time.Now().Clock(); h >= 8 && h <= 17 {
-			resp := goproxy.NewResponse(r, goproxy.ContentTypeText, http.StatusForbidden, "Don't waste your time!")
+			resp := goproxy.NewResponse(req, goproxy.ContentTypeText, http.StatusForbidden, "Don't waste your time!")
             return req, resp
         }
-        return req,nil
+        return req, nil
 })
 ```
 
