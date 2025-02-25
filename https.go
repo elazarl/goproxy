@@ -19,6 +19,37 @@ import (
 	"github.com/elazarl/goproxy/internal/signer"
 )
 
+func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls.Config, error) {
+	return func(host string, ctx *ProxyCtx) (*tls.Config, error) {
+		var err error
+		var cert *tls.Certificate
+
+		hostname, _, err := net.SplitHostPort(host)
+		if err != nil {
+			hostname = host
+		}
+		config := defaultTLSConfig.Clone()
+		ctx.Options.Infof(ctx, "signing for %s", hostname)
+
+		genCert := func() (*tls.Certificate, error) {
+			return signer.SignHost(*ca, []string{hostname})
+		}
+		if ctx.Options.CertStore != nil {
+			cert, err = ctx.Options.CertStore.Fetch(hostname, genCert)
+		} else {
+			cert, err = genCert()
+		}
+
+		if err != nil {
+			ctx.Options.Warnf(ctx, "Cannot sign host certificate with provided CA: %s", err)
+			return nil, err
+		}
+
+		config.Certificates = append(config.Certificates, *cert)
+		return config, nil
+	}
+}
+
 type ConnectActionLiteral int
 
 const (
@@ -37,7 +68,7 @@ var (
 	RejectConnect   = &ConnectAction{Action: ConnectReject, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
 )
 
-var _errorRespMaxLength int64 = 500
+const _errorRespMaxLength int64 = 500
 
 // ConnectAction enables the caller to override the standard connect flow.
 // When Action is ConnectHijack, it is up to the implementer to send the
@@ -521,161 +552,91 @@ func dialerFromEnv(proxy *ProxyHttpServer) func(ctx context.Context, network, ad
 }
 
 func (proxy *ProxyHttpServer) NewConnectDialToProxy(httpsProxy string) func(ctx context.Context, network, addr string) (net.Conn, error) {
-	return proxy.NewConnectDialToProxyWithHandler(httpsProxy, nil)
+	return proxy.NewConnectDialToProxyWithHandlers(httpsProxy, nil, nil)
 }
 
-func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(
+func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandlers(
 	httpsProxy string,
-	connectReqHandler func(req *http.Request) error,
-) func(ctx context.Context, network, addr string) (net.Conn, error) {
-	return proxy.NewConnectDialToProxyWithMoreHandlers(httpsProxy, connectReqHandler, nil)
-}
-
-func (proxy *ProxyHttpServer) NewConnectDialToProxyWithMoreHandlers(
-	httpsProxy string,
-	connectReqHandler func(req *http.Request) error,
-	connectRespHandler func(req *http.Response) error,
+	connectReqHandler func(req *http.Request) (*http.Request, error),
+	connectRespHandler func(req *http.Response) (*http.Response, error),
 ) func(ctx context.Context, network, addr string) (net.Conn, error) {
 	u, err := url.Parse(httpsProxy)
 	if err != nil {
 		return nil
 	}
+
+	var isTLS bool
 	if u.Scheme == "" || u.Scheme == "http" {
-		if !strings.ContainsRune(u.Host, ':') {
+		if !strings.Contains(u.Host, ":") {
 			u.Host += ":80"
 		}
-		return func(ctx context.Context, network, addr string) (net.Conn, error) {
-			connectReq := &http.Request{
-				Method: http.MethodConnect,
-				URL:    &url.URL{Opaque: addr},
-				Host:   addr,
-				Header: make(http.Header),
-			}
-			if connectReqHandler != nil {
-				if err := connectReqHandler(connectReq); err != nil {
-					return nil, err
-				}
-			}
-			req := &http.Request{}
-			req = req.WithContext(ctx)
-			c, err := proxy.dial(&ProxyCtx{Req: req}, network, u.Host)
-			if err != nil {
-				return nil, err
-			}
-			_ = connectReq.Write(c)
-			// Read response.
-			// Okay to use and discard buffered reader here, because
-			// TLS server will not speak until spoken to.
-			br := bufio.NewReader(c)
-			resp, err := http.ReadResponse(br, connectReq)
-			if err != nil {
-				_ = c.Close()
-				return nil, err
-			}
-			defer resp.Body.Close()
-			if connectRespHandler != nil {
-				if err := connectRespHandler(resp); err != nil {
-					c.Close()
-					return nil, err
-				}
-			} else if resp.StatusCode != http.StatusOK {
-				resp, err := io.ReadAll(io.LimitReader(resp.Body, _errorRespMaxLength))
-				if err != nil {
-					return nil, err
-				}
-				_ = c.Close()
-				return nil, errors.New("proxy refused connection" + string(resp))
-			}
-			return c, nil
-		}
-	}
-	if u.Scheme == "https" || u.Scheme == "wss" {
-		if !strings.ContainsRune(u.Host, ':') {
+	} else if u.Scheme == "https" || u.Scheme == "wss" {
+		isTLS = true
+		if !strings.Contains(u.Host, ":") {
 			u.Host += ":443"
 		}
-		return func(dialCtx context.Context, network, addr string) (net.Conn, error) {
-			req := &http.Request{}
-			req = req.WithContext(dialCtx)
-			ctx := &ProxyCtx{Req: req}
-			c, err := proxy.dial(ctx, network, u.Host)
-			if err != nil {
-				return nil, err
-			}
+	} else {
+		// Proxy scheme is unknown, we wil return nil to not use any proxy
+		return nil
+	}
 
+	return func(dialCtx context.Context, network, addr string) (net.Conn, error) {
+		req := &http.Request{}
+		req = req.WithContext(dialCtx)
+
+		ctx := &ProxyCtx{Req: req}
+		c, err := proxy.dial(ctx, network, u.Host)
+		if err != nil {
+			return nil, err
+		}
+
+		if isTLS {
 			c, err = proxy.initializeTLSconnection(ctx, c, proxy.opt.Transport.TLSClientConfig, u.Host)
 			if err != nil {
 				return nil, err
 			}
+		}
 
-			connectReq := &http.Request{
-				Method: http.MethodConnect,
-				URL:    &url.URL{Opaque: addr},
-				Host:   addr,
-				Header: make(http.Header),
+		connectReq := &http.Request{
+			Method: http.MethodConnect,
+			URL:    &url.URL{Opaque: addr},
+			Host:   addr,
+			Header: make(http.Header),
+		}
+		if connectReqHandler != nil {
+			connectReq, err = connectReqHandler(connectReq)
+			if err != nil {
+				return nil, err
 			}
-			if connectReqHandler != nil {
-				if err := connectReqHandler(connectReq); err != nil {
-					return nil, err
-				}
-			}
-			_ = connectReq.Write(c)
-			// Read response.
-			// Okay to use and discard buffered reader here, because
-			// TLS server will not speak until spoken to.
-			br := bufio.NewReader(c)
-			resp, err := http.ReadResponse(br, connectReq)
+		}
+		_ = connectReq.Write(c)
+
+		// Read response.
+		// Okay to use and discard buffered reader here, because
+		// TLS server will not speak until spoken to.
+		br := bufio.NewReader(c)
+		resp, err := http.ReadResponse(br, connectReq)
+		if err != nil {
+			_ = c.Close()
+			return nil, err
+		}
+		defer resp.Body.Close()
+
+		if connectRespHandler != nil {
+			resp, err = connectRespHandler(resp)
 			if err != nil {
 				_ = c.Close()
 				return nil, err
 			}
-			defer resp.Body.Close()
-			if connectRespHandler != nil {
-				if err := connectRespHandler(resp); err != nil {
-					c.Close()
-					return nil, err
-				}
-			} else if resp.StatusCode != http.StatusOK {
-				body, err := io.ReadAll(io.LimitReader(resp.Body, _errorRespMaxLength))
-				if err != nil {
-					return nil, err
-				}
-				_ = c.Close()
-				return nil, errors.New("proxy refused connection" + string(body))
+		} else if resp.StatusCode != http.StatusOK {
+			respData, err := io.ReadAll(io.LimitReader(resp.Body, _errorRespMaxLength))
+			if err != nil {
+				return nil, err
 			}
-			return c, nil
+			_ = c.Close()
+			return nil, errors.New("proxy refused connection" + string(respData))
 		}
-	}
-	return nil
-}
-
-func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls.Config, error) {
-	return func(host string, ctx *ProxyCtx) (*tls.Config, error) {
-		var err error
-		var cert *tls.Certificate
-
-		hostname, _, err := net.SplitHostPort(host)
-		if err != nil {
-			hostname = host
-		}
-		config := defaultTLSConfig.Clone()
-		ctx.Options.Infof(ctx, "signing for %s", hostname)
-
-		genCert := func() (*tls.Certificate, error) {
-			return signer.SignHost(*ca, []string{hostname})
-		}
-		if ctx.Options.CertStore != nil {
-			cert, err = ctx.Options.CertStore.Fetch(hostname, genCert)
-		} else {
-			cert, err = genCert()
-		}
-
-		if err != nil {
-			ctx.Options.Warnf(ctx, "Cannot sign host certificate with provided CA: %s", err)
-			return nil, err
-		}
-
-		config.Certificates = append(config.Certificates, *cert)
-		return config, nil
+		return c, nil
 	}
 }
 

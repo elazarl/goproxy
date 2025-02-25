@@ -17,25 +17,15 @@ type ProxyCtx struct {
 	// Will contain the remote server's response (if available. nil if the request wasn't send yet)
 	Resp         *http.Response
 	Options      Options
-	RoundTripper RoundTripper
+	RoundTripper http.RoundTripper
 	// Specify a custom connection dialer that will be used only for the current
 	// request, including WebSocket connection upgrades
 	Dialer func(ctx context.Context, network string, addr string) (net.Conn, error)
 }
 
-type RoundTripper interface {
-	RoundTrip(req *http.Request, ctx *ProxyCtx) (*http.Response, error)
-}
-
-type RoundTripperFunc func(req *http.Request, ctx *ProxyCtx) (*http.Response, error)
-
-func (f RoundTripperFunc) RoundTrip(req *http.Request, ctx *ProxyCtx) (*http.Response, error) {
-	return f(req, ctx)
-}
-
 func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 	if ctx.RoundTripper != nil {
-		return ctx.RoundTripper.RoundTrip(req, ctx)
+		return ctx.RoundTripper.RoundTrip(req)
 	}
 	return ctx.Options.Transport.RoundTrip(req)
 }

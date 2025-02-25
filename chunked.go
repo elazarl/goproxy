@@ -17,7 +17,9 @@ import (
 // would result in double chunking or chunking with a Content-Length
 // length, both of which are wrong.
 func newChunkedWriter(w io.Writer) io.WriteCloser {
-	return &chunkedWriter{w}
+	return &chunkedWriter{
+		Wire: w,
+	}
 }
 
 // Writing to chunkedWriter translates to writing in HTTP chunked Transfer
