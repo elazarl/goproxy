@@ -31,7 +31,7 @@ func (opt Options) Errorf(ctx *ProxyCtx, format string, values ...any) {
 	if opt.Logger == nil {
 		return
 	}
-	opt.Logger.Errorf(ctx.Session, format, values...)
+	opt.Logger.Errorf(ctx.SessionID, format, values...)
 }
 
 // Infof logs an INFO message to the logger specified in proxy options.
@@ -39,7 +39,7 @@ func (opt Options) Infof(ctx *ProxyCtx, format string, values ...any) {
 	if opt.Logger == nil {
 		return
 	}
-	opt.Logger.Infof(ctx.Session, format, values...)
+	opt.Logger.Infof(ctx.SessionID, format, values...)
 }
 
 // Warnf logs a WARNING message to the logger specified in proxy options.
@@ -47,7 +47,7 @@ func (opt Options) Warnf(ctx *ProxyCtx, format string, values ...any) {
 	if opt.Logger == nil {
 		return
 	}
-	opt.Logger.Warnf(ctx.Session, format, values...)
+	opt.Logger.Warnf(ctx.SessionID, format, values...)
 }
 
 // Debugf logs a DEBUG message to the logger specified in proxy options.
@@ -55,7 +55,7 @@ func (opt Options) Debugf(ctx *ProxyCtx, format string, values ...any) {
 	if opt.Logger == nil {
 		return
 	}
-	opt.Logger.Debugf(ctx.Session, format, values...)
+	opt.Logger.Debugf(ctx.SessionID, format, values...)
 }
 
 type LoggingLevel int

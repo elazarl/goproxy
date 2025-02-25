@@ -132,8 +132,9 @@ import (
 )
 
 func main() {
-    proxy := goproxy.NewProxyHttpServer()
-    proxy.Verbose = true
+	opt := goproxy.DefaultOptions()
+	opt.Logger = goproxy.NewDefaultLogger(goproxy.DEBUG)
+    proxy := goproxy.NewProxyHttpServer(opt)
     log.Fatal(http.ListenAndServe(":8080", proxy))
 }
 ```

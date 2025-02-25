@@ -8,7 +8,7 @@ import (
 )
 
 func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request) {
-	ctx := &ProxyCtx{Req: r, Session: proxy.sess.Add(1), Proxy: proxy, Options: proxy.opt}
+	ctx := &ProxyCtx{Req: r, SessionID: proxy.sess.Add(1), Options: proxy.opt}
 
 	ctx.Options.Infof(ctx, "Got request %s %s %s %s", r.URL.Path, r.Host, r.Method, r.URL.String())
 	if !r.URL.IsAbs() {
@@ -41,8 +41,8 @@ func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request)
 		}
 		ctx.Options.Infof(ctx, responseError.Error())
 
-		if ctx.Proxy.opt.ErrorHandler != nil {
-			resp := ctx.Proxy.opt.ErrorHandler(ctx, responseError)
+		if ctx.Options.ErrorHandler != nil {
+			resp := ctx.Options.ErrorHandler(ctx, responseError)
 			if err := resp.Write(w); err != nil {
 				ctx.Options.Warnf(ctx, "Error responding to client: %s", err)
 			}

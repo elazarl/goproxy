@@ -80,7 +80,7 @@ type halfClosable interface {
 var _ halfClosable = (*net.TCPConn)(nil)
 
 func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request) {
-	ctx := &ProxyCtx{Req: r, Session: proxy.sess.Add(1), Proxy: proxy, Options: proxy.opt}
+	ctx := &ProxyCtx{Req: r, SessionID: proxy.sess.Add(1), Options: proxy.opt}
 
 	hij, ok := w.(http.Hijacker)
 	if !ok {
@@ -285,9 +285,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				req, err := clientTlsReader.ReadRequest()
 				ctx := &ProxyCtx{
 					Req:          req,
-					Session:      proxy.sess.Add(1),
-					Proxy:        proxy,
-					UserData:     ctx.UserData,
+					SessionID:    proxy.sess.Add(1),
 					RoundTripper: ctx.RoundTripper,
 				}
 				if err != nil && !errors.Is(err, io.EOF) {
@@ -468,8 +466,8 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 }
 
 func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
-	if ctx.Proxy.opt.ErrorHandler != nil {
-		resp := ctx.Proxy.opt.ErrorHandler(ctx, err)
+	if ctx.Options.ErrorHandler != nil {
+		resp := ctx.Options.ErrorHandler(ctx, err)
 		if err := resp.Write(w); err != nil {
 			ctx.Options.Warnf(ctx, "Error responding to client: %s", err)
 		}
@@ -665,8 +663,8 @@ func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls
 		genCert := func() (*tls.Certificate, error) {
 			return signer.SignHost(*ca, []string{hostname})
 		}
-		if ctx.Proxy.opt.CertStore != nil {
-			cert, err = ctx.Proxy.opt.CertStore.Fetch(hostname, genCert)
+		if ctx.Options.CertStore != nil {
+			cert, err = ctx.Options.CertStore.Fetch(hostname, genCert)
 		} else {
 			cert, err = genCert()
 		}
