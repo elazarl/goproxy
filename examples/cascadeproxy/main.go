@@ -35,6 +35,7 @@ func main() {
 	// Start middle proxy server
 	middleProxy := goproxy.NewProxyHttpServer()
 	middleProxy.Verbose = true
+	middleProxy.KeepHeader = true
 	middleProxy.Tr.Proxy = func(req *http.Request) (*url.URL, error) {
 		// Here we specify the proxy URL of the other server.
 		// If it was a socks5 proxy, we would have used an url like
