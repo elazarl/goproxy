@@ -183,6 +183,7 @@ func MethodIs(methods ...string) ReqCondition {
 		methodSet[strings.ToUpper(m)] = true
 	}
 	return ReqConditionFunc(func(req *http.Request, ctx *ProxyCtx) bool {
+		// req.Method is uppercase
 		_, ok := methodSet[req.Method]
 		return ok
 	})
