@@ -176,6 +176,18 @@ func Not(r ReqCondition) ReqConditionFunc {
 	}
 }
 
+// MethodIs returns a ReqCondition testing whether the method of the request is one of the given strings.
+func MethodIs(methods ...string) ReqCondition {
+	methodSet := make(map[string]bool)
+	for _, m := range methods {
+		methodSet[strings.ToUpper(m)] = true
+	}
+	return ReqConditionFunc(func(req *http.Request, ctx *ProxyCtx) bool {
+		_, ok := methodSet[req.Method]
+		return ok
+	})
+}
+
 // ContentTypeIs returns a RespCondition testing whether the HTTP response has Content-Type header equal
 // to one of the given strings.
 func ContentTypeIs(typ string, types ...string) RespCondition {
