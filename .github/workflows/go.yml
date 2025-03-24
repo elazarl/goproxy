@@ -34,7 +34,7 @@ jobs:
         run: go test -race -p 1 -v -shuffle=on -count=2 ./...
 
       - name: Linter
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
           version: latest
         env:
