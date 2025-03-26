@@ -17,8 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/miekg/dns"
@@ -191,10 +191,21 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 	}
 
 	var dialHost string
-	domain := strings.Split(host, ":")[0]
-	ips, ips6, err := proxy.resolveDomain(ctx, "udp", domain, ctx.DNSResolver)
+
+	var targetDomain, targetPort string
+	if len(strings.Split(host, ":")) > 1 {
+		targetDomain, targetPort, err = net.SplitHostPort(host)
+		if err != nil {
+			return
+		}
+	} else {
+		targetPort = "443" // fallback on 443 if no port given
+		targetDomain = host
+	}
+
+	ips, ips6, err := proxy.resolveDomain(ctx, "udp", targetDomain, ctx.DNSResolver)
 	if err != nil && ctx.BackupDNSResolver != "" {
-		ips, ips6, err = proxy.resolveDomain(ctx, "udp", domain, ctx.BackupDNSResolver)
+		ips, ips6, err = proxy.resolveDomain(ctx, "udp", targetDomain, ctx.BackupDNSResolver)
 	}
 
 	// if this is an ipv6 only endpoint, and we have a forward proxy, exit locally instead
@@ -301,7 +312,7 @@ func (proxy *ProxyHttpServer) getTargetSiteConnection(ctx *ProxyCtx, proxyClient
 		if err != nil || len(ips) == 0 {
 			dialHost = host
 		} else {
-			dialHost = net.JoinHostPort(ips[0], "443")
+			dialHost = net.JoinHostPort(ips[0], targetPort)
 		}
 
 		ctx.Logf("dial %v (%s) locally from: %+v", host, dialHost, ctx.ForwardProxySourceIP)
