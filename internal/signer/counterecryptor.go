@@ -5,10 +5,10 @@ import (
 	"crypto/cipher"
 	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
-	"errors"
 )
 
 type CounterEncryptorRand struct {
@@ -32,7 +32,7 @@ func NewCounterEncryptorRandFromKey(key any, seed []byte) (r CounterEncryptorRan
 			return
 		}
 	default:
-		return r, errors.New("only RSA, ED25519 and ECDSA keys supported")
+		rand.Read(keyBytes)
 	}
 	h := sha256.New()
 	if r.cipher, err = aes.NewCipher(h.Sum(keyBytes)[:aes.BlockSize]); err != nil {
