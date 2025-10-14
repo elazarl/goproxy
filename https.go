@@ -377,7 +377,9 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						}
 						ctx.Logf("resp %v", resp.Status)
 					}
+					origBody := resp.Body
 					resp = proxy.filterResponse(resp, ctx)
+					bodyModified := resp.Body != origBody
 					defer resp.Body.Close()
 
 					text := resp.Status
@@ -397,9 +399,8 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						// RFC7230: A server MUST NOT send a Content-Length header field in any response
 						// with a status code of 1xx (Informational) or 204 (No Content)
 						resp.Header.Del("Content-Length")
-					} else {
+					} else if bodyModified {
 						// Since we don't know the length of resp, return chunked encoded response
-						// TODO: use a more reasonable scheme
 						resp.Header.Del("Content-Length")
 						resp.Header.Set("Transfer-Encoding", "chunked")
 					}
@@ -441,18 +442,29 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						// Don't write out a response body, when it's not allowed
 						// in RFC7230
 					} else {
-						chunked := newChunkedWriter(rawClientTls)
-						if _, err := io.Copy(chunked, resp.Body); err != nil {
-							ctx.Warnf("Cannot write TLS response body from mitm'd client: %v", err)
-							return false
-						}
-						if err := chunked.Close(); err != nil {
-							ctx.Warnf("Cannot write TLS chunked EOF from mitm'd client: %v", err)
-							return false
-						}
-						if _, err = io.WriteString(rawClientTls, "\r\n"); err != nil {
-							ctx.Warnf("Cannot write TLS response chunked trailer from mitm'd client: %v", err)
-							return false
+						if bodyModified {
+							chunked := newChunkedWriter(rawClientTls)
+							if _, err := io.Copy(chunked, resp.Body); err != nil {
+								ctx.Warnf("Cannot write TLS response body from mitm'd client: %v", err)
+								return false
+							}
+							if err := chunked.Close(); err != nil {
+								ctx.Warnf("Cannot write TLS chunked EOF from mitm'd client: %v", err)
+								return false
+							}
+							if _, err = io.WriteString(rawClientTls, "\r\n"); err != nil {
+								ctx.Warnf("Cannot write TLS response chunked trailer from mitm'd client: %v", err)
+								return false
+							}
+						} else {
+							if _, err := io.Copy(rawClientTls, resp.Body); err != nil {
+								ctx.Warnf("Cannot write TLS response body from mitm'd client: %v", err)
+								return false
+							}
+							if err := rawClientTls.Close(); err != nil {
+								ctx.Warnf("Cannot write TLS EOF from mitm'd client: %v", err)
+								return false
+							}
 						}
 					}
 

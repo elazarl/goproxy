@@ -1041,6 +1041,28 @@ func TestResponseContentLength(t *testing.T) {
 	}
 }
 
+func TestMITMResponseContentLength(t *testing.T) {
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		// Don't touch the body at all
+		return resp
+	})
+
+	client, l := oneShotProxy(proxy)
+	defer l.Close()
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, https.URL+"/bobo", nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+
+	assert.EqualValues(t, len(body), resp.ContentLength)
+}
+
 func TestMITMRequestCancel(t *testing.T) {
 	// target server
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
