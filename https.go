@@ -199,6 +199,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 
 		var targetSiteCon net.Conn
 		var remote *bufio.Reader
+		var clientCloseOnce sync.Once
 
 		client := http1parser.NewRequestReader(proxy.PreventCanonicalization, proxyClient)
 		for !client.IsEOF() {
@@ -223,6 +224,9 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				req.RemoteAddr = r.RemoteAddr
 				ctx.Logf("req %v", r.Host)
 				ctx.Req = req
+				if req.Header.Get("Connection") == "close" {
+					defer clientCloseOnce.Do(func() { _ = proxyClient.Close() })
+				}
 
 				req, resp := proxy.filterRequest(req, ctx)
 				if resp == nil {
