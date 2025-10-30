@@ -57,6 +57,7 @@ type ProxyCtx struct {
 	ForwardProxyAuth                     string
 	ForwardProxyProto                    string
 	ForwardProxyHeaders                  []ForwardProxyHeader
+	ForwardProxyStripHeaders             []string
 	ForwardMetricsCounters               MetricsCounters
 	ForwardProxyRegWrite                 bool
 	ForwardProxyErrorFallbackAuth        bool
