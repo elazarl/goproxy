@@ -839,6 +839,10 @@ func TestProxyWithCertStorage(t *testing.T) {
 		req.URL.Path = "/bobo"
 		return req, nil
 	})
+	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		resp.Close = true
+		return resp
+	})
 
 	s := httptest.NewServer(proxy)
 
