@@ -457,10 +457,6 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 								ctx.Warnf("Cannot write TLS response body from mitm'd client: %v", err)
 								return false
 							}
-							if err := rawClientTls.Close(); err != nil {
-								ctx.Warnf("Cannot write TLS EOF from mitm'd client: %v", err)
-								return false
-							}
 						}
 					}
 
