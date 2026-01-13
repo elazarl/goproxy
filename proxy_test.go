@@ -7,11 +7,13 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httptrace"
 	"net/url"
 	"os"
 	"os/exec"
@@ -839,6 +841,10 @@ func TestProxyWithCertStorage(t *testing.T) {
 		req.URL.Path = "/bobo"
 		return req, nil
 	})
+	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		resp.Close = true
+		return resp
+	})
 
 	s := httptest.NewServer(proxy)
 
@@ -1107,5 +1113,63 @@ func TestMITMRequestCancel(t *testing.T) {
 		assert.False(t, ok)
 	default:
 		assert.Fail(t, "request hasn't been cancelled")
+	}
+}
+
+func TestPersistentMitmRequest(t *testing.T) {
+	requestCount := 0
+	backend := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprintf(w, "Request number %d", requestCount)
+		requestCount++
+	}))
+	defer backend.Close()
+
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	proxyServer := httptest.NewServer(proxy)
+	defer proxyServer.Close()
+
+	proxyURL, err := url.Parse(proxyServer.URL)
+	require.NoError(t, err)
+
+	client := &http.Client{
+		Transport: &http.Transport{
+			Proxy: http.ProxyURL(proxyURL),
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+			// We disable HTTP/2 to make sure to test HTTP/1.1 Keep-Alive
+			ForceAttemptHTTP2: false,
+		},
+	}
+
+	for i := 0; i < 2; i++ {
+		var connReused bool
+		trace := &httptrace.ClientTrace{
+			GotConn: func(info httptrace.GotConnInfo) {
+				connReused = info.Reused
+			},
+		}
+
+		ctx := httptrace.WithClientTrace(context.Background(), trace)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, backend.URL, nil)
+		require.NoError(t, err)
+
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+
+		assert.Equal(t, fmt.Sprintf("Request number %d", i), string(body))
+
+		// First request creates the connection, second request reuses it
+		switch i {
+		case 0:
+			assert.False(t, connReused)
+		case 1:
+			assert.True(t, connReused)
+		}
 	}
 }
