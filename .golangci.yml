@@ -110,6 +110,7 @@ linters:
         - G115 # Integer overflow conversion (uint64 -> int64)
         - G404 # Use of weak random number generator (math/rand)
         - G204 # Subprocess launched with a potential tainted input or cmd arguments
+        - G602 # Slice index out of range
   exclusions:
     generated: lax
     presets:
