@@ -382,6 +382,13 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					bodyModified := resp.Body != origBody
 					defer resp.Body.Close()
 
+					// User-registered custom filters are not controllable and may return a response
+					// without Request set. Ensure correct behavior when request is nil, as subsequent
+					// processing logic depends on request information.
+					if resp.Request == nil {
+						resp.Request = req
+					}
+
 					text := resp.Status
 					statusCode := strconv.Itoa(resp.StatusCode) + " "
 					text = strings.TrimPrefix(text, statusCode)
