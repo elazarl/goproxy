@@ -99,7 +99,7 @@ func getOrFail(t *testing.T, url string, client *http.Client) []byte {
 
 func getCert(t *testing.T, c *tls.Conn) []byte {
 	t.Helper()
-	if err := c.Handshake(); err != nil {
+	if err := c.HandshakeContext(context.Background()); err != nil {
 		t.Fatal("cannot handshake", err)
 	}
 	return c.ConnectionState().PeerCertificates[0].Raw
@@ -318,14 +318,19 @@ func TestSimpleMitm(t *testing.T) {
 	client, l := oneShotProxy(proxy)
 	defer l.Close()
 
-	c, err := tls.Dial("tcp", https.Listener.Addr().String(), &tls.Config{InsecureSkipVerify: true})
+	ctx := context.Background()
+	c, err := (&tls.Dialer{
+		Config: &tls.Config{InsecureSkipVerify: true},
+	}).DialContext(ctx, "tcp", https.Listener.Addr().String())
 	if err != nil {
 		t.Fatal("cannot dial to tcp server", err)
 	}
-	origCert := getCert(t, c)
+	tlsConn, ok := c.(*tls.Conn)
+	assert.True(t, ok)
+	origCert := getCert(t, tlsConn)
 	_ = c.Close()
 
-	c2, err := net.Dial("tcp", l.Listener.Addr().String())
+	c2, err := (&net.Dialer{}).DialContext(ctx, "tcp", l.Listener.Addr().String())
 	if err != nil {
 		t.Fatal("dialing to proxy", err)
 	}
@@ -555,7 +560,9 @@ func TestHeadReqHasContentLength(t *testing.T) {
 }
 
 func TestChunkedResponse(t *testing.T) {
-	l, err := net.Listen("tcp", ":10234")
+	ctx := context.Background()
+
+	l, err := (&net.ListenConfig{}).Listen(ctx, "tcp", ":10234")
 	panicOnErr(err, "listen")
 	defer l.Close()
 	go func() {
@@ -579,10 +586,10 @@ func TestChunkedResponse(t *testing.T) {
 		}
 	}()
 
-	c, err := net.Dial("tcp", "localhost:10234")
+	c, err := (&net.Dialer{}).DialContext(ctx, "tcp", "localhost:10234")
 	panicOnErr(err, "dial")
 	defer c.Close()
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "/", nil)
 	_ = req.Write(c)
 	resp, err := http.ReadResponse(bufio.NewReader(c), req)
 	panicOnErr(err, "readresp")
@@ -609,7 +616,7 @@ func TestChunkedResponse(t *testing.T) {
 	client, s := oneShotProxy(proxy)
 	defer s.Close()
 
-	req, err = http.NewRequestWithContext(context.Background(), http.MethodGet, "http://localhost:10234/", nil)
+	req, err = http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost:10234/", nil)
 	if err != nil {
 		t.Fatal("Cannot create request", err)
 	}
@@ -694,7 +701,7 @@ func TestGoproxyHijackConnect(t *testing.T) {
 	client, l := oneShotProxy(proxy)
 	defer l.Close()
 	proxyAddr := l.Listener.Addr().String()
-	conn, err := net.Dial("tcp", proxyAddr)
+	conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyAddr)
 	panicOnErr(err, "conn "+proxyAddr)
 	buf := bufio.NewReader(conn)
 	writeConnect(conn)

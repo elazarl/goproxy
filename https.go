@@ -82,7 +82,8 @@ func (proxy *ProxyHttpServer) dial(ctx *ProxyCtx, network, addr string) (c net.C
 
 	// if the user didn't specify any dialer, we just use the default one,
 	// provided by net package
-	return net.Dial(network, addr)
+	var d net.Dialer
+	return d.DialContext(ctx.Req.Context(), network, addr)
 }
 
 func (proxy *ProxyHttpServer) connectDial(ctx *ProxyCtx, network, addr string) (c net.Conn, err error) {
@@ -282,7 +283,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		go func() {
 			rawClientTls := tls.Server(proxyClient, tlsConfig)
 			defer rawClientTls.Close()
-			if err := rawClientTls.Handshake(); err != nil {
+			if err := rawClientTls.HandshakeContext(context.Background()); err != nil {
 				ctx.Warnf("Cannot handshake client %v %v", r.Host, err)
 				return
 			}
