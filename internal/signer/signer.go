@@ -10,7 +10,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"fmt"
 	"math/big"
 	"math/rand"
 	"net"
@@ -93,7 +92,9 @@ func SignHost(ca tls.Certificate, hosts []string) (cert *tls.Certificate, err er
 			return nil, err
 		}
 	default:
-		return nil, fmt.Errorf("unsupported key type %T", ca.PrivateKey)
+		if certpriv, err = ecdsa.GenerateKey(elliptic.P256(), &csprng); err != nil {
+			return nil, err
+		}
 	}
 
 	derBytes, err := x509.CreateCertificate(&csprng, &template, x509ca, certpriv.Public(), ca.PrivateKey)
