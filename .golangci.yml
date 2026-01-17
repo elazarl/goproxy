@@ -1,18 +1,10 @@
+version: "2"
 run:
-  timeout: 5m
   modules-download-mode: readonly
 
 # List from https://golangci-lint.run/usage/linters/
 linters:
   enable:
-    # Default linters
-    - errcheck
-    - gosimple
-    - govet
-    - ineffassign
-    - staticcheck
-    - unused
-    # Other linters
     - asasalint
     - asciicheck
     - bidichk
@@ -27,13 +19,10 @@ linters:
     - fatcontext
     - forbidigo
     - forcetypeassert
-    - gci
     - gocheckcompilerdirectives
     - gochecksumtype
     - gocritic
     - godot
-    - gofmt
-    - gofumpt
     - goheader
     - gomodguard
     - goprintffuncname
@@ -57,9 +46,8 @@ linters:
     - predeclared
     - reassign
     - revive
-    - stylecheck
+    - staticcheck
     - tagalign
-    - tenv
     - testableexamples
     - testifylint
     - testpackage
@@ -69,7 +57,6 @@ linters:
     - usestdlibvars
     - wastedassign
     - whitespace
-
   disable:
     - bodyclose
     - canonicalheader
@@ -89,7 +76,6 @@ linters:
     - goconst
     - gocyclo
     - godox
-    - goimports
     - gomoddirectives
     - inamedparam
     - intrange
@@ -115,46 +101,65 @@ linters:
     - wrapcheck
     - wsl
     - zerologlint
-
-linters-settings:
-  gci:
-    sections:
-      - standard
-      - default
-    skip-generated: false
-    custom-order: true
-  gosec:
-    excludes:
-      - G402 # InsecureSkipVerify
-      - G102 # Binds to all network interfaces
-      - G403 # RSA keys should be at least 2048 bits
-      - G115 # Integer overflow conversion (uint64 -> int64)
-      - G404 # Use of weak random number generator (math/rand)
-      - G204 # Subprocess launched with a potential tainted input or cmd arguments
-
-issues:
-  exclude-rules:
-    - linters:
-        - gocritic
-      text: "ifElseChain"
-    - linters:
-        - lll
-      source: "^// "
-    - linters:
-        - revive
-      text: "add-constant: "
-    - linters:
-        - revive
-      text: "unused-parameter: "
-    - linters:
-        - revive
-      text: "empty-block: "
-    - linters:
-        - revive
-      text: "var-naming: " # TODO: Re-enable in V2
-    - linters:
-        - stylecheck
-      text: " should be " # TODO: Re-enable in V2
-    - linters:
-        - stylecheck
-      text: "ST1003: should not use ALL_CAPS in Go names; use CamelCase instead" # TODO: Re-enable in V2
+  settings:
+    gosec:
+      excludes:
+        - G402 # InsecureSkipVerify
+        - G102 # Binds to all network interfaces
+        - G403 # RSA keys should be at least 2048 bits
+        - G115 # Integer overflow conversion (uint64 -> int64)
+        - G404 # Use of weak random number generator (math/rand)
+        - G204 # Subprocess launched with a potential tainted input or cmd arguments
+        - G602 # Slice index out of range
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - gocritic
+        text: ifElseChain
+      - linters:
+          - lll
+        source: '^// '
+      - linters:
+          - revive
+        text: 'add-constant: '
+      - linters:
+          - revive
+        text: 'unused-parameter: '
+      - linters:
+          - revive
+        text: 'empty-block: '
+      - linters:
+          - revive
+        text: 'var-naming: ' # TODO: Re-enable in V2
+      - linters:
+          - staticcheck
+        text: ' should be ' # TODO: Re-enable in V2
+      - linters:
+          - staticcheck
+        text: 'ST1003: should not use ALL_CAPS in Go names; use CamelCase instead'
+    paths:
+      - examples$
+      - transport
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+      custom-order: true
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

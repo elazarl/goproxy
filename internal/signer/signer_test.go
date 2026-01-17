@@ -90,7 +90,8 @@ func testSignerTLS(t *testing.T, ca tls.Certificate) {
 	}
 	browser := getBrowser(os.Args)
 	if browser != "" {
-		_ = exec.Command(browser, asLocalhost).Run()
+		ctx := context.Background()
+		_ = exec.CommandContext(ctx, browser, asLocalhost).Run()
 		time.Sleep(10 * time.Second)
 	}
 }

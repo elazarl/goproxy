@@ -2,6 +2,7 @@ package goproxy
 
 import (
 	"bufio"
+	"context"
 	"crypto/tls"
 	"errors"
 	"io"
@@ -45,7 +46,7 @@ func (r *H2Transport) RoundTrip(_ *http.Request) (*http.Response, error) {
 	if !ok {
 		return nil, errors.New("invalid TLS connection")
 	}
-	if err = rawTLSConn.Handshake(); err != nil {
+	if err = rawTLSConn.HandshakeContext(context.Background()); err != nil {
 		return nil, err
 	}
 	if r.TLSConfig == nil || !r.TLSConfig.InsecureSkipVerify {
