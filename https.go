@@ -285,6 +285,9 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			defer rawClientTls.Close()
 			if err := rawClientTls.HandshakeContext(context.Background()); err != nil {
 				ctx.Warnf("Cannot handshake client %v %v", r.Host, err)
+				if proxy.ConnectionErrHandler != nil {
+					proxy.ConnectionErrHandler(proxyClient, ctx, err)
+				}
 				return
 			}
 
