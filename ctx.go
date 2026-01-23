@@ -98,6 +98,7 @@ type ProxyCtx struct {
 
 type MetricsCounters struct {
 	Requests       *prometheus.CounterVec
+	SimpleRequests *prometheus.CounterVec // For rb_requests - ensures simple target/type tracking even when Requests is curried
 	ProxyBandwidth *prometheus.Counter
 	TLSTimes       *prometheus.Observer
 }
@@ -132,6 +133,11 @@ func (ctx *ProxyCtx) SetErrorMetric() {
 		}
 		ctx.ForwardMetricsCounters.Requests.WithLabelValues(target, "err").Inc()
 
+		// Also increment SimpleRequests (rb_requests) if set, to ensure simple metrics are tracked
+		// even when Requests has been curried to rb_proxy_requests
+		if ctx.ForwardMetricsCounters.SimpleRequests != nil {
+			ctx.ForwardMetricsCounters.SimpleRequests.WithLabelValues(target, "err").Inc()
+		}
 	}
 }
 
@@ -146,6 +152,11 @@ func (ctx *ProxyCtx) SetSuccessMetric() {
 		}
 		ctx.ForwardMetricsCounters.Requests.WithLabelValues(target, "ok").Inc()
 
+		// Also increment SimpleRequests (rb_requests) if set, to ensure simple metrics are tracked
+		// even when Requests has been curried to rb_proxy_requests
+		if ctx.ForwardMetricsCounters.SimpleRequests != nil {
+			ctx.ForwardMetricsCounters.SimpleRequests.WithLabelValues(target, "ok").Inc()
+		}
 	}
 }
 
