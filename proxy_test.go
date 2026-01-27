@@ -773,11 +773,54 @@ func TestCurlMinusP(t *testing.T) {
 }
 
 func TestSelfRequest(t *testing.T) {
+	// By default, transparent mode is enabled, so we need to explicitly
+	// set NonproxyHandler to reject non-proxy requests if that's desired.
 	proxy := goproxy.NewProxyHttpServer()
+	proxy.NonproxyHandler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		http.Error(w, "This is a proxy server. Does not respond to non-proxy requests.", http.StatusInternalServerError)
+	})
 	_, l := oneShotProxy(proxy)
 	defer l.Close()
 	if !strings.Contains(string(getOrFail(t, l.URL, &http.Client{})), "non-proxy") {
 		t.Fatal("non proxy requests should fail")
+	}
+}
+
+func TestTransparentModeDefault(t *testing.T) {
+	// Test that transparent mode is enabled by default.
+	// Non-proxy requests are forwarded based on the Host header.
+	proxy := goproxy.NewProxyHttpServer()
+
+	// Set up the target server
+	targetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := w.Write([]byte("transparent-success")); err != nil {
+			t.Logf("write error: %v", err)
+		}
+	}))
+	defer targetServer.Close()
+
+	// Create a proxy server
+	proxyServer := httptest.NewServer(proxy)
+	defer proxyServer.Close()
+
+	// Send a non-proxy request (relative URL) with Host header pointing to target
+	targetURL, _ := url.Parse(targetServer.URL)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, proxyServer.URL+"/test", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Override Host header to point to target server
+	req.Host = targetURL.Host
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal("transparent proxy request failed:", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if string(body) != "transparent-success" {
+		t.Errorf("expected 'transparent-success', got '%s'", string(body))
 	}
 }
 

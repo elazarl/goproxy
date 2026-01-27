@@ -143,14 +143,26 @@ func (proxy *ProxyHttpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 }
 
 // NewProxyHttpServer creates and returns a proxy server, logging to stderr by default.
+// By default, it supports transparent proxy mode for non-proxy HTTP requests by
+// forwarding them based on the Host header.
 func NewProxyHttpServer() *ProxyHttpServer {
 	proxy := ProxyHttpServer{
 		Logger: log.New(os.Stderr, "", log.LstdFlags),
-		NonproxyHandler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			http.Error(w, "This is a proxy server. Does not respond to non-proxy requests.", http.StatusInternalServerError)
-		}),
-		Tr: &http.Transport{TLSClientConfig: tlsClientSkipVerify, Proxy: http.ProxyFromEnvironment},
+		Tr:     &http.Transport{TLSClientConfig: tlsClientSkipVerify, Proxy: http.ProxyFromEnvironment},
 	}
+	// Default NonproxyHandler supports transparent proxy mode by forwarding
+	// requests based on the Host header. This allows the proxy to work in
+	// transparent mode without explicit configuration.
+	proxy.NonproxyHandler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.Host == "" {
+			http.Error(w, "Cannot handle requests without Host header, e.g., HTTP 1.0", http.StatusBadRequest)
+			return
+		}
+		// Convert to absolute URL for transparent proxy handling
+		req.URL.Scheme = "http"
+		req.URL.Host = req.Host
+		proxy.ServeHTTP(w, req)
+	})
 	proxy.ConnectDial = dialerFromEnv(&proxy)
 	return &proxy
 }
