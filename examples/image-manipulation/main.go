@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/elazarl/goproxy"
-	"github.com/elazarl/goproxy/ext/image"
+	"github.com/yx-zero/goproxy-transparent"
+	"github.com/yx-zero/goproxy-transparent/ext/image"
 	"image"
 	"log"
 	"net/http"

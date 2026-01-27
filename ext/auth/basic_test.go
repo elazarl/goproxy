@@ -13,8 +13,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/elazarl/goproxy"
-	"github.com/elazarl/goproxy/ext/auth"
+	"github.com/yx-zero/goproxy-transparent"
+	"github.com/yx-zero/goproxy-transparent/ext/auth"
 )
 
 type ConstantHanlder string

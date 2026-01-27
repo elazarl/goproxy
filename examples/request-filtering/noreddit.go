@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/elazarl/goproxy"
+	"github.com/yx-zero/goproxy-transparent"
 	"log"
 	"net/http"
 	"time"

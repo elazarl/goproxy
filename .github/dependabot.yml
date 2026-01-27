@@ -15,4 +15,4 @@ updates:
     schedule:
       interval: "daily"
     ignore:
-      - dependency-name: "github.com/elazarl/goproxy"
+      - dependency-name: "github.com/yx-zero/goproxy-transparent"

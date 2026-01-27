@@ -1,4 +1,4 @@
-module github.com/elazarl/goproxy
+module github.com/yx-zero/goproxy-transparent
 
 go 1.23.0
 

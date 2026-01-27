@@ -1,8 +1,8 @@
 # GoProxy
 
-![Status](https://github.com/elazarl/goproxy/workflows/Go/badge.svg)
-[![GoDoc](https://pkg.go.dev/badge/github.com/elazarl/goproxy)](https://pkg.go.dev/github.com/elazarl/goproxy)
-[![Go Report](https://goreportcard.com/badge/github.com/elazarl/goproxy)](https://goreportcard.com/report/github.com/elazarl/goproxy)
+![Status](https://github.com/yx-zero/goproxy-transparent/workflows/Go/badge.svg)
+[![GoDoc](https://pkg.go.dev/badge/github.com/yx-zero/goproxy-transparent)](https://pkg.go.dev/github.com/yx-zero/goproxy-transparent)
+[![Go Report](https://goreportcard.com/badge/github.com/yx-zero/goproxy-transparent)](https://goreportcard.com/report/github.com/yx-zero/goproxy-transparent)
 [![BSD-3 License](https://img.shields.io/badge/License-BSD%203--Clause-orange.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Pull Requests](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](https://makeapullrequest.com)
 [![Awesome Go](https://awesome.re/mentioned-badge.svg)](https://github.com/avelino/awesome-go?tab=readme-ov-file#networking)
@@ -22,7 +22,7 @@ Here is how you do that in [Chrome](https://www.wikihow.com/Connect-to-a-Proxy-S
 and in [Firefox](http://www.wikihow.com/Enter-Proxy-Settings-in-Firefox).
 If you decide to start with the `base` example, the URL you should use as
 proxy is `localhost:8080`, which is the default one in our example.
-You also have to [trust](https://github.com/elazarl/goproxy/blob/master/examples/customca/README.md)
+You also have to [trust](https://github.com/yx-zero/goproxy-transparent/blob/master/examples/customca/README.md)
 the proxy CA certificate, to avoid any certificate issue in the clients.
 
 > [✈️ Telegram Group](https://telegram.me/goproxygroup)
@@ -128,7 +128,7 @@ import (
     "log"
     "net/http"
 
-    "github.com/elazarl/goproxy"
+    "github.com/yx-zero/goproxy-transparent"
 )
 
 func main() {
@@ -189,7 +189,7 @@ request and the client will receive the `"Don't waste your time!"` response.
 
 ### Let's start
 ```go
-import "github.com/elazarl/goproxy"
+import "github.com/yx-zero/goproxy-transparent"
 ```
 
 There are some proxy usage examples in the `examples` folder, which

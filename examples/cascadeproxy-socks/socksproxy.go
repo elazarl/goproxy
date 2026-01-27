@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/elazarl/goproxy"
+	"github.com/yx-zero/goproxy-transparent"
 )
 
 type SocksAuth struct {
