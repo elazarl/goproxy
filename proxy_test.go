@@ -1061,7 +1061,7 @@ func TestMITMResponseHTTP2MissingContentLength(t *testing.T) {
 			// Force missing Content-Length
 			f.Flush()
 		}
-		w.Write([]byte("HTTP/2 response"))
+		_, _ = w.Write([]byte("HTTP/2 response"))
 	})
 
 	// Explicitly make an HTTP/2 server
@@ -1114,9 +1114,9 @@ func TestMITMResponseHTTP2MissingContentLength(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
 
-	assert.Equal(t, -1, int(resp.ContentLength))
+	assert.EqualValues(t, -1, resp.ContentLength)
 	assert.Equal(t, []string{"chunked"}, resp.TransferEncoding)
-	assert.Equal(t, 15, len(body))
+	assert.Len(t, body, 15)
 }
 
 func TestMITMResponseContentLength(t *testing.T) {
@@ -1139,6 +1139,82 @@ func TestMITMResponseContentLength(t *testing.T) {
 	_ = resp.Body.Close()
 
 	assert.EqualValues(t, len(body), resp.ContentLength)
+}
+
+func TestMITMEmptyBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(nil)
+	}))
+	defer srv.Close()
+
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		return resp
+	})
+
+	client, l := oneShotProxy(proxy)
+	defer l.Close()
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+
+	assert.EqualValues(t, 0, resp.ContentLength)
+}
+
+func TestMITMOverwriteAlreadyEmptyBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(nil)
+	}))
+	defer srv.Close()
+
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		assert.EqualValues(t, 0, resp.ContentLength)
+		resp.Body = io.NopCloser(bytes.NewReader(nil))
+		return resp
+	})
+
+	client, l := oneShotProxy(proxy)
+	defer l.Close()
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+
+	assert.EqualValues(t, 0, resp.ContentLength)
+}
+
+func TestMITMOverwriteBodyToEmpty(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("test"))
+	}))
+	defer srv.Close()
+
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		assert.EqualValues(t, 4, resp.ContentLength)
+		resp.Body = io.NopCloser(bytes.NewReader(nil))
+		return resp
+	})
+
+	client, l := oneShotProxy(proxy)
+	defer l.Close()
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+
+	assert.EqualValues(t, 0, resp.ContentLength)
 }
 
 func TestMITMRequestCancel(t *testing.T) {

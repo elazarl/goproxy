@@ -380,8 +380,12 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					resp = proxy.filterResponse(resp, ctx)
 					bodyModified := resp.Body != origBody
 					defer resp.Body.Close()
-					if bodyModified || resp.Header.Get("Content-Length") == "" {
-						// Since we don't know the length of resp, return chunked encoded response
+					if bodyModified || (resp.ContentLength <= 0 && resp.Header.Get("Content-Length") == "") {
+						// Return chunked encoded response when we don't know the length of the resp, if the body
+						// has been modified by the response handler or if there is no content length in the response.
+						// We include 0 in resp.ContentLength <= 0 because 0 is the field zero value and some user
+						// might incorrectly leave it instead of setting it to -1 when the length is unknown (but we
+						// also check that the Content-Length header is empty, so there is no issue with empty bodies).
 						resp.ContentLength = -1
 						resp.Header.Del("Content-Length")
 						resp.TransferEncoding = []string{"chunked"}
