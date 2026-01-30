@@ -1054,6 +1054,71 @@ func TestResponseContentLength(t *testing.T) {
 	}
 }
 
+func TestMITMResponseHTTP2MissingContentLength(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		if f, ok := w.(http.Flusher); ok {
+			// Force missing Content-Length
+			f.Flush()
+		}
+		w.Write([]byte("HTTP/2 response"))
+	})
+
+	// Explicitly make an HTTP/2 server
+	srv := httptest.NewUnstartedServer(handler)
+	srv.EnableHTTP2 = true
+	srv.StartTLS()
+	defer srv.Close()
+
+	// proxy server
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		// Connection between the proxy client and the proxy server
+		assert.Equal(t, "HTTP/1.1", req.Proto)
+		return req, nil
+	})
+	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		// Connection between the proxy server and the origin
+		assert.Equal(t, "HTTP/2.0", resp.Proto)
+		return resp
+	})
+
+	// Configure proxy transport to use HTTP/2 to communicate with the server
+	proxy.Tr = &http.Transport{
+		ForceAttemptHTTP2: true,
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+			NextProtos:         []string{"h2"},
+		},
+	}
+
+	proxySrv := httptest.NewServer(proxy)
+	defer proxySrv.Close()
+
+	client := &http.Client{
+		Transport: &http.Transport{
+			Proxy: func(req *http.Request) (*url.URL, error) {
+				return url.Parse(proxySrv.URL)
+			},
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		},
+	}
+
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+
+	assert.Equal(t, -1, int(resp.ContentLength))
+	assert.Equal(t, []string{"chunked"}, resp.TransferEncoding)
+	assert.Equal(t, 15, len(body))
+}
+
 func TestMITMResponseContentLength(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
