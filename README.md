@@ -26,6 +26,8 @@ You also have to [trust](https://github.com/elazarl/goproxy/blob/master/examples
 the proxy CA certificate, to avoid any certificate issue in the clients.
 
 > [✈️ Telegram Group](https://telegram.me/goproxygroup)
+>
+> [🎁 Become a Sponsor](https://opencollective.com/goproxy)
 
 ## Features
 - Perform certain actions only on `specific hosts`,  with a single equality comparison or with regex evaluation
@@ -43,19 +45,14 @@ the proxy CA certificate, to avoid any certificate issue in the clients.
 4. "Hijacked" proxy connection, where the configured handler can access the raw net.Conn data
 
 ## Sponsors
-Does your company use GoProxy? Ask your manager or marketing team
-if your company would be interested in supporting our project.
-Supporting this project will allow the maintainers to dedicate more time
-for maintenance and new features for everyone.
-This will also benefit you, because maintainers will fix problems that will occur
-and keep GoProxy up to date for your projects.
-Moreover, your company logo will be shown on GitHub, in this README section.
-> [Apply Here](https://opencollective.com/goproxy)
+Does your company use GoProxy? Help us keep the project maintained and healthy!
+Supporting GoProxy allows us to dedicate more time to bug fixes and new features.
+In exchange, if you choose a Gold Supporter or Enterprise plan, we'll proudly display your company logo here.
 
-[![GoProxy Sponsor](https://opencollective.com/goproxy/tiers/sponsor/0/avatar)](https://opencollective.com/goproxy/tiers/sponsor/0/website)
-[![GoProxy Sponsor](https://opencollective.com/goproxy/tiers/sponsor/1/avatar)](https://opencollective.com/goproxy/tiers/sponsor/1/website)
-[![GoProxy Sponsor](https://opencollective.com/goproxy/tiers/sponsor/2/avatar)](https://opencollective.com/goproxy/tiers/sponsor/2/website)
-[![GoProxy Sponsor](https://opencollective.com/goproxy/tiers/sponsor/3/avatar)](https://opencollective.com/goproxy/tiers/sponsor/3/website)
+> [Become a Sponsor](https://opencollective.com/goproxy)
+
+[![Gold Supporters](https://opencollective.com/goproxy/tiers/gold-sponsor.svg?width=890)](https://opencollective.com/goproxy)
+[![Enterprise Supporters](https://opencollective.com/goproxy/tiers/enterprise.svg?width=890)](https://opencollective.com/goproxy)
 
 ## Maintainers
 - [Elazar Leibovich](https://github.com/elazarl): Creator of the project, Software Engineer
