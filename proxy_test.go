@@ -744,7 +744,7 @@ func writeConnect(w io.Writer) {
 func TestCurlMinusP(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
-		return goproxy.HTTPMitmConnect, host
+		return goproxy.MitmConnect, host
 	})
 	called := false
 	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
