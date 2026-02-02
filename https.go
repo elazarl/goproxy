@@ -322,6 +322,10 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					req = req.WithContext(requestContext)
 					defer finishRequest()
 
+					// explicitly discard request body to avoid data races in certain RoundTripper implementations
+					// see https://github.com/golang/go/issues/61596#issuecomment-1652345131
+					defer req.Body.Close()
+
 					// Bug fix which goproxy fails to provide request
 					// information URL in the context when does HTTPS MITM
 					ctx.Req = req
@@ -364,12 +368,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						if !proxy.KeepHeader {
 							RemoveProxyHeaders(ctx, req)
 						}
-						resp, err = func() (*http.Response, error) {
-							// explicitly discard request body to avoid data races in certain RoundTripper implementations
-							// see https://github.com/golang/go/issues/61596#issuecomment-1652345131
-							defer req.Body.Close()
-							return ctx.RoundTrip(req)
-						}()
+						resp, err = ctx.RoundTrip(req)
 						if err != nil {
 							ctx.Warnf("Cannot read TLS response from mitm'd server %v", err)
 							return false
