@@ -1265,7 +1265,7 @@ func TestMITMRequestCancel(t *testing.T) {
 }
 
 func TestNewResponseProtoVersion(t *testing.T) {
-	req, _ := http.NewRequest("GET", "https://example.com/", nil)
+	req, _ := http.NewRequest(http.MethodGet, "https://example.com/", nil)
 	resp := goproxy.NewResponse(req, goproxy.ContentTypeText, http.StatusForbidden, "blocked")
 
 	assert.Equal(t, "HTTP/1.1", resp.Proto)
