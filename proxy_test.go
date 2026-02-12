@@ -1275,7 +1275,7 @@ func TestNewResponseProtoVersion(t *testing.T) {
 	assert.Equal(t, 1, resp.ProtoMinor)
 
 	var buf bytes.Buffer
-	err := resp.Write(&buf)
+	err = resp.Write(&buf)
 	require.NoError(t, err)
 
 	line, err := buf.ReadString('\n')
