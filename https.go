@@ -447,7 +447,16 @@ func dialerFromEnv(proxy *ProxyHttpServer) func(network, addr string) (net.Conn,
 	if httpsProxy == "" {
 		return nil
 	}
-	return proxy.NewConnectDialToProxy(httpsProxy)
+
+	proxyDialer := proxy.NewConnectDialToProxy(httpsProxy)
+
+	return func(network, addr string) (net.Conn, error) {
+		req := &http.Request{URL: &url.URL{Scheme: "https", Host: addr}}
+		if p, _ := http.ProxyFromEnvironment(req); p == nil {
+			return net.Dial(network, addr)
+		}
+		return proxyDialer(network, addr)
+	}
 }
 
 func (proxy *ProxyHttpServer) NewConnectDialToProxy(httpsProxy string) func(network, addr string) (net.Conn, error) {
