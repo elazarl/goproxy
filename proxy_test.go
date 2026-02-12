@@ -1264,6 +1264,49 @@ func TestMITMRequestCancel(t *testing.T) {
 	}
 }
 
+func TestNewResponseProtoVersion(t *testing.T) {
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://example.com/", nil)
+	require.NoError(t, err)
+
+	resp := goproxy.NewResponse(req, goproxy.ContentTypeText, http.StatusForbidden, "blocked")
+
+	assert.Equal(t, "HTTP/1.1", resp.Proto)
+	assert.Equal(t, 1, resp.ProtoMajor)
+	assert.Equal(t, 1, resp.ProtoMinor)
+
+	var buf bytes.Buffer
+	err = resp.Write(&buf)
+	require.NoError(t, err)
+
+	line, err := buf.ReadString('\n')
+	require.NoError(t, err)
+	assert.True(t, strings.HasPrefix(line, "HTTP/1.1 403"), "expected HTTP/1.1 status line, got: %s", line)
+}
+
+func TestNewResponseMitmWrite(t *testing.T) {
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		return nil, goproxy.NewResponse(req, goproxy.ContentTypeText, http.StatusForbidden, "blocked")
+	})
+
+	client, l := oneShotProxy(proxy)
+	defer l.Close()
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, https.URL+"/anything", nil)
+	require.NoError(t, err)
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	assert.Equal(t, "blocked", string(body))
+}
+
 func TestPersistentMitmRequest(t *testing.T) {
 	requestCount := 0
 	backend := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

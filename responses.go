@@ -22,6 +22,9 @@ func NewResponse(r *http.Request, contentType string, status int, body string) *
 	resp.Header.Add("Content-Type", contentType)
 	resp.StatusCode = status
 	resp.Status = http.StatusText(status)
+	resp.Proto = "HTTP/1.1"
+	resp.ProtoMajor = 1
+	resp.ProtoMinor = 1
 	buf := bytes.NewBufferString(body)
 	resp.ContentLength = int64(buf.Len())
 	resp.Body = io.NopCloser(buf)
