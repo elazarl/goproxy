@@ -43,6 +43,20 @@ func (c RespConditionFunc) HandleResp(resp *http.Response, ctx *ProxyCtx) bool {
 	return c(resp, ctx)
 }
 
+// CookieMatches returns a ReqCondition, testing whether any of the Name or Value of the cookies
+// in the request matches both of the given regular expressions for http.Cookie.Name and
+// http.Cookie.Value.
+func CookieMatches(regexpName *regexp.Regexp, regexpValue *regexp.Regexp) ReqConditionFunc {
+	return func(req *http.Request, ctx *ProxyCtx) bool {
+		for _, c := range req.Cookies() {
+			if regexpName.MatchString(c.Name) && regexpValue.MatchString(c.Value) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
 // UrlHasPrefix returns a ReqCondition checking wether the destination URL the proxy client has requested
 // has the given prefix, with or without the host.
 // For example UrlHasPrefix("host/x") will match requests of the form 'GET host/x', and will match
