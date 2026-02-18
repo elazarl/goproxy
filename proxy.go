@@ -51,6 +51,10 @@ type ProxyHttpServer struct {
 	// Accept-Encoding header. To disable this behavior, set
 	// Tr.DisableCompression to true.
 	KeepAcceptEncoding bool
+	// TLSHandshakeErrorHandler is called when a TLS handshake with a client fails
+	// during MITM proxying. This allows tracking/metrics of client-side TLS failures.
+	// The host parameter is the target host from the CONNECT request.
+	TLSHandshakeErrorHandler func(host string, err error, ctx *ProxyCtx)
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
