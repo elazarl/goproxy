@@ -1364,3 +1364,63 @@ func TestPersistentMitmRequest(t *testing.T) {
 		}
 	}
 }
+
+func TestMITMResponseHTTP2ProtoVersion(t *testing.T) {
+	// Upstream HTTP/2 server
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("hello"))
+	})
+	srv := httptest.NewUnstartedServer(handler)
+	srv.EnableHTTP2 = true
+	srv.StartTLS()
+	defer srv.Close()
+
+	// Proxy with MITM and HTTP/2 upstream transport
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	proxy.Tr = &http.Transport{
+		ForceAttemptHTTP2: true,
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+			NextProtos:         []string{"h2"},
+		},
+	}
+
+	proxySrv := httptest.NewServer(proxy)
+	defer proxySrv.Close()
+
+	// Client talks HTTP/1.1 through the MITM proxy
+	proxyURL, _ := url.Parse(proxySrv.URL)
+	conn, err := net.Dial("tcp", proxyURL.Host)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	// Send CONNECT
+	connectReq, _ := http.NewRequest(http.MethodConnect, srv.URL, nil)
+	require.NoError(t, connectReq.Write(conn))
+	br := bufio.NewReader(conn)
+	connectResp, err := http.ReadResponse(br, connectReq)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, connectResp.StatusCode)
+
+	// TLS handshake with the MITM'd proxy
+	tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
+	require.NoError(t, tlsConn.Handshake())
+
+	// Send an HTTP/1.1 request through the tunnel
+	httpReq, _ := http.NewRequest(http.MethodGet, srv.URL+"/test", nil)
+	require.NoError(t, httpReq.Write(tlsConn))
+
+	// Read response — must be HTTP/1.x, not HTTP/2.0
+	tlsBr := bufio.NewReader(tlsConn)
+	resp, err := http.ReadResponse(tlsBr, httpReq)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	assert.Equal(t, "hello", string(body))
+	assert.Equal(t, 1, resp.ProtoMajor,
+		"MITM'd client should receive HTTP/1.x response, got %s", resp.Proto)
+}
