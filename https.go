@@ -266,7 +266,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 
 				// Need to explicitly send 100 continue for clients that will wait indefinitely for confirmation.
 				if req.Header.Get("Expect") == "100-continue" {
-					io.WriteString(rawClientTls, "HTTP/1.1 100 Continue\r\n\r\n")
+					_, _ = io.WriteString(client, "HTTP/1.1 100 Continue\r\n\r\n")
 					// Strip the header before forwarding to upstream.
 					req.Header.Del("Expect")
 				}
