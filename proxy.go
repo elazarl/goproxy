@@ -94,9 +94,18 @@ func RemoveProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 	r.RequestURI = "" // this must be reset when serving a request with the client
 	ctx.Logf("Sending request %v %v", r.Method, r.URL.String())
 	if !ctx.Proxy.KeepAcceptEncoding {
-		// If no Accept-Encoding header exists, Transport will add the headers it can accept
-		// and would wrap the response body with the relevant reader.
-		r.Header.Del("Accept-Encoding")
+		if ctx.Proxy.Tr != nil && ctx.Proxy.Tr.DisableCompression {
+			// User explicitly disabled compression — strip the header
+			// entirely so no encoding is negotiated.
+			r.Header.Del("Accept-Encoding")
+		} else {
+			// Replace the client's Accept-Encoding with the encodings
+			// the proxy can transparently decompress: gzip and brotli.
+			// Setting this explicitly also prevents net/http.Transport
+			// from adding its own gzip-only header, which would bypass
+			// our decompression layer.
+			r.Header.Set("Accept-Encoding", "gzip, br")
+		}
 	}
 	// curl can add that, see
 	// https://jdebp.eu./FGA/web-proxy-connection-header.html

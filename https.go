@@ -333,6 +333,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 							return false
 						}
 						ctx.Logf("resp %v", resp.Status)
+
+						// Transparently decompress brotli/gzip for MITM'd HTTPS responses.
+						if !proxy.KeepAcceptEncoding {
+							decompressResponse(resp, req)
+						}
 					}
 					origBody := resp.Body
 					resp = proxy.filterResponse(resp, ctx)
