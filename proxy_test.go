@@ -508,8 +508,8 @@ func TestAcceptEncoding(t *testing.T) {
 		acceptEncoding     string
 		expectedValue      string
 	}{
-		{false, false, "", "gzip"},
-		{false, false, "identity", "gzip"},
+		{false, false, "", "gzip, br"},
+		{false, false, "identity", "gzip, br"},
 		{false, true, "", ""},
 		{false, true, "identity", ""},
 		{true, false, "", "gzip"},
