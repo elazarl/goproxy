@@ -1393,7 +1393,7 @@ func TestMITMResponseHTTP2ProtoVersion(t *testing.T) {
 
 	// Client talks HTTP/1.1 through the MITM proxy
 	proxyURL, _ := url.Parse(proxySrv.URL)
-	conn, err := net.DialContext(context.Background(), "tcp", proxyURL.Host)
+	conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyURL.Host)
 	require.NoError(t, err)
 	defer conn.Close()
 
