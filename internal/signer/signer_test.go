@@ -7,11 +7,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"os/exec"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/elazarl/goproxy"
 	"github.com/elazarl/goproxy/internal/signer"
@@ -28,18 +25,6 @@ type ConstantHanlder string
 
 func (h ConstantHanlder) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 	_, _ = io.WriteString(w, string(h))
-}
-
-func getBrowser(args []string) string {
-	for i, arg := range args {
-		if arg == "-browser" && i+1 < len(arg) {
-			return args[i+1]
-		}
-		if strings.HasPrefix(arg, "-browser=") {
-			return arg[len("-browser="):]
-		}
-	}
-	return ""
 }
 
 func testSignerX509(t *testing.T, ca tls.Certificate) {
@@ -87,12 +72,6 @@ func testSignerTLS(t *testing.T, ca tls.Certificate) {
 	orFatal(t, "io.ReadAll", err)
 	if string(txt) != expected {
 		t.Errorf("Expected '%s' got '%s'", expected, string(txt))
-	}
-	browser := getBrowser(os.Args)
-	if browser != "" {
-		ctx := context.Background()
-		_ = exec.CommandContext(ctx, browser, asLocalhost).Run()
-		time.Sleep(10 * time.Second)
 	}
 }
 
