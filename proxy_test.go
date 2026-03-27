@@ -8,8 +8,10 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
+	"html"
 	"io"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -37,10 +39,11 @@ var (
 type QueryHandler struct{}
 
 func (QueryHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	req.Body = http.MaxBytesReader(w, req.Body, 1024*1024)
 	if err := req.ParseForm(); err != nil {
 		panic(err)
 	}
-	_, _ = io.WriteString(w, req.Form.Get("result"))
+	_, _ = io.WriteString(w, html.EscapeString(req.Form.Get("result")))
 }
 
 type HeadersHandler struct{}
@@ -276,7 +279,8 @@ func TestContentType(t *testing.T) {
 
 func panicOnErr(err error, msg string) {
 	if err != nil {
-		log.Fatal(err.Error() + ":-" + msg)
+		slog.Error("Critical failure", "error", err, "context", msg)
+		os.Exit(1)
 	}
 }
 
