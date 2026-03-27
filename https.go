@@ -349,6 +349,14 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						resp.TransferEncoding = []string{"chunked"}
 					}
 
+					// The MITM'd client speaks HTTP/1.1, but the upstream
+					// response may have been received over HTTP/2. Normalize
+					// the protocol version so resp.Write() produces a valid
+					// HTTP/1.1 status line.
+					resp.Proto = "HTTP/1.1"
+					resp.ProtoMajor = 1
+					resp.ProtoMinor = 1
+
 					if isWebSocketHandshake(resp.Header) {
 						ctx.Logf("Response looks like websocket upgrade.")
 
