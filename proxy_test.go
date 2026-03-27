@@ -1393,12 +1393,12 @@ func TestMITMResponseHTTP2ProtoVersion(t *testing.T) {
 
 	// Client talks HTTP/1.1 through the MITM proxy
 	proxyURL, _ := url.Parse(proxySrv.URL)
-	conn, err := net.Dial("tcp", proxyURL.Host)
+	conn, err := net.DialContext(context.Background(), "tcp", proxyURL.Host)
 	require.NoError(t, err)
 	defer conn.Close()
 
 	// Send CONNECT
-	connectReq, _ := http.NewRequest(http.MethodConnect, srv.URL, nil)
+	connectReq, _ := http.NewRequestWithContext(context.Background(), http.MethodConnect, srv.URL, nil)
 	require.NoError(t, connectReq.Write(conn))
 	br := bufio.NewReader(conn)
 	connectResp, err := http.ReadResponse(br, connectReq)
@@ -1407,10 +1407,10 @@ func TestMITMResponseHTTP2ProtoVersion(t *testing.T) {
 
 	// TLS handshake with the MITM'd proxy
 	tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
-	require.NoError(t, tlsConn.Handshake())
+	require.NoError(t, tlsConn.HandshakeContext(context.Background()))
 
 	// Send an HTTP/1.1 request through the tunnel
-	httpReq, _ := http.NewRequest(http.MethodGet, srv.URL+"/test", nil)
+	httpReq, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL+"/test", nil)
 	require.NoError(t, httpReq.Write(tlsConn))
 
 	// Read response — must be HTTP/1.x, not HTTP/2.0
