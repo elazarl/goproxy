@@ -264,6 +264,13 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					return
 				}
 
+				// When receiving an Expect: 100-continue header from the client, we need to respond
+				// with a 100 Continue status code before we can read the body of the request.
+				// Some clients will wait for the 100 Continue response before sending the body.
+				if req.Header.Get("Expect") == "100-continue" {
+					io.WriteString(rawClientTls, "HTTP/1.1 100 Continue\r\n\r\n")
+				}
+
 				// since we're converting the request, need to carry over the
 				// original connecting IP as well
 				req.RemoteAddr = r.RemoteAddr
