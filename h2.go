@@ -116,17 +116,13 @@ func proxyFrame(fr *http2.Framer) error {
 		if !ok {
 			return ErrInvalidH2Frame
 		}
-		terr := fr.WriteData(tf.StreamID, tf.StreamEnded(), tf.Data())
-		if terr == nil && tf.StreamEnded() {
-			terr = io.EOF
-		}
-		return terr
+		return fr.WriteData(tf.StreamID, tf.StreamEnded(), tf.Data())
 	case http2.FrameHeaders:
 		tf, ok := f.(*http2.HeadersFrame)
 		if !ok {
 			return ErrInvalidH2Frame
 		}
-		terr := fr.WriteHeaders(http2.HeadersFrameParam{
+		return fr.WriteHeaders(http2.HeadersFrameParam{
 			StreamID:      tf.StreamID,
 			BlockFragment: tf.HeaderBlockFragment(),
 			EndStream:     tf.StreamEnded(),
@@ -134,10 +130,6 @@ func proxyFrame(fr *http2.Framer) error {
 			PadLength:     0,
 			Priority:      tf.Priority,
 		})
-		if terr == nil && tf.StreamEnded() {
-			terr = io.EOF
-		}
-		return terr
 	case http2.FrameContinuation:
 		tf, ok := f.(*http2.ContinuationFrame)
 		if !ok {
