@@ -5,6 +5,10 @@ import (
 	"crypto/x509"
 )
 
+// GoproxyCa is the built-in self-signed CA certificate used by default for MITM interception.
+// It is loaded at package initialization from CA_CERT and CA_KEY.
+// You can replace it with your own CA by calling TLSConfigFromCA with a different certificate
+// and assigning the result to ConnectAction.TLSConfig.
 var GoproxyCa tls.Certificate
 
 func init() {
@@ -29,6 +33,10 @@ var defaultTLSConfig = &tls.Config{
 	InsecureSkipVerify: true,
 }
 
+// CA_CERT is the PEM-encoded certificate of the built-in proxy CA.
+// It is used together with CA_KEY to initialize GoproxyCa at startup.
+// Expose it to clients so they can import and trust the proxy CA,
+// which is required to avoid TLS errors during MITM interception.
 var CA_CERT = []byte(`-----BEGIN CERTIFICATE-----
 MIIF9DCCA9ygAwIBAgIJAODqYUwoVjJkMA0GCSqGSIb3DQEBCwUAMIGOMQswCQYD
 VQQGEwJJTDEPMA0GA1UECAwGQ2VudGVyMQwwCgYDVQQHDANMb2QxEDAOBgNVBAoM
@@ -64,6 +72,8 @@ NCNwK5Yl6HuvF97CIH5CdgO+5C7KifUtqTOL8pQKbNwy0S3sNYvB+njGvRpR7pKV
 BUnFpB/Atptqr4CUlTXrc5IPLAqAfmwk5IKcwy3EXUbruf9Dwz69YA==
 -----END CERTIFICATE-----`)
 
+// CA_KEY is the PEM-encoded RSA private key of the built-in proxy CA.
+// It is used together with CA_CERT to initialize GoproxyCa at startup.
 var CA_KEY = []byte(`-----BEGIN RSA PRIVATE KEY-----
 MIIJKAIBAAKCAgEAnhDL4fqGGhjWzRBFy8iHGuNIdo79FtoWPevCpyek6AWrTuBF
 0j3dzRMUpAkemC/p94tGES9f9iWUVi7gnfmUz1lxhjiqUoW5K1xfwmbx+qmC2YAw
