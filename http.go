@@ -58,10 +58,16 @@ func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request)
 	// We keep the original body to remove the header only if things changed.
 	// This will prevent problems with HEAD requests where there's no body, yet,
 	// the Content-Length header should be set.
-	if origBody != resp.Body {
+	announcedTrailers := declaredTrailers(resp)
+	if origBody != resp.Body || len(announcedTrailers) > 0 {
 		resp.Header.Del("Content-Length")
 	}
 	copyHeaders(w.Header(), resp.Header, proxy.KeepDestinationHeaders)
+	for trailer := range announcedTrailers {
+		if !headerDeclaresTrailer(resp.Header, trailer) {
+			w.Header().Add("Trailer", trailer)
+		}
+	}
 	w.WriteHeader(resp.StatusCode)
 
 	if isWebSocketHandshake(resp.Header) {
@@ -93,5 +99,51 @@ func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request)
 	if err := resp.Body.Close(); err != nil {
 		ctx.Warnf("Can't close response body %v", err)
 	}
+	if len(resp.Trailer) > 0 {
+		_ = http.NewResponseController(w).Flush()
+		writeTrailers(w.Header(), resp.Trailer, announcedTrailers)
+	}
 	ctx.Logf("Copied %v bytes to client error=%v", nr, err)
+}
+
+func declaredTrailers(resp *http.Response) map[string]struct{} {
+	trailers := map[string]struct{}{}
+	for trailer := range declaredTrailersFromHeader(resp.Header) {
+		trailers[trailer] = struct{}{}
+	}
+	for trailer := range resp.Trailer {
+		trailers[http.CanonicalHeaderKey(trailer)] = struct{}{}
+	}
+	return trailers
+}
+
+func declaredTrailersFromHeader(header http.Header) map[string]struct{} {
+	trailers := map[string]struct{}{}
+	for _, headerValue := range header.Values("Trailer") {
+		for _, trailer := range strings.Split(headerValue, ",") {
+			trailer = http.CanonicalHeaderKey(strings.TrimSpace(trailer))
+			if trailer == "" {
+				continue
+			}
+			trailers[trailer] = struct{}{}
+		}
+	}
+	return trailers
+}
+
+func headerDeclaresTrailer(header http.Header, trailer string) bool {
+	_, ok := declaredTrailersFromHeader(header)[http.CanonicalHeaderKey(trailer)]
+	return ok
+}
+
+func writeTrailers(dst, trailers http.Header, announced map[string]struct{}) {
+	for trailer, values := range trailers {
+		key := http.CanonicalHeaderKey(trailer)
+		if _, ok := announced[key]; !ok {
+			key = http.TrailerPrefix + key
+		}
+		for _, value := range values {
+			dst.Add(key, value)
+		}
+	}
 }
