@@ -344,9 +344,14 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						// We include 0 in resp.ContentLength <= 0 because 0 is the field zero value and some user
 						// might incorrectly leave it instead of setting it to -1 when the length is unknown (but we
 						// also check that the Content-Length header is empty, so there is no issue with empty bodies).
-						resp.ContentLength = -1
-						resp.Header.Del("Content-Length")
-						resp.TransferEncoding = []string{"chunked"}
+						//
+						// 304 Not Modified responses MUST NOT have a body (RFC 7232),
+						// so don't set Transfer-Encoding for them.
+						if resp.StatusCode != http.StatusNotModified {
+							resp.ContentLength = -1
+							resp.Header.Del("Content-Length")
+							resp.TransferEncoding = []string{"chunked"}
+						}
 					}
 
 					// The MITM'd client speaks HTTP/1.1, but the upstream
