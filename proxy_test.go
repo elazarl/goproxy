@@ -1428,3 +1428,72 @@ func TestMITMResponseHTTP2ProtoVersion(t *testing.T) {
 	assert.Equal(t, 1, resp.ProtoMajor,
 		"MITM'd client should receive HTTP/1.x response, got %s", resp.Proto)
 }
+
+// TestTrailersForwarded verifies that response trailers (e.g. gRPC's
+// grpc-status, grpc-message) emitted by the upstream server are forwarded
+// through the proxy to the client.
+//
+// Regression test for https://github.com/elazarl/goproxy/issues/408
+// ("Proxying grpc/h2c requests fail with 'server closed the stream
+// without sending trailers'").
+func TestTrailersForwarded(t *testing.T) {
+	const (
+		bodyText     = "hello world"
+		announcedKey = "Grpc-Status"
+		announcedVal = "0"
+		unannouncedK = "X-Late-Trailer"
+		unannouncedV = "abc"
+	)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Pre-announce one trailer (h1 chunked path).
+		w.Header().Set("Trailer", announcedKey)
+		w.Header().Set("Content-Type", "application/grpc")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, bodyText)
+		// Pre-announced: value goes under the unprefixed key.
+		w.Header().Set(announcedKey, announcedVal)
+		// Late / unannounced: must use TrailerPrefix on the upstream,
+		// which httputil-style proxy code paths must forward via
+		// TrailerPrefix on the client side too.
+		w.Header().Set(http.TrailerPrefix+unannouncedK, unannouncedV)
+	}))
+	defer upstream.Close()
+
+	client, proxySrv := oneShotProxy(goproxy.NewProxyHttpServer())
+	defer proxySrv.Close()
+
+	resp, err := client.Get(upstream.URL + "/anything")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, bodyText, string(body))
+
+	// resp.Trailer is only populated after the body is fully consumed.
+	require.Equal(t, announcedVal, resp.Trailer.Get(announcedKey),
+		"upstream pre-announced trailer should be forwarded by the proxy")
+	require.Equal(t, unannouncedV, resp.Trailer.Get(unannouncedK),
+		"upstream late/unannounced trailer should be forwarded by the proxy")
+}
+
+// TestNoTrailersUnchanged is a sanity check that responses without trailers
+// are unaffected by the trailer-forwarding code.
+func TestNoTrailersUnchanged(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "ok")
+	}))
+	defer upstream.Close()
+
+	client, proxySrv := oneShotProxy(goproxy.NewProxyHttpServer())
+	defer proxySrv.Close()
+
+	resp, err := client.Get(upstream.URL + "/")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, "ok", strings.TrimSpace(string(body)))
+	require.Empty(t, resp.Trailer)
+}
