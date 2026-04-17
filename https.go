@@ -239,6 +239,13 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				}
 
 				// Create a TLS connection over the TCP connection
+				// When AllowHTTP2 is set and the TLS config doesn't already
+				// specify protocols, advertise h2 so HTTP/2 clients can
+				// negotiate it and be handled by serveH2.
+				if proxy.AllowHTTP2 && len(tlsConfig.NextProtos) == 0 {
+					tlsConfig = tlsConfig.Clone()
+					tlsConfig.NextProtos = []string{"h2", "http/1.1"}
+				}
 				rawClientTls := tls.Server(client, tlsConfig)
 				client = rawClientTls
 				if err := rawClientTls.HandshakeContext(context.Background()); err != nil {
@@ -289,33 +296,31 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					// information URL in the context when does HTTPS MITM
 					ctx.Req = req
 
-					req, resp := proxy.filterRequest(req, ctx)
-					if resp == nil {
-						if req.Method == "PRI" {
-							// Handle HTTP/2 connections.
-
-							// NOTE: As of 1.22, golang's http module will not recognize or
-							// parse the HTTP Body for PRI requests. This leaves the body of
-							// the http2.ClientPreface ("SM\r\n\r\n") on the wire which we need
-							// to clear before setting up the connection.
-							reader := clientReader.Reader()
-							_, err := reader.Discard(6)
-							if err != nil {
-								ctx.Warnf("Failed to process HTTP2 client preface: %v", err)
-								return false
-							}
-							if !proxy.AllowHTTP2 {
-								ctx.Warnf("HTTP2 connection failed: disallowed")
-								return false
-							}
-							tr := H2Transport{reader, client, tlsConfig, host}
-							if _, err := tr.RoundTrip(req); err != nil {
-								ctx.Warnf("HTTP2 connection failed: %v", err)
-							} else {
-								ctx.Logf("Exiting on EOF")
-							}
+					// Handle HTTP/2 PRI method before the filter chain.
+					// The PRI request itself (with URL path "*") is the HTTP/2
+					// connection preface — not a real request. Per-stream
+					// filtering happens inside serveH2, where http2.Server
+					// decodes each stream and dispatches it through
+					// proxy.handleHttp (and thus filterRequest) with the
+					// real method, path, and headers.
+					if req.Method == "PRI" {
+						reader := clientReader.Reader()
+						_, err := reader.Discard(6)
+						if err != nil {
+							ctx.Warnf("Failed to process HTTP2 client preface: %v", err)
 							return false
 						}
+						if !proxy.AllowHTTP2 {
+							ctx.Warnf("HTTP2 connection failed: disallowed")
+							return false
+						}
+						proxy.serveH2(reader, client, host, r.RemoteAddr, ctx)
+						ctx.Logf("Exiting on EOF")
+						return false
+					}
+
+					req, resp := proxy.filterRequest(req, ctx)
+					if resp == nil {
 						if err != nil {
 							if req.URL != nil {
 								ctx.Warnf("Illegal URL %s", scheme+"://"+r.Host+req.URL.Path)

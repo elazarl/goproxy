@@ -1,208 +1,68 @@
 package goproxy
 
 import (
-	"bufio"
-	"context"
-	"crypto/tls"
-	"errors"
 	"io"
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"golang.org/x/net/http2"
 )
 
-var ErrInvalidH2Frame = errors.New("invalid H2 frame")
-
-// H2Transport is an implementation of RoundTripper that abstracts an entire
-// HTTP/2 session, sending all client frames to the server and responses back
-// to the client.
-type H2Transport struct {
-	ClientReader io.Reader
-	ClientWriter io.Writer
-	TLSConfig    *tls.Config
-	Host         string
+// h2Conn adapts an io.Reader/io.Writer pair into a net.Conn for
+// http2.Server.ServeConn.
+type h2Conn struct {
+	r    io.Reader
+	w    io.Writer
+	conn net.Conn
 }
 
-// RoundTrip executes an HTTP/2 session (including all contained streams).
-// The request and response are ignored but any error encountered during the
-// proxying from the session is returned as a result of the invocation.
-func (r *H2Transport) RoundTrip(_ *http.Request) (*http.Response, error) {
-	raddr := r.Host
-	if !strings.Contains(raddr, ":") {
-		raddr += ":443"
-	}
-	rawServerTLS, err := dial("tcp", raddr)
-	if err != nil {
-		return nil, err
-	}
-	defer rawServerTLS.Close()
-	// Ensure that we only advertise HTTP/2 as the accepted protocol.
-	r.TLSConfig.NextProtos = []string{http2.NextProtoTLS}
-	// Initiate TLS and check remote host name against certificate.
-	rawServerTLS = tls.Client(rawServerTLS, r.TLSConfig)
-	rawTLSConn, ok := rawServerTLS.(*tls.Conn)
-	if !ok {
-		return nil, errors.New("invalid TLS connection")
-	}
-	if err = rawTLSConn.HandshakeContext(context.Background()); err != nil {
-		return nil, err
-	}
-	if r.TLSConfig == nil || !r.TLSConfig.InsecureSkipVerify {
-		if err = rawTLSConn.VerifyHostname(raddr[:strings.LastIndex(raddr, ":")]); err != nil {
-			return nil, err
-		}
-	}
-	// Send new client preface to match the one parsed in req.
-	if _, err := io.WriteString(rawServerTLS, http2.ClientPreface); err != nil {
-		return nil, err
-	}
-	serverTLSReader := bufio.NewReader(rawServerTLS)
-	cToS := http2.NewFramer(rawServerTLS, r.ClientReader)
-	sToC := http2.NewFramer(r.ClientWriter, serverTLSReader)
-	errSToC := make(chan error)
-	errCToS := make(chan error)
-	go func() {
-		for {
-			if err := proxyFrame(sToC); err != nil {
-				errSToC <- err
-				break
-			}
-		}
-	}()
-	go func() {
-		for {
-			if err := proxyFrame(cToS); err != nil {
-				errCToS <- err
-				break
-			}
-		}
-	}()
-	for i := 0; i < 2; i++ {
-		select {
-		case err := <-errSToC:
-			if !errors.Is(err, io.EOF) {
-				return nil, err
-			}
-		case err := <-errCToS:
-			if !errors.Is(err, io.EOF) {
-				return nil, err
-			}
-		}
-	}
-	return nil, nil
+func (c *h2Conn) Read(p []byte) (int, error)        { return c.r.Read(p) }
+func (c *h2Conn) Write(p []byte) (int, error)       { return c.w.Write(p) }
+func (c *h2Conn) Close() error                      { return c.conn.Close() }
+func (c *h2Conn) LocalAddr() net.Addr               { return c.conn.LocalAddr() }
+func (c *h2Conn) RemoteAddr() net.Addr              { return c.conn.RemoteAddr() }
+func (c *h2Conn) SetDeadline(t time.Time) error     { return c.conn.SetDeadline(t) }
+func (c *h2Conn) SetReadDeadline(t time.Time) error { return c.conn.SetReadDeadline(t) }
+func (c *h2Conn) SetWriteDeadline(t time.Time) error {
+	return c.conn.SetWriteDeadline(t)
 }
 
-func dial(network, addr string) (c net.Conn, err error) {
-	addri, err := net.ResolveTCPAddr(network, addr)
-	if err != nil {
-		return
-	}
-	c, err = net.DialTCP(network, nil, addri)
-	return
-}
+// serveH2 terminates an HTTP/2 client session on the already-decrypted
+// conn, decoding each stream into a standard *http.Request and handing it
+// to the proxy's normal HTTP handler (filterRequest → RoundTrip →
+// filterResponse). The caller must have already consumed the HTTP/2
+// client preface ("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n").
+//
+// remoteAddr is the original client address (typically from the outer
+// CONNECT request) and is propagated to each decoded *http.Request so
+// downstream handlers see the real client rather than an intermediate.
+//
+// parentCtx, if non-nil, supplies UserData and RoundTripper that should
+// be inherited by every per-stream ProxyCtx — matching the behaviour of
+// the HTTP/1.1 path in handleHttps.
+func (proxy *ProxyHttpServer) serveH2(clientReader io.Reader, clientConn net.Conn, host, remoteAddr string, parentCtx *ProxyCtx) {
+	// Prepend the client preface so http2.Server.ServeConn can read it.
+	preface := io.MultiReader(strings.NewReader(http2.ClientPreface), clientReader)
+	conn := &h2Conn{r: preface, w: clientConn, conn: clientConn}
 
-// proxyFrame reads a single frame from the Framer and, when successful, writes
-// a ~identical one back to the Framer.
-func proxyFrame(fr *http2.Framer) error {
-	f, err := fr.ReadFrame()
-	if err != nil {
-		return err
-	}
-	switch f.Header().Type {
-	case http2.FrameData:
-		tf, ok := f.(*http2.DataFrame)
-		if !ok {
-			return ErrInvalidH2Frame
-		}
-		terr := fr.WriteData(tf.StreamID, tf.StreamEnded(), tf.Data())
-		if terr == nil && tf.StreamEnded() {
-			terr = io.EOF
-		}
-		return terr
-	case http2.FrameHeaders:
-		tf, ok := f.(*http2.HeadersFrame)
-		if !ok {
-			return ErrInvalidH2Frame
-		}
-		terr := fr.WriteHeaders(http2.HeadersFrameParam{
-			StreamID:      tf.StreamID,
-			BlockFragment: tf.HeaderBlockFragment(),
-			EndStream:     tf.StreamEnded(),
-			EndHeaders:    tf.HeadersEnded(),
-			PadLength:     0,
-			Priority:      tf.Priority,
-		})
-		if terr == nil && tf.StreamEnded() {
-			terr = io.EOF
-		}
-		return terr
-	case http2.FrameContinuation:
-		tf, ok := f.(*http2.ContinuationFrame)
-		if !ok {
-			return ErrInvalidH2Frame
-		}
-		return fr.WriteContinuation(tf.StreamID, tf.HeadersEnded(), tf.HeaderBlockFragment())
-	case http2.FrameGoAway:
-		tf, ok := f.(*http2.GoAwayFrame)
-		if !ok {
-			return ErrInvalidH2Frame
-		}
-		return fr.WriteGoAway(tf.StreamID, tf.ErrCode, tf.DebugData())
-	case http2.FramePing:
-		tf, ok := f.(*http2.PingFrame)
-		if !ok {
-			return ErrInvalidH2Frame
-		}
-		return fr.WritePing(tf.IsAck(), tf.Data)
-	case http2.FrameRSTStream:
-		tf, ok := f.(*http2.RSTStreamFrame)
-		if !ok {
-			return ErrInvalidH2Frame
-		}
-		return fr.WriteRSTStream(tf.StreamID, tf.ErrCode)
-	case http2.FrameSettings:
-		tf, ok := f.(*http2.SettingsFrame)
-		if !ok {
-			return ErrInvalidH2Frame
-		}
-		if tf.IsAck() {
-			return fr.WriteSettingsAck()
-		}
-		var settings []http2.Setting
-		// NOTE: If we want to parse headers, need to handle
-		// settings where s.ID == http2.SettingHeaderTableSize and
-		// accordingly update the Framer options.
-		for i := 0; i < tf.NumSettings(); i++ {
-			settings = append(settings, tf.Setting(i))
-		}
-		return fr.WriteSettings(settings...)
-	case http2.FrameWindowUpdate:
-		tf, ok := f.(*http2.WindowUpdateFrame)
-		if !ok {
-			return ErrInvalidH2Frame
-		}
-		return fr.WriteWindowUpdate(tf.StreamID, tf.Increment)
-	case http2.FramePriority:
-		tf, ok := f.(*http2.PriorityFrame)
-		if !ok {
-			return ErrInvalidH2Frame
-		}
-		return fr.WritePriority(tf.StreamID, tf.PriorityParam)
-	case http2.FramePushPromise:
-		tf, ok := f.(*http2.PushPromiseFrame)
-		if !ok {
-			return ErrInvalidH2Frame
-		}
-		return fr.WritePushPromise(http2.PushPromiseParam{
-			StreamID:      tf.StreamID,
-			PromiseID:     tf.PromiseID,
-			BlockFragment: tf.HeaderBlockFragment(),
-			EndHeaders:    tf.HeadersEnded(),
-			PadLength:     0,
-		})
-	default:
-		return errors.New("Unsupported frame: " + string(f.Header().Type))
-	}
+	h2s := &http2.Server{}
+	h2s.ServeConn(conn, &http2.ServeConnOpts{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			// Build an absolute URL so handleHttp treats it as a proxy request.
+			if req.URL.Host == "" {
+				req.URL.Host = host
+			}
+			if req.URL.Scheme == "" {
+				req.URL.Scheme = "https"
+			}
+			req.RequestURI = ""
+			if remoteAddr != "" {
+				req.RemoteAddr = remoteAddr
+			}
+
+			proxy.handleHttpWithParent(w, req, parentCtx)
+		}),
+	})
 }
