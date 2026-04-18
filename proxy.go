@@ -17,13 +17,21 @@ type ProxyHttpServer struct {
 	// KeepDestinationHeaders indicates the proxy should retain any headers present in the http.Response before proxying
 	KeepDestinationHeaders bool
 	// setting Verbose to true will log information on each request sent to the proxy
-	Verbose         bool
-	Logger          Logger
+	Verbose bool
+	// Logger is used to emit log messages. Defaults to log.New(os.Stderr, "", log.LstdFlags).
+	// Log output is only produced when Verbose is true.
+	// Any type implementing Printf satisfies the Logger interface.
+	Logger Logger
+	// NonproxyHandler is invoked for requests that are not proxy requests,
+	// i.e. requests with a relative path (e.g. GET /ping) instead of an absolute URL.
+	// Defaults to a handler that returns HTTP 500 with an explanatory message.
 	NonproxyHandler http.Handler
 	reqHandlers     []ReqHandler
 	respHandlers    []RespHandler
 	httpsHandlers   []HttpsHandler
-	Tr              *http.Transport
+	// Tr is the http.Transport used to send requests to destination servers.
+	// Defaults to a transport that skips TLS verification and reads proxy settings from environment variables.
+	Tr *http.Transport
 	// ConnectionErrHandler will be invoked to return a custom response
 	// to clients (written using conn parameter), when goproxy fails to connect
 	// to a target proxy.
@@ -32,11 +40,20 @@ type ProxyHttpServer struct {
 	ConnectionErrHandler func(conn io.Writer, ctx *ProxyCtx, err error)
 	// ConnectDial will be used to create TCP connections for CONNECT requests
 	// if nil Tr.Dial will be used
-	ConnectDial        func(network string, addr string) (net.Conn, error)
+	ConnectDial func(network string, addr string) (net.Conn, error)
+	// ConnectDialWithReq is like ConnectDial but also receives the original CONNECT request,
+	// allowing dial decisions based on request headers (e.g. target host, auth tokens).
+	// When both ConnectDialWithReq and ConnectDial are set, ConnectDialWithReq takes precedence.
 	ConnectDialWithReq func(req *http.Request, network string, addr string) (net.Conn, error)
-	CertStore          CertStorage
-	KeepHeader         bool
-	AllowHTTP2         bool
+	// CertStore is an optional cache for MITM certificates. When set, the proxy reuses
+	// previously generated TLS certificates for the same hostname, avoiding repeated
+	// CPU-intensive signing operations. Strongly recommended for production use.
+	CertStore CertStorage
+	// KeepHeader, when true, preserves the Proxy-Authorization header when forwarding
+	// requests to an upstream proxy. By default this header is stripped.
+	KeepHeader bool
+	// AllowHTTP2, when true, enables HTTP/2 support in the proxy. Disabled by default.
+	AllowHTTP2 bool
 	// When PreventCanonicalization is true, the header names present in
 	// the request sent through the proxy are directly passed to the destination server,
 	// instead of following the HTTP RFC for their canonicalization.
