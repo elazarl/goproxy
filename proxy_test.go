@@ -1058,6 +1058,37 @@ func TestResponseContentLength(t *testing.T) {
 	}
 }
 
+func TestHeaderMultipleValues(t *testing.T) {
+	// target server
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Test", "1")
+	}))
+	defer srv.Close()
+
+	// proxy server
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		resp.Header.Add("Test", "2")
+		return resp
+	})
+	proxySrv := httptest.NewServer(proxy)
+	defer proxySrv.Close()
+
+	// send request
+	client := &http.Client{}
+	client.Transport = &http.Transport{
+		Proxy: func(req *http.Request) (*url.URL, error) {
+			return url.Parse(proxySrv.URL)
+		},
+	}
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	resp, _ := client.Do(req)
+
+	assert.Len(t, resp.Header["Test"], 2)
+	assert.Contains(t, resp.Header["Test"], "1")
+	assert.Contains(t, resp.Header["Test"], "2")
+}
+
 func TestMITMResponseHTTP2MissingContentLength(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
