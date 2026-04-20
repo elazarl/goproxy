@@ -1463,7 +1463,7 @@ func TestTrailersForwarded(t *testing.T) {
 	client, proxySrv := oneShotProxy(goproxy.NewProxyHttpServer())
 	defer proxySrv.Close()
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, upstream.URL + "/anything", nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, upstream.URL+"/anything", nil)
 	require.NoError(t, err)
 
 	resp, err := client.Do(req)
@@ -1492,7 +1492,7 @@ func TestNoTrailersUnchanged(t *testing.T) {
 	client, proxySrv := oneShotProxy(goproxy.NewProxyHttpServer())
 	defer proxySrv.Close()
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, upstream.URL + "/", nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, upstream.URL+"/", nil)
 	require.NoError(t, err)
 
 	resp, err := client.Do(req)
