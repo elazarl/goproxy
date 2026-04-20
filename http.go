@@ -8,7 +8,19 @@ import (
 )
 
 func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request) {
+	proxy.handleHttpWithParent(w, r, nil)
+}
+
+// handleHttpWithParent is the internal entry point that allows a parent
+// ProxyCtx (e.g. the outer CONNECT context for HTTP/2 streams) to seed
+// UserData and RoundTripper for each per-request context. When parent is
+// nil it behaves identically to handleHttp.
+func (proxy *ProxyHttpServer) handleHttpWithParent(w http.ResponseWriter, r *http.Request, parent *ProxyCtx) {
 	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy}
+	if parent != nil {
+		ctx.UserData = parent.UserData
+		ctx.RoundTripper = parent.RoundTripper
+	}
 
 	ctx.Logf("Got request %v %v %v %v", r.URL.Path, r.Host, r.Method, r.URL.String())
 	if !r.URL.IsAbs() {

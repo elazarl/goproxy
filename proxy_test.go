@@ -28,6 +28,7 @@ import (
 	"github.com/elazarl/goproxy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/net/http2"
 )
 
 var (
@@ -69,6 +70,16 @@ func init() {
 }
 
 type ConstantHanlder string
+
+// readBufferedConn wraps a net.Conn with a bufio.Reader so that bytes already
+// buffered (e.g. after reading an HTTP CONNECT response) are not lost when
+// handing the connection to a TLS client.
+type readBufferedConn struct {
+	net.Conn
+	r *bufio.Reader
+}
+
+func (c *readBufferedConn) Read(p []byte) (int, error) { return c.r.Read(p) }
 
 func (h ConstantHanlder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.WriteString(w, string(h))
@@ -1533,4 +1544,211 @@ func TestNoTrailersUnchanged(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "ok", strings.TrimSpace(string(body)))
 	require.Empty(t, resp.Trailer)
+}
+
+func TestH2MitmPassthrough(t *testing.T) {
+	env := newH2TestEnv(t, h2EchoPath)
+
+	resp, body := env.get(t, "/test-path")
+	assert.Equal(t, "/test-path", body)
+	assert.Equal(t, "HTTP/2.0", resp.Proto)
+}
+
+func TestH2MitmRequestFilter(t *testing.T) {
+	env := newH2TestEnv(t, h2EchoPath)
+
+	// Block /blocked, allow everything else.
+	env.proxy.OnRequest(goproxy.ReqConditionFunc(func(req *http.Request, _ *goproxy.ProxyCtx) bool {
+		return strings.Contains(req.URL.Path, "/blocked")
+	})).DoFunc(func(req *http.Request, _ *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		return req, goproxy.NewResponse(req, goproxy.ContentTypeText, http.StatusForbidden, "blocked")
+	})
+
+	resp, body := env.get(t, "/allowed")
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "/allowed", body)
+
+	resp, body = env.get(t, "/blocked")
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	assert.Equal(t, "blocked", body)
+}
+
+func TestH2MitmResponseFilter(t *testing.T) {
+	// X-Original is set by the upstream; X-Proxy is added by the proxy's
+	// OnResponse hook. Asserting both arrive at the client proves the
+	// response filter augments headers rather than replacing them.
+	env := newH2TestEnv(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("X-Original", "yes")
+		_, _ = io.WriteString(w, "original")
+	})
+
+	env.proxy.OnResponse().DoFunc(func(resp *http.Response, _ *goproxy.ProxyCtx) *http.Response {
+		resp.Header.Set("X-Proxy", "injected")
+		return resp
+	})
+
+	resp, body := env.get(t, "/test")
+	assert.Equal(t, "original", body)
+	assert.Equal(t, "yes", resp.Header.Get("X-Original"))
+	assert.Equal(t, "injected", resp.Header.Get("X-Proxy"))
+}
+
+func TestH2MitmRewriteRequestHeaders(t *testing.T) {
+	env := newH2TestEnv(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, html.EscapeString(r.Header.Get("X-Custom")))
+	})
+
+	env.proxy.OnRequest().DoFunc(func(req *http.Request, _ *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		req.Header.Set("X-Custom", "from-proxy")
+		return req, nil
+	})
+
+	_, body := env.get(t, "/echo")
+	assert.Equal(t, "from-proxy", body)
+}
+
+func TestH2MitmRewriteURL(t *testing.T) {
+	env := newH2TestEnv(t, h2EchoPath)
+
+	env.proxy.OnRequest().DoFunc(func(req *http.Request, _ *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		req.URL.Path = "/rewritten"
+		return req, nil
+	})
+
+	_, body := env.get(t, "/original")
+	assert.Equal(t, "/rewritten", body)
+}
+
+func TestH2MitmRewriteResponseBody(t *testing.T) {
+	env := newH2TestEnv(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "original-body")
+	})
+
+	env.proxy.OnResponse().DoFunc(func(resp *http.Response, _ *goproxy.ProxyCtx) *http.Response {
+		resp.Body = io.NopCloser(strings.NewReader("replaced-body"))
+		return resp
+	})
+
+	_, body := env.get(t, "/test")
+	assert.Equal(t, "replaced-body", body)
+}
+
+func TestH2MitmMultipleStreams(t *testing.T) {
+	env := newH2TestEnv(t, h2EchoPath)
+
+	for i := 0; i < 5; i++ {
+		path := fmt.Sprintf("/stream-%d", i)
+		resp, body := env.get(t, path)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, path, body)
+	}
+}
+
+// --- H2 test helpers ---
+
+// h2EchoPath is a minimal upstream handler that echoes the request path.
+func h2EchoPath(w http.ResponseWriter, r *http.Request) {
+	_, _ = io.WriteString(w, html.EscapeString(r.URL.Path))
+}
+
+// h2TestEnv bundles a goproxy MITM proxy, an HTTP/2 upstream server, and a
+// lazy HTTP/2 client that tunnels through the proxy via CONNECT. All
+// resources are cleaned up via t.Cleanup.
+type h2TestEnv struct {
+	proxy       *goproxy.ProxyHttpServer
+	proxyURL    *url.URL
+	upstream    *httptest.Server
+	upstreamURL *url.URL
+
+	t      *testing.T
+	client *http.Client // lazily created so handler-registration tests can run before any request
+}
+
+func newH2TestEnv(t *testing.T, handler http.HandlerFunc) *h2TestEnv {
+	t.Helper()
+
+	upstream := httptest.NewUnstartedServer(handler)
+	upstream.EnableHTTP2 = true
+	upstream.StartTLS()
+	t.Cleanup(upstream.Close)
+
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.AllowHTTP2 = true
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	proxySrv := httptest.NewServer(proxy)
+	t.Cleanup(proxySrv.Close)
+
+	return &h2TestEnv{
+		proxy:       proxy,
+		proxyURL:    mustParseURL(t, proxySrv.URL),
+		upstream:    upstream,
+		upstreamURL: mustParseURL(t, upstream.URL),
+		t:           t,
+	}
+}
+
+// get issues an HTTP/2 GET to the upstream at the given path and returns
+// the response and the full body. The response body is registered for
+// automatic cleanup.
+func (env *h2TestEnv) get(t *testing.T, path string) (*http.Response, string) {
+	t.Helper()
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://"+env.upstreamURL.Host+path, nil)
+	require.NoError(t, err)
+	resp, err := env.h2Client().Do(req)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = resp.Body.Close() })
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	return resp, string(body)
+}
+
+// h2Client opens (once per env) a CONNECT tunnel through the proxy to the
+// upstream, performs the inner TLS handshake with h2 ALPN, and returns an
+// http.Client whose http2.Transport is pinned to that single TLS connection.
+func (env *h2TestEnv) h2Client() *http.Client {
+	if env.client != nil {
+		return env.client
+	}
+	t := env.t
+	t.Helper()
+
+	conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", env.proxyURL.Host)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+
+	connectReq, err := http.NewRequestWithContext(
+		context.Background(), http.MethodConnect,
+		"https://"+env.upstreamURL.Host, nil,
+	)
+	require.NoError(t, err)
+	require.NoError(t, connectReq.Write(conn))
+
+	br := bufio.NewReader(conn)
+	connectResp, err := http.ReadResponse(br, connectReq)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, connectResp.StatusCode)
+
+	tlsConn := tls.Client(&readBufferedConn{Conn: conn, r: br}, &tls.Config{
+		InsecureSkipVerify: true,
+		NextProtos:         []string{"h2"},
+	})
+	require.NoError(t, tlsConn.HandshakeContext(context.Background()))
+
+	env.client = &http.Client{
+		Transport: &http2.Transport{
+			DialTLSContext: func(context.Context, string, string, *tls.Config) (net.Conn, error) {
+				return tlsConn, nil
+			},
+		},
+	}
+	return env.client
+}
+
+func mustParseURL(t *testing.T, raw string) *url.URL {
+	t.Helper()
+	u, err := url.Parse(raw)
+	require.NoError(t, err)
+	return u
 }
