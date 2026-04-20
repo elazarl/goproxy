@@ -79,8 +79,14 @@ func copyHeaders(dst, src http.Header, keepDestHeaders bool) {
 		}
 	}
 	for k, vs := range src {
-		// direct assignment to avoid canonicalization
-		dst[k] = append([]string(nil), vs...)
+		if keepDestHeaders {
+			// Append to existing values to preserve non-unique headers
+			// like Set-Cookie.
+			dst[k] = append(dst[k], vs...)
+		} else {
+			// direct assignment to avoid canonicalization
+			dst[k] = append([]string(nil), vs...)
+		}
 	}
 }
 
