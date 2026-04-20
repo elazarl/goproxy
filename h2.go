@@ -62,6 +62,16 @@ func (proxy *ProxyHttpServer) serveH2(
 			if req.URL.Scheme == "" {
 				req.URL.Scheme = "https"
 			}
+			// Drop the default port for the scheme so the URL serialization
+			// matches the HTTP/1.1 MITM path (which uses the CONNECT
+			// request's Host header, typically without :443/:80). This
+			// keeps URL-based logging and routing consistent across h1/h2.
+			if h, p, ok := strings.Cut(req.URL.Host, ":"); ok {
+				if (req.URL.Scheme == "https" && p == "443") ||
+					(req.URL.Scheme == "http" && p == "80") {
+					req.URL.Host = h
+				}
+			}
 			req.RequestURI = ""
 			if remoteAddr != "" {
 				req.RemoteAddr = remoteAddr
