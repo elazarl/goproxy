@@ -19,24 +19,58 @@ import (
 	"github.com/elazarl/goproxy/internal/signer"
 )
 
+// ConnectActionLiteral defines the action the proxy should take
+// when it receives an HTTP CONNECT request from a client.
 type ConnectActionLiteral int
 
 const (
-	ConnectAccept = iota
+	// ConnectAccept instructs the proxy to accept the CONNECT request
+	// and establish a transparent TCP tunnel to the destination host.
+	// The proxy will forward raw bytes in both directions without inspecting them.
+	ConnectAccept ConnectActionLiteral = iota
+
+	// ConnectReject instructs the proxy to reject the CONNECT request
+	// and immediately close the connection with the client.
 	ConnectReject
+
+	// ConnectMitm instructs the proxy to perform a Man-in-the-Middle (MITM)
+	// attack on the CONNECT tunnel. The proxy generates a dynamic TLS certificate
+	// for the target host, signed by its CA (see GoproxyCa), and establishes
+	// separate TLS connections with both the client and the destination server.
+	// All request and response handlers remain active on this intercepted connection.
 	ConnectMitm
+
+	// ConnectHijack instructs the proxy to hand the raw net.Conn to the function
+	// defined in ConnectAction.Hijack, giving full low-level control of the
+	// connection to the caller. The hijack function is responsible for sending
+	// an HTTP response (e.g. "HTTP/1.1 200 OK") back to the client.
 	ConnectHijack
-	// Deprecated: use ConnectMitm.
+
+	// ConnectHTTPMitm is deprecated: use ConnectMitm instead.
 	ConnectHTTPMitm
+
+	// ConnectProxyAuthHijack instructs the proxy to hijack the CONNECT connection
+	// after a proxy authentication failure, allowing the handler to send
+	// a custom authentication challenge or error response to the client.
 	ConnectProxyAuthHijack
 )
 
 var (
-	OkConnect   = &ConnectAction{Action: ConnectAccept, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
+	// OkConnect is a ready-to-use ConnectAction that accepts the CONNECT request
+	// and creates a transparent TCP tunnel to the destination host, using the built-in CA.
+	OkConnect = &ConnectAction{Action: ConnectAccept, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
+
+	// MitmConnect is a ready-to-use ConnectAction that performs MITM interception,
+	// signing dynamic TLS certificates with the built-in CA (GoproxyCa).
+	// Use proxy.CertStore to cache generated certificates and save CPU in production.
 	MitmConnect = &ConnectAction{Action: ConnectMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
-	// Deprecated: use MitmConnect.
+
+	// HTTPMitmConnect is deprecated: use MitmConnect instead.
 	HTTPMitmConnect = &ConnectAction{Action: ConnectHTTPMitm, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
-	RejectConnect   = &ConnectAction{Action: ConnectReject, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
+
+	// RejectConnect is a ready-to-use ConnectAction that rejects the CONNECT request
+	// and closes the connection with the client.
+	RejectConnect = &ConnectAction{Action: ConnectReject, TLSConfig: TLSConfigFromCA(&GoproxyCa)}
 )
 
 var _errorRespMaxLength int64 = 500
@@ -468,10 +502,19 @@ func dialerFromEnv(proxy *ProxyHttpServer) func(network, addr string) (net.Conn,
 	return proxy.NewConnectDialToProxy(httpsProxy)
 }
 
+// NewConnectDialToProxy returns a dial function that establishes TCP connections
+// through an upstream HTTP/HTTPS proxy using the CONNECT method.
+// Use it to set proxy.ConnectDial when chaining two proxy servers.
+// For authentication or other CONNECT request modifications, use NewConnectDialToProxyWithHandler instead.
 func (proxy *ProxyHttpServer) NewConnectDialToProxy(httpsProxy string) func(network, addr string) (net.Conn, error) {
 	return proxy.NewConnectDialToProxyWithHandler(httpsProxy, nil)
 }
 
+// NewConnectDialToProxyWithHandler returns a dial function that establishes TCP connections
+// through an upstream HTTP/HTTPS proxy using the CONNECT method, calling connectReqHandler
+// before sending the CONNECT request. Use connectReqHandler to add headers such as
+// Proxy-Authorization to authenticate with the upstream proxy.
+// If connectReqHandler is nil, the behavior is identical to NewConnectDialToProxy.
 func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(
 	httpsProxy string,
 	connectReqHandler func(req *http.Request),
@@ -570,6 +613,10 @@ func (proxy *ProxyHttpServer) NewConnectDialToProxyWithHandler(
 	return nil
 }
 
+// TLSConfigFromCA returns a TLSConfig function that generates dynamic TLS certificates
+// for each target host, signed by the given CA certificate.
+// The generated certificates are used during MITM interception (ConnectMitm).
+// If a CertStorage is set on the ProxyCtx, certificates are cached and reused to save CPU.
 func TLSConfigFromCA(ca *tls.Certificate) func(host string, ctx *ProxyCtx) (*tls.Config, error) {
 	return func(host string, ctx *ProxyCtx) (*tls.Config, error) {
 		var err error
