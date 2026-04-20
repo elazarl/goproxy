@@ -28,7 +28,6 @@ import (
 	"github.com/elazarl/goproxy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 	"golang.org/x/net/http2"
 )
 
@@ -1694,7 +1693,9 @@ func newH2TestEnv(t *testing.T, handler http.HandlerFunc) *h2TestEnv {
 func (env *h2TestEnv) get(t *testing.T, path string) (*http.Response, string) {
 	t.Helper()
 
-	resp, err := env.h2Client().Get("https://" + env.upstreamURL.Host + path)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://"+env.upstreamURL.Host+path, nil)
+	require.NoError(t, err)
+	resp, err := env.h2Client().Do(req)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = resp.Body.Close() })
 
@@ -1713,11 +1714,14 @@ func (env *h2TestEnv) h2Client() *http.Client {
 	t := env.t
 	t.Helper()
 
-	conn, err := net.Dial("tcp", env.proxyURL.Host)
+	conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", env.proxyURL.Host)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
 
-	connectReq, err := http.NewRequest(http.MethodConnect, "https://"+env.upstreamURL.Host, nil)
+	connectReq, err := http.NewRequestWithContext(
+		context.Background(), http.MethodConnect,
+		"https://"+env.upstreamURL.Host, nil,
+	)
 	require.NoError(t, err)
 	require.NoError(t, connectReq.Write(conn))
 

@@ -42,7 +42,12 @@ func (c *h2Conn) SetWriteDeadline(t time.Time) error {
 // parentCtx, if non-nil, supplies UserData and RoundTripper that should
 // be inherited by every per-stream ProxyCtx — matching the behaviour of
 // the HTTP/1.1 path in handleHttps.
-func (proxy *ProxyHttpServer) serveH2(clientReader io.Reader, clientConn net.Conn, host, remoteAddr string, parentCtx *ProxyCtx) {
+func (proxy *ProxyHttpServer) serveH2(
+	clientReader io.Reader,
+	clientConn net.Conn,
+	host, remoteAddr string,
+	parentCtx *ProxyCtx,
+) {
 	// Prepend the client preface so http2.Server.ServeConn can read it.
 	preface := io.MultiReader(strings.NewReader(http2.ClientPreface), clientReader)
 	conn := &h2Conn{r: preface, w: clientConn, conn: clientConn}
