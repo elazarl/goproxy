@@ -1495,7 +1495,7 @@ func TestNoTrailersUnchanged(t *testing.T) {
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, upstream.URL + "/", nil)
 	require.NoError(t, err)
 
-	resp, err := client.Do(upstream.URL + "/")
+	resp, err := client.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
