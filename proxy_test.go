@@ -1595,7 +1595,7 @@ func TestH2MitmResponseFilter(t *testing.T) {
 
 func TestH2MitmRewriteRequestHeaders(t *testing.T) {
 	env := newH2TestEnv(t, func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.WriteString(w, r.Header.Get("X-Custom"))
+		_, _ = io.WriteString(w, html.EscapeString(r.Header.Get("X-Custom")))
 	})
 
 	env.proxy.OnRequest().DoFunc(func(req *http.Request, _ *goproxy.ProxyCtx) (*http.Request, *http.Response) {
@@ -1648,7 +1648,7 @@ func TestH2MitmMultipleStreams(t *testing.T) {
 
 // h2EchoPath is a minimal upstream handler that echoes the request path.
 func h2EchoPath(w http.ResponseWriter, r *http.Request) {
-	_, _ = io.WriteString(w, r.URL.Path)
+	_, _ = io.WriteString(w, html.EscapeString(r.URL.Path))
 }
 
 // h2TestEnv bundles a goproxy MITM proxy, an HTTP/2 upstream server, and a
