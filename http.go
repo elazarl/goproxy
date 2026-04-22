@@ -27,6 +27,12 @@ func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request)
 		if err != nil {
 			ctx.Error = err
 		}
+
+		// Transparently decompress brotli/gzip responses when the proxy
+		// injected Accept-Encoding (KeepAcceptEncoding=false, the default).
+		if resp != nil && !proxy.KeepAcceptEncoding {
+			decompressResponse(resp, r)
+		}
 	}
 
 	var origBody io.ReadCloser
