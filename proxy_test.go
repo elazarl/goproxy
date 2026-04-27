@@ -316,6 +316,7 @@ func TestChangeResp(t *testing.T) {
 
 func TestSimpleMitm(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
+	proxy.Tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	proxy.OnRequest(goproxy.ReqHostIs(https.Listener.Addr().String())).HandleConnect(goproxy.AlwaysMitm)
 	proxy.OnRequest(goproxy.ReqHostIs("no such host exists")).HandleConnect(goproxy.AlwaysMitm)
 
@@ -369,6 +370,7 @@ func TestSimpleMitm(t *testing.T) {
 
 func TestMitmMutateRequest(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
+	proxy.Tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		// We inject a header in the request
@@ -402,6 +404,7 @@ func TestConnectHandler(t *testing.T) {
 
 func TestMitmIsFiltered(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
+	proxy.Tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	proxy.OnRequest(goproxy.ReqHostIs(https.Listener.Addr().String())).HandleConnect(goproxy.AlwaysMitm)
 	proxy.OnRequest(goproxy.UrlIs("/momo")).DoFunc(
 		func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
@@ -636,6 +639,7 @@ func TestChunkedResponse(t *testing.T) {
 
 func TestGoproxyThroughProxy(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
+	proxy.Tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	proxy2 := goproxy.NewProxyHttpServer()
 	doubleString := func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
 		b, err := io.ReadAll(resp.Body)
@@ -660,6 +664,7 @@ func TestGoproxyThroughProxy(t *testing.T) {
 
 func TestHttpProxyAddrsFromEnv(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
+	proxy.Tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	doubleString := func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
 		b, err := io.ReadAll(resp.Body)
 		panicOnErr(err, "readAll resp")
@@ -787,6 +792,7 @@ func TestSelfRequest(t *testing.T) {
 
 func TestHasGoproxyCA(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
+	proxy.Tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 	s := httptest.NewServer(proxy)
 
@@ -846,6 +852,7 @@ func TestProxyWithCertStorage(t *testing.T) {
 	tcs := newTestCertStorage()
 	t.Logf("TestProxyWithCertStorage started")
 	proxy := goproxy.NewProxyHttpServer()
+	proxy.Tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	proxy.CertStore = tcs
 	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
@@ -1156,6 +1163,7 @@ func TestMITMResponseHTTP2MissingContentLength(t *testing.T) {
 
 func TestMITMResponseContentLength(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
+	proxy.Tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
 		// Don't touch the body at all
@@ -1261,6 +1269,7 @@ func TestMITMRequestCancel(t *testing.T) {
 
 	// proxy server
 	proxy := goproxy.NewProxyHttpServer()
+	proxy.Tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 	var request *http.Request
 	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
@@ -1351,6 +1360,7 @@ func TestPersistentMitmRequest(t *testing.T) {
 	defer backend.Close()
 
 	proxy := goproxy.NewProxyHttpServer()
+	proxy.Tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 	proxyServer := httptest.NewServer(proxy)
 	defer proxyServer.Close()
