@@ -379,9 +379,12 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						// might incorrectly leave it instead of setting it to -1 when the length is unknown (but we
 						// also check that the Content-Length header is empty, so there is no issue with empty bodies).
 						//
-						// 304 Not Modified responses MUST NOT have a body (RFC 7232),
-						// so don't set Transfer-Encoding for them.
-						if resp.StatusCode != http.StatusNotModified {
+						// 1xx, 204 No Content and 304 Not Modified responses MUST NOT
+						// have a body (RFC 7230 §3.3.2, RFC 7232 §4.1), so don't set
+						// Transfer-Encoding for them.
+						if resp.StatusCode != http.StatusNotModified &&
+							resp.StatusCode != http.StatusNoContent &&
+							resp.StatusCode >= 200 {
 							resp.ContentLength = -1
 							resp.Header.Del("Content-Length")
 							resp.TransferEncoding = []string{"chunked"}
