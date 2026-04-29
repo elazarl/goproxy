@@ -1210,7 +1210,6 @@ func TestMITMEmptyBody(t *testing.T) {
 
 func TestMITMNoContentResponse(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Length", "0")
 		w.WriteHeader(http.StatusNotModified)
 	}))
 	defer srv.Close()
