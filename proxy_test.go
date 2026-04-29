@@ -1208,6 +1208,29 @@ func TestMITMEmptyBody(t *testing.T) {
 	assert.EqualValues(t, 0, resp.ContentLength)
 }
 
+func TestMITMNoContentResponse(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "0")
+		w.WriteHeader(http.StatusNotModified)
+	}))
+	defer srv.Close()
+
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.Tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	client, l := oneShotProxy(proxy)
+	defer l.Close()
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+
+	assert.Equal(t, http.StatusNotModified, resp.StatusCode)
+	assert.NotContains(t, resp.TransferEncoding, "chunked")
+}
+
 func TestMITMOverwriteAlreadyEmptyBody(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(nil)
