@@ -473,12 +473,20 @@ func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader) error {
 
 func copyAndClose(ctx *ProxyCtx, dst, src halfClosable, wg *sync.WaitGroup) {
 	_, err := io.Copy(dst, src)
-	if err != nil && !errors.Is(err, net.ErrClosed) {
-		ctx.Warnf("Error copying to client: %s", err.Error())
+	if err != nil {
+		if !errors.Is(err, net.ErrClosed) {
+			ctx.Warnf("Error copying to client: %s", err.Error())
+		}
+		// Fully close dst to unblock any goroutine blocked on
+		// io.Copy reading from it. Half-close (CloseWrite/CloseRead)
+		// would not interrupt a pending read, leaving the other
+		// goroutine stuck and the client connection never closed.
+		_ = dst.Close()
+		_ = src.Close()
+	} else {
+		_ = dst.CloseWrite()
+		_ = src.CloseRead()
 	}
-
-	_ = dst.CloseWrite()
-	_ = src.CloseRead()
 	wg.Done()
 }
 

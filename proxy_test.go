@@ -1566,3 +1566,86 @@ func TestNoTrailersUnchanged(t *testing.T) {
 	require.Equal(t, "ok", strings.TrimSpace(string(body)))
 	require.Empty(t, resp.Trailer)
 }
+
+// TestTransparentTunnelClosesClientConnOnTargetError verifies that when the
+// target connection closes unexpectedly during a transparent TCP tunnel
+// (ConnectAccept path), the client connection is also closed so the client
+// doesn't hang indefinitely.
+//
+// Regression test for https://github.com/elazarl/goproxy/issues/657
+func TestTransparentTunnelClosesClientConnOnTargetError(t *testing.T) {
+	// Target server: closes connection immediately after reading from client.
+	// This simulates a target IO error (timeout, connection reset).
+	targetListener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer targetListener.Close()
+
+	targetConnCh := make(chan net.Conn, 1)
+	go func() {
+		conn, err := targetListener.Accept()
+		if err != nil {
+			return
+		}
+		targetConnCh <- conn
+	}()
+
+	// Proxy server: transparent tunnel (ConnectAccept, the default).
+	// No HandleConnect handler means OkConnect (transparent tunnel) is used.
+	proxy := goproxy.NewProxyHttpServer()
+
+	proxyServer := httptest.NewServer(proxy)
+	defer proxyServer.Close()
+
+	proxyURL, err := url.Parse(proxyServer.URL)
+	require.NoError(t, err)
+
+	// Connect to proxy.
+	clientConn, err := net.Dial("tcp", proxyURL.Host)
+	require.NoError(t, err)
+	defer clientConn.Close()
+
+	// Send CONNECT request.
+	connectReq := &http.Request{
+		Method: http.MethodConnect,
+		URL:    &url.URL{Opaque: targetListener.Addr().String()},
+		Host:   targetListener.Addr().String(),
+		Header: make(http.Header),
+	}
+	require.NoError(t, connectReq.Write(clientConn))
+
+	// Read CONNECT response.
+	br := bufio.NewReader(clientConn)
+	connectResp, err := http.ReadResponse(br, connectReq)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, connectResp.StatusCode)
+
+	// Wait for target to accept connection.
+	var targetConn net.Conn
+	select {
+	case targetConn = <-targetConnCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for target connection")
+	}
+
+	// Send data through the tunnel so the target starts reading.
+	_, err = clientConn.Write([]byte("hello"))
+	require.NoError(t, err)
+
+	// Target closes connection (simulates IO error).
+	require.NoError(t, targetConn.Close())
+
+	// Verify client connection is closed within timeout.
+	done := make(chan struct{})
+	go func() {
+		buf := make([]byte, 1024)
+		_, _ = clientConn.Read(buf)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Connection was closed — this is the expected behavior.
+	case <-time.After(3 * time.Second):
+		t.Fatal("client connection was not closed after target closed; client would hang indefinitely")
+	}
+}
