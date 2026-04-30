@@ -1576,7 +1576,7 @@ func TestNoTrailersUnchanged(t *testing.T) {
 func TestTransparentTunnelClosesClientConnOnTargetError(t *testing.T) {
 	// Target server: closes connection immediately after reading from client.
 	// This simulates a target IO error (timeout, connection reset).
-	targetListener, err := net.Listen("tcp", "127.0.0.1:0")
+	targetListener, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	defer targetListener.Close()
 
@@ -1600,7 +1600,7 @@ func TestTransparentTunnelClosesClientConnOnTargetError(t *testing.T) {
 	require.NoError(t, err)
 
 	// Connect to proxy.
-	clientConn, err := net.Dial("tcp", proxyURL.Host)
+	clientConn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyURL.Host)
 	require.NoError(t, err)
 	defer clientConn.Close()
 
