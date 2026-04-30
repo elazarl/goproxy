@@ -342,7 +342,13 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 								ctx.Warnf("HTTP2 connection failed: disallowed")
 								return false
 							}
-							tr := H2Transport{reader, client, tlsConfig, host}
+							tlsCfg := proxy.Tr.TLSClientConfig
+							if tlsCfg == nil {
+								tlsCfg = &tls.Config{}
+							} else {
+								tlsCfg = tlsCfg.Clone()
+							}
+							tr := H2Transport{reader, client, tlsCfg, host}
 							if _, err := tr.RoundTrip(req); err != nil {
 								ctx.Warnf("HTTP2 connection failed: %v", err)
 							} else {
