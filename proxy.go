@@ -62,10 +62,8 @@ func copyHeaders(dst, src http.Header, keepDestHeaders bool) {
 		}
 	}
 	for k, vs := range src {
-		if keepDestHeaders {
-			// direct assignment to avoid canonicalization
-			dst[k] = append(dst[k], vs...)
-		}
+		// direct assignment to avoid canonicalization
+		dst[k] = append(dst[k], vs...)
 	}
 }
 
