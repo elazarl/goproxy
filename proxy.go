@@ -58,17 +58,13 @@ var hasPort = regexp.MustCompile(`:\d+$`)
 func copyHeaders(dst, src http.Header, keepDestHeaders bool) {
 	if !keepDestHeaders {
 		for k := range dst {
-			dst.Del(k)
+			delete(dst, k)
 		}
 	}
 	for k, vs := range src {
 		if keepDestHeaders {
-			// Append to existing values to preserve non-unique headers
-			// like Set-Cookie.
-			dst[k] = append(dst[k], vs...)
-		} else {
 			// direct assignment to avoid canonicalization
-			dst[k] = append([]string(nil), vs...)
+			dst[k] = append(dst[k], vs...)
 		}
 	}
 }
