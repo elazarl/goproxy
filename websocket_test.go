@@ -45,6 +45,7 @@ func TestWebSocketMitm(t *testing.T) {
 
 	// Start goproxy
 	proxy := goproxy.NewProxyHttpServer()
+	proxy.Tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 
 	proxyServer := httptest.NewServer(proxy)

@@ -294,6 +294,11 @@ func (pcond *ReqProxyConds) HandleConnectFunc(f func(host string, ctx *ProxyCtx)
 	pcond.HandleConnect(FuncHttpsHandler(f))
 }
 
+// HijackConnect registers a handler that takes full control of the raw net.Conn
+// for CONNECT requests that match the aggregated conditions.
+// The handler receives the original HTTP request, the raw client connection, and the proxy context.
+// It is the handler's responsibility to write an HTTP response (e.g. "HTTP/1.1 200 OK\r\n\r\n")
+// and close the connection when done.
 func (pcond *ReqProxyConds) HijackConnect(f func(req *http.Request, client net.Conn, ctx *ProxyCtx)) {
 	pcond.proxy.httpsHandlers = append(pcond.proxy.httpsHandlers,
 		FuncHttpsHandler(func(host string, ctx *ProxyCtx) (*ConnectAction, string) {
