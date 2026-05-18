@@ -3,14 +3,22 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"github.com/coder/websocket"
-	"github.com/elazarl/goproxy"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
 	"time"
+
+	"github.com/coder/websocket"
+	"github.com/elazarl/goproxy"
+)
+
+const (
+	echoAddr  = ":12345"
+	proxyAddr = ":54321"
+	proxyURL  = "http://localhost:54321"
+	echoURL   = "wss://localhost:12345"
 )
 
 func echo(w http.ResponseWriter, r *http.Request) {
@@ -36,25 +44,26 @@ func echo(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func StartEchoServer() {
+func startEchoServer() {
 	log.Println("Starting echo server")
 	go func() {
-		http.HandleFunc("/", echo)
-		err := http.ListenAndServeTLS(":12345", "localhost.pem", "localhost-key.pem", nil)
+		mux := http.NewServeMux()
+		mux.HandleFunc("/", echo)
+		err := http.ListenAndServeTLS(echoAddr, "localhost.pem", "localhost-key.pem", mux)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}()
 }
 
-func StartProxy() {
+func startProxy() {
 	log.Println("Starting proxy server")
 	go func() {
 		proxy := goproxy.NewProxyHttpServer()
 		proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 		proxy.Verbose = true
 
-		if err := http.ListenAndServe(":54321", proxy); err != nil {
+		if err := http.ListenAndServe(proxyAddr, proxy); err != nil {
 			log.Fatal(err)
 		}
 	}()
@@ -63,19 +72,16 @@ func StartProxy() {
 func main() {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
-	StartEchoServer()
-	StartProxy()
+	startEchoServer()
+	startProxy()
 
-	proxyUrl := "http://localhost:54321"
-	parsedProxy, err := url.Parse(proxyUrl)
+	parsedProxy, err := url.Parse(proxyURL)
 	if err != nil {
-		log.Fatal("unable to parse proxy URL")
+		log.Fatal("unable to parse proxy URL:", err)
 	}
 
 	ctx := context.Background()
-	endpointUrl := "wss://localhost:12345"
-
-	c, _, err := websocket.Dial(ctx, endpointUrl, &websocket.DialOptions{
+	c, _, err := websocket.Dial(ctx, echoURL, &websocket.DialOptions{
 		HTTPClient: &http.Client{
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{
@@ -89,6 +95,7 @@ func main() {
 	if err != nil {
 		log.Fatal("dial:", err)
 	}
+	defer c.Close(websocket.StatusNormalClosure, "")
 
 	done := make(chan struct{})
 

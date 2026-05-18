@@ -32,7 +32,9 @@ func NewResponse(r *http.Request, contentType string, status int, body string) *
 }
 
 const (
+	// ContentTypeText is the MIME type for plain text responses.
 	ContentTypeText = "text/plain"
+	// ContentTypeHtml is the MIME type for HTML responses.
 	ContentTypeHtml = "text/html"
 )
 

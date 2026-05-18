@@ -9,10 +9,13 @@ import (
 )
 
 func main() {
-	verbose := flag.Bool("v", false, "should every proxy request be logged to stdout")
-	addr := flag.String("addr", ":8080", "proxy listen address")
+	verboseLogging := flag.Bool("v", false, "log every proxy request to stdout")
+	listenAddr := flag.String("addr", ":8080", "proxy listen address")
 	flag.Parse()
+
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.Verbose = *verbose
-	log.Fatal(http.ListenAndServe(*addr, proxy))
+	proxy.Verbose = *verboseLogging
+
+	log.Printf("base proxy listening on %s", *listenAddr)
+	log.Fatal(http.ListenAndServe(*listenAddr, proxy))
 }

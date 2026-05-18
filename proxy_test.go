@@ -8,8 +8,10 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
+	"html"
 	"io"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -37,10 +39,11 @@ var (
 type QueryHandler struct{}
 
 func (QueryHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	req.Body = http.MaxBytesReader(w, req.Body, 1024*1024)
 	if err := req.ParseForm(); err != nil {
 		panic(err)
 	}
-	_, _ = io.WriteString(w, req.Form.Get("result"))
+	_, _ = io.WriteString(w, html.EscapeString(req.Form.Get("result")))
 }
 
 type HeadersHandler struct{}
@@ -276,7 +279,8 @@ func TestContentType(t *testing.T) {
 
 func panicOnErr(err error, msg string) {
 	if err != nil {
-		log.Fatal(err.Error() + ":-" + msg)
+		slog.Error("Critical failure", "error", err, "context", msg)
+		os.Exit(1)
 	}
 }
 
@@ -312,6 +316,7 @@ func TestChangeResp(t *testing.T) {
 
 func TestSimpleMitm(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
+	proxy.Tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	proxy.OnRequest(goproxy.ReqHostIs(https.Listener.Addr().String())).HandleConnect(goproxy.AlwaysMitm)
 	proxy.OnRequest(goproxy.ReqHostIs("no such host exists")).HandleConnect(goproxy.AlwaysMitm)
 
@@ -365,6 +370,7 @@ func TestSimpleMitm(t *testing.T) {
 
 func TestMitmMutateRequest(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
+	proxy.Tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		// We inject a header in the request
@@ -398,6 +404,7 @@ func TestConnectHandler(t *testing.T) {
 
 func TestMitmIsFiltered(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
+	proxy.Tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	proxy.OnRequest(goproxy.ReqHostIs(https.Listener.Addr().String())).HandleConnect(goproxy.AlwaysMitm)
 	proxy.OnRequest(goproxy.UrlIs("/momo")).DoFunc(
 		func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
@@ -632,6 +639,7 @@ func TestChunkedResponse(t *testing.T) {
 
 func TestGoproxyThroughProxy(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
+	proxy.Tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	proxy2 := goproxy.NewProxyHttpServer()
 	doubleString := func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
 		b, err := io.ReadAll(resp.Body)
@@ -656,6 +664,7 @@ func TestGoproxyThroughProxy(t *testing.T) {
 
 func TestHttpProxyAddrsFromEnv(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
+	proxy.Tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	doubleString := func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
 		b, err := io.ReadAll(resp.Body)
 		panicOnErr(err, "readAll resp")
@@ -783,6 +792,7 @@ func TestSelfRequest(t *testing.T) {
 
 func TestHasGoproxyCA(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
+	proxy.Tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 	s := httptest.NewServer(proxy)
 
@@ -842,6 +852,7 @@ func TestProxyWithCertStorage(t *testing.T) {
 	tcs := newTestCertStorage()
 	t.Logf("TestProxyWithCertStorage started")
 	proxy := goproxy.NewProxyHttpServer()
+	proxy.Tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	proxy.CertStore = tcs
 	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
@@ -1054,6 +1065,37 @@ func TestResponseContentLength(t *testing.T) {
 	}
 }
 
+func TestHeaderMultipleValues(t *testing.T) {
+	// target server
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Test", "1")
+	}))
+	defer srv.Close()
+
+	// proxy server
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		resp.Header.Add("Test", "2")
+		return resp
+	})
+	proxySrv := httptest.NewServer(proxy)
+	defer proxySrv.Close()
+
+	// send request
+	client := &http.Client{}
+	client.Transport = &http.Transport{
+		Proxy: func(req *http.Request) (*url.URL, error) {
+			return url.Parse(proxySrv.URL)
+		},
+	}
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	resp, _ := client.Do(req)
+
+	assert.Len(t, resp.Header["Test"], 2)
+	assert.Contains(t, resp.Header["Test"], "1")
+	assert.Contains(t, resp.Header["Test"], "2")
+}
+
 func TestMITMResponseHTTP2MissingContentLength(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -1121,6 +1163,7 @@ func TestMITMResponseHTTP2MissingContentLength(t *testing.T) {
 
 func TestMITMResponseContentLength(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
+	proxy.Tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
 		// Don't touch the body at all
@@ -1163,6 +1206,28 @@ func TestMITMEmptyBody(t *testing.T) {
 	_ = resp.Body.Close()
 
 	assert.EqualValues(t, 0, resp.ContentLength)
+}
+
+func TestMITMNoContentResponse(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotModified)
+	}))
+	defer srv.Close()
+
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.Tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	client, l := oneShotProxy(proxy)
+	defer l.Close()
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+
+	assert.Equal(t, http.StatusNotModified, resp.StatusCode)
+	assert.NotContains(t, resp.TransferEncoding, "chunked")
 }
 
 func TestMITMOverwriteAlreadyEmptyBody(t *testing.T) {
@@ -1226,6 +1291,7 @@ func TestMITMRequestCancel(t *testing.T) {
 
 	// proxy server
 	proxy := goproxy.NewProxyHttpServer()
+	proxy.Tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 	var request *http.Request
 	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
@@ -1316,6 +1382,7 @@ func TestPersistentMitmRequest(t *testing.T) {
 	defer backend.Close()
 
 	proxy := goproxy.NewProxyHttpServer()
+	proxy.Tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 	proxyServer := httptest.NewServer(proxy)
 	defer proxyServer.Close()
@@ -1362,5 +1429,223 @@ func TestPersistentMitmRequest(t *testing.T) {
 		case 1:
 			assert.True(t, connReused)
 		}
+	}
+}
+
+func TestMITMResponseHTTP2ProtoVersion(t *testing.T) {
+	// Upstream HTTP/2 server
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("hello"))
+	})
+	srv := httptest.NewUnstartedServer(handler)
+	srv.EnableHTTP2 = true
+	srv.StartTLS()
+	defer srv.Close()
+
+	// Proxy with MITM and HTTP/2 upstream transport
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	proxy.Tr = &http.Transport{
+		ForceAttemptHTTP2: true,
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+			NextProtos:         []string{"h2"},
+		},
+	}
+
+	proxySrv := httptest.NewServer(proxy)
+	defer proxySrv.Close()
+
+	// Client talks HTTP/1.1 through the MITM proxy
+	proxyURL, _ := url.Parse(proxySrv.URL)
+	conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyURL.Host)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	// Send CONNECT
+	connectReq, _ := http.NewRequestWithContext(context.Background(), http.MethodConnect, srv.URL, nil)
+	require.NoError(t, connectReq.Write(conn))
+	br := bufio.NewReader(conn)
+	connectResp, err := http.ReadResponse(br, connectReq)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, connectResp.StatusCode)
+
+	// TLS handshake with the MITM'd proxy
+	tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
+	require.NoError(t, tlsConn.HandshakeContext(context.Background()))
+
+	// Send an HTTP/1.1 request through the tunnel
+	httpReq, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL+"/test", nil)
+	require.NoError(t, httpReq.Write(tlsConn))
+
+	// Read response — must be HTTP/1.x, not HTTP/2.0
+	tlsBr := bufio.NewReader(tlsConn)
+	resp, err := http.ReadResponse(tlsBr, httpReq)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	assert.Equal(t, "hello", string(body))
+	assert.Equal(t, 1, resp.ProtoMajor,
+		"MITM'd client should receive HTTP/1.x response, got %s", resp.Proto)
+}
+
+// TestTrailersForwarded verifies that response trailers (e.g. gRPC's
+// grpc-status, grpc-message) emitted by the upstream server are forwarded
+// through the proxy to the client.
+//
+// Regression test for https://github.com/elazarl/goproxy/issues/408
+// ("Proxying grpc/h2c requests fail with 'server closed the stream
+// without sending trailers'").
+func TestTrailersForwarded(t *testing.T) {
+	const (
+		bodyText     = "hello world"
+		announcedKey = "Grpc-Status"
+		announcedVal = "0"
+		unannouncedK = "X-Late-Trailer"
+		unannouncedV = "abc"
+	)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Pre-announce one trailer (h1 chunked path).
+		w.Header().Set("Trailer", announcedKey)
+		w.Header().Set("Content-Type", "application/grpc")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, bodyText)
+		// Pre-announced: value goes under the unprefixed key.
+		w.Header().Set(announcedKey, announcedVal)
+		// Late / unannounced: must use TrailerPrefix on the upstream,
+		// which httputil-style proxy code paths must forward via
+		// TrailerPrefix on the client side too.
+		w.Header().Set(http.TrailerPrefix+unannouncedK, unannouncedV)
+	}))
+	defer upstream.Close()
+
+	client, proxySrv := oneShotProxy(goproxy.NewProxyHttpServer())
+	defer proxySrv.Close()
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, upstream.URL+"/anything", nil)
+	require.NoError(t, err)
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, bodyText, string(body))
+
+	// resp.Trailer is only populated after the body is fully consumed.
+	require.Equal(t, announcedVal, resp.Trailer.Get(announcedKey),
+		"upstream pre-announced trailer should be forwarded by the proxy")
+	require.Equal(t, unannouncedV, resp.Trailer.Get(unannouncedK),
+		"upstream late/unannounced trailer should be forwarded by the proxy")
+}
+
+// TestNoTrailersUnchanged is a sanity check that responses without trailers
+// are unaffected by the trailer-forwarding code.
+func TestNoTrailersUnchanged(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "ok")
+	}))
+	defer upstream.Close()
+
+	client, proxySrv := oneShotProxy(goproxy.NewProxyHttpServer())
+	defer proxySrv.Close()
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, upstream.URL+"/", nil)
+	require.NoError(t, err)
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, "ok", strings.TrimSpace(string(body)))
+	require.Empty(t, resp.Trailer)
+}
+
+// TestTransparentTunnelClosesClientConnOnTargetError verifies that when the
+// target connection closes unexpectedly during a transparent TCP tunnel
+// (ConnectAccept path), the client connection is also closed so the client
+// doesn't hang indefinitely.
+//
+// Regression test for https://github.com/elazarl/goproxy/issues/657
+func TestTransparentTunnelClosesClientConnOnTargetError(t *testing.T) {
+	// Target server: closes connection immediately after reading from client.
+	// This simulates a target IO error (timeout, connection reset).
+	targetListener, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer targetListener.Close()
+
+	targetConnCh := make(chan net.Conn, 1)
+	go func() {
+		conn, err := targetListener.Accept()
+		if err != nil {
+			return
+		}
+		targetConnCh <- conn
+	}()
+
+	// Proxy server: transparent tunnel (ConnectAccept, the default).
+	// No HandleConnect handler means OkConnect (transparent tunnel) is used.
+	proxy := goproxy.NewProxyHttpServer()
+
+	proxyServer := httptest.NewServer(proxy)
+	defer proxyServer.Close()
+
+	proxyURL, err := url.Parse(proxyServer.URL)
+	require.NoError(t, err)
+
+	// Connect to proxy.
+	clientConn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyURL.Host)
+	require.NoError(t, err)
+	defer clientConn.Close()
+
+	// Send CONNECT request.
+	connectReq := &http.Request{
+		Method: http.MethodConnect,
+		URL:    &url.URL{Opaque: targetListener.Addr().String()},
+		Host:   targetListener.Addr().String(),
+		Header: make(http.Header),
+	}
+	require.NoError(t, connectReq.Write(clientConn))
+
+	// Read CONNECT response.
+	br := bufio.NewReader(clientConn)
+	connectResp, err := http.ReadResponse(br, connectReq)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, connectResp.StatusCode)
+
+	// Wait for target to accept connection.
+	var targetConn net.Conn
+	select {
+	case targetConn = <-targetConnCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for target connection")
+	}
+
+	// Send data through the tunnel so the target starts reading.
+	_, err = clientConn.Write([]byte("hello"))
+	require.NoError(t, err)
+
+	// Target closes connection (simulates IO error).
+	require.NoError(t, targetConn.Close())
+
+	// Verify client connection is closed within timeout.
+	done := make(chan struct{})
+	go func() {
+		buf := make([]byte, 1024)
+		_, _ = clientConn.Read(buf)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Connection was closed — this is the expected behavior.
+	case <-time.After(3 * time.Second):
+		t.Fatal("client connection was not closed after target closed; client would hang indefinitely")
 	}
 }

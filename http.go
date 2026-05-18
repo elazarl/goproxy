@@ -62,6 +62,20 @@ func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request)
 		resp.Header.Del("Content-Length")
 	}
 	copyHeaders(w.Header(), resp.Header, proxy.KeepDestinationHeaders)
+
+	// Announce trailers known at this point (HTTP/1.1 with pre-announced
+	// Trailer header). Setting "Trailer" before WriteHeader makes
+	// http.Server commit to chunked encoding (h1) or a trailing HEADERS
+	// frame (h2), which is required for any trailers to be forwarded.
+	// Mirrors net/http/httputil.ReverseProxy.
+	announcedTrailers := len(resp.Trailer)
+	if announcedTrailers > 0 {
+		trailerKeys := make([]string, 0, announcedTrailers)
+		for k := range resp.Trailer {
+			trailerKeys = append(trailerKeys, k)
+		}
+		w.Header().Add("Trailer", strings.Join(trailerKeys, ", "))
+	}
 	w.WriteHeader(resp.StatusCode)
 
 	if isWebSocketHandshake(resp.Header) {
@@ -92,6 +106,33 @@ func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request)
 	nr, err := io.Copy(copyWriter, resp.Body)
 	if err := resp.Body.Close(); err != nil {
 		ctx.Warnf("Can't close response body %v", err)
+	}
+
+	// Forward upstream response trailers. Two cases:
+	//   1. resp.Trailer count == announcedTrailers: every trailer was
+	//      pre-announced, so http.Server is already looking for them
+	//      under the unprefixed names — write values there.
+	//   2. resp.Trailer count > announcedTrailers (HTTP/2 servers, or
+	//      late additions): use http.TrailerPrefix so http.Server emits
+	//      them as trailers without needing the leading announcement.
+	//      We still need a Flush below to force chunked encoding for
+	//      bodies short enough that http.Server would otherwise inline
+	//      them with Content-Length and silently drop trailers.
+	if len(resp.Trailer) > 0 {
+		// Force chunking even when the body is small / fully buffered.
+		if rc := http.NewResponseController(w); rc != nil {
+			_ = rc.Flush()
+		}
+	}
+	if len(resp.Trailer) == announcedTrailers {
+		copyHeaders(w.Header(), resp.Trailer, proxy.KeepDestinationHeaders)
+	} else {
+		for k, vs := range resp.Trailer {
+			k = http.TrailerPrefix + k
+			for _, v := range vs {
+				w.Header().Add(k, v)
+			}
+		}
 	}
 	ctx.Logf("Copied %v bytes to client error=%v", nr, err)
 }
