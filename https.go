@@ -12,12 +12,14 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 
 	"github.com/elazarl/goproxy/internal/http1parser"
 	"github.com/elazarl/goproxy/internal/signer"
+	"golang.org/x/net/http2"
 )
 
 var responseHeadTerminator = []byte("\r\n\r\n")
@@ -199,21 +201,11 @@ var _ halfClosable = (*net.TCPConn)(nil)
 func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request) {
 	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy, certStore: proxy.CertStore}
 
-	hij, ok := w.(http.Hijacker)
-	if !ok {
-		panic("httpserver does not support hijacking")
-	}
-
-	proxyClient, _, e := hij.Hijack()
-	if e != nil {
-		panic("Cannot hijack connection " + e.Error())
-	}
-
+	// Run CONNECT handlers first, before any connection hijacking
 	ctx.Logf("Running %d CONNECT handlers", len(proxy.httpsHandlers))
 	todo, host := OkConnect, r.URL.Host
 	for i, h := range proxy.httpsHandlers {
 		newtodo, newhost := h.HandleConnect(host, ctx)
-
 		// If found a result, break the loop immediately
 		if newtodo != nil {
 			todo, host = newtodo, newhost
@@ -221,6 +213,91 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			break
 		}
 	}
+
+	hij, canHijack := w.(http.Hijacker)
+
+	// Handle actions that do NOT require a bidirectional tunnel
+	switch todo.Action {
+	case ConnectReject:
+		if ctx.Resp != nil {
+			if canHijack {
+				proxyClient, _, e := hij.Hijack()
+				if e != nil {
+					ctx.Warnf("Cannot hijack connection: %v", e)
+					return
+				}
+				defer proxyClient.Close()
+				if err := ctx.Resp.Write(proxyClient); err != nil {
+					ctx.Warnf("Cannot write response that reject http CONNECT: %v", err)
+				}
+			} else {
+				// HTTP/2: write the rejection as a proper HTTP response.
+				for k, vv := range ctx.Resp.Header {
+					for _, v := range vv {
+						w.Header().Add(k, v)
+					}
+				}
+				w.WriteHeader(ctx.Resp.StatusCode)
+				if ctx.Resp.Body != nil {
+					_, _ = io.Copy(w, ctx.Resp.Body)
+					_ = ctx.Resp.Body.Close()
+				}
+			}
+		} else if canHijack {
+			proxyClient, _, _ := hij.Hijack()
+			_ = proxyClient.Close()
+		} else {
+			http.Error(w, "Connection rejected", http.StatusForbidden)
+		}
+		return
+
+	case ConnectProxyAuthHijack:
+		if !canHijack {
+			// Extended-CONNECT over HTTP/2 does not support 407 hijack flow.
+			ctx.Warnf("ConnectProxyAuthHijack is not supported when the proxy is served over HTTP/2")
+			http.Error(w, "Proxy auth hijack not supported in HTTP/2 mode", http.StatusInternalServerError)
+			return
+		}
+		proxyClient, _, e := hij.Hijack()
+		if e != nil {
+			ctx.Warnf("Cannot hijack connection: %v", e)
+			return
+		}
+		_, _ = proxyClient.Write([]byte("HTTP/1.1 407 Proxy Authentication Required\r\n"))
+		todo.Hijack(r, proxyClient, ctx)
+		return
+	}
+
+	// All remaining actions need a bidirectional tunnel (proxyClient)
+	//
+	// In HTTP/1.1 mode we hijack the connection.
+	// In HTTP/2 mode (r.ProtoMajor == 2), we take the H2 path as explained in RFC 8441 extended-CONNECT.
+	var proxyClient net.Conn
+	isH2Tunnel := false
+
+	if canHijack {
+		var e error
+		proxyClient, _, e = hij.Hijack()
+		if e != nil {
+			ctx.Warnf("Cannot hijack connection: %v", e)
+			return
+		}
+	} else if r.ProtoMajor == 2 {
+		// The incoming CONNECT arrived over HTTP/2 (no hijacking available).
+		// Use h2StreamConn so reads/writes go directly against the H2 stream.
+		isH2Tunnel = true
+		// Wrap the H2 stream directly as a net.Conn — no intermediate pipe,
+		// no goroutines, no unnecessary copies.
+		proxyClient = newH2StreamConn(w, r)
+	} else {
+		// Hijacking is not supported and the request is not HTTP/2.
+		// This can happen if goproxy is wrapped by middleware that strips the
+		// Hijacker interface. There is no safe way to tunnel here.
+		ctx.Warnf("CONNECT: server does not support hijacking and request is not HTTP/2 (proto=%s)", r.Proto)
+		http.Error(w, "Proxy: cannot establish tunnel (no hijacking support)", http.StatusInternalServerError)
+		return
+	}
+
 	switch todo.Action {
 	case ConnectAccept:
 		if !hasPort.MatchString(host) {
@@ -233,7 +310,16 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			return
 		}
 		ctx.Logf("Accepting CONNECT to %s", host)
-		_, _ = proxyClient.Write([]byte("HTTP/1.0 200 Connection established\r\n\r\n"))
+		// In HTTP/1.1 mode the client is waiting for the 200 confirmation;
+		// In HTTP/2 mode we send it now, after we know the dial succeeded.
+		if isH2Tunnel {
+			w.WriteHeader(http.StatusOK)
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+		} else {
+			_, _ = proxyClient.Write([]byte("HTTP/1.0 200 Connection established\r\n\r\n"))
+		}
 
 		targetTCP, targetOK := targetSiteCon.(halfClosable)
 		proxyClientTCP, clientOK := proxyClient.(halfClosable)
@@ -283,8 +369,16 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 
 	case ConnectHijack:
 		todo.Hijack(r, proxyClient, ctx)
+
 	case ConnectHTTPMitm, ConnectMitm:
-		_, _ = proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+		if isH2Tunnel {
+			w.WriteHeader(http.StatusOK)
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+		} else {
+			_, _ = proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+		}
 		ctx.Logf("Received CONNECT request, mitm proxying it")
 		// this goes in a separate goroutine, so that the net/http server won't think we're
 		// still handling the request even after hijacking the connection. Those HTTP CONNECT
@@ -301,11 +395,8 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				_ = client.Close()
 			}()
 
-			var tlsConfig *tls.Config
-			scheme := "http"
 			if isTLS {
-				scheme = "https"
-				tlsConfig = defaultTLSConfig
+				tlsConfig := defaultTLSConfig
 				if todo.TLSConfig != nil {
 					var err error
 					tlsConfig, err = todo.TLSConfig(host, ctx)
@@ -315,6 +406,16 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					}
 				}
 
+				if proxy.AllowHTTP2 {
+					if !slices.Contains(tlsConfig.NextProtos, "h2") {
+						tlsConfig.NextProtos = append(tlsConfig.NextProtos, "h2")
+					}
+				}
+
+				if !slices.Contains(tlsConfig.NextProtos, "http/1.1") {
+					tlsConfig.NextProtos = append(tlsConfig.NextProtos, "http/1.1")
+				}
+
 				// Create a TLS connection over the TCP connection
 				rawClientTls := tls.Server(client, tlsConfig)
 				client = rawClientTls
@@ -322,6 +423,23 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					ctx.Warnf("Cannot handshake client %v %v", r.Host, err)
 					return
 				}
+				if proxy.AllowHTTP2 && rawClientTls.ConnectionState().NegotiatedProtocol == "h2" {
+					ctx.Logf("ALPN negotiated h2, starting http2.ServeConn")
+					proxy.serveH2Mitm(client, host, ctx)
+					return
+				}
+			} else if proxy.AllowHTTP2 {
+				// Handle cleartext HTTP/2 (h2c) by looking for the client preface.
+				preface, err := readBuffer.Peek(len(http2.ClientPreface))
+				if err == nil && string(preface) == http2.ClientPreface {
+					proxy.serveH2Mitm(client, host, ctx)
+					return
+				}
+			}
+
+			scheme := "http"
+			if isTLS {
+				scheme = "https"
 			}
 
 			clientReader := http1parser.NewRequestReader(proxy.PreventCanonicalization, client)
@@ -372,31 +490,6 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 
 					req, resp := proxy.filterRequest(req, ctx)
 					if resp == nil {
-						if req.Method == "PRI" {
-							// Handle HTTP/2 connections.
-
-							// NOTE: As of 1.22, golang's http module will not recognize or
-							// parse the HTTP Body for PRI requests. This leaves the body of
-							// the http2.ClientPreface ("SM\r\n\r\n") on the wire which we need
-							// to clear before setting up the connection.
-							reader := clientReader.Reader()
-							_, err := reader.Discard(6)
-							if err != nil {
-								ctx.Warnf("Failed to process HTTP2 client preface: %v", err)
-								return false
-							}
-							if !proxy.AllowHTTP2 {
-								ctx.Warnf("HTTP2 connection failed: disallowed")
-								return false
-							}
-							tr := H2Transport{reader, client, tlsConfig, host}
-							if _, err := tr.RoundTrip(req); err != nil {
-								ctx.Warnf("HTTP2 connection failed: %v", err)
-							} else {
-								ctx.Logf("Exiting on EOF")
-							}
-							return false
-						}
 						if err != nil {
 							if req.URL != nil {
 								ctx.Warnf("Illegal URL %s", scheme+"://"+r.Host+req.URL.Path)
@@ -482,35 +575,38 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			}
 			ctx.Logf("Exiting on EOF")
 		}()
-	case ConnectProxyAuthHijack:
-		_, _ = proxyClient.Write([]byte("HTTP/1.1 407 Proxy Authentication Required\r\n"))
-		todo.Hijack(r, proxyClient, ctx)
-	case ConnectReject:
-		if ctx.Resp != nil {
-			if err := ctx.Resp.Write(proxyClient); err != nil {
-				ctx.Warnf("Cannot write response that reject http CONNECT: %v", err)
-			}
-		}
-		_ = proxyClient.Close()
 	}
 }
 
-func httpError(w io.WriteCloser, ctx *ProxyCtx, err error) {
+func httpError(w io.Writer, ctx *ProxyCtx, err error) {
 	if ctx.Proxy.ConnectionErrHandler != nil {
 		ctx.Proxy.ConnectionErrHandler(w, ctx, err)
 	} else {
-		errorMessage := err.Error()
-		errStr := fmt.Sprintf(
-			"HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s",
-			len(errorMessage),
-			errorMessage,
-		)
-		if _, err := io.WriteString(w, errStr); err != nil {
-			ctx.Warnf("Error responding to client: %s", err)
+		var rw http.ResponseWriter
+		if r, ok := w.(http.ResponseWriter); ok {
+			rw = r
+		} else if h2, ok := w.(ResponseWriterProvider); ok {
+			rw = h2.ResponseWriter()
+		}
+
+		if rw != nil {
+			http.Error(rw, err.Error(), http.StatusBadGateway)
+		} else {
+			errorMessage := err.Error()
+			errStr := fmt.Sprintf(
+				"HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s",
+				len(errorMessage),
+				errorMessage,
+			)
+			if _, err := io.WriteString(w, errStr); err != nil {
+				ctx.Warnf("Error responding to client: %s", err)
+			}
 		}
 	}
-	if err := w.Close(); err != nil {
-		ctx.Warnf("Error closing client connection: %s", err)
+	if c, ok := w.(io.Closer); ok {
+		if err := c.Close(); err != nil {
+			ctx.Warnf("Error closing client connection: %s", err)
+		}
 	}
 }
 

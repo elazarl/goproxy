@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+
+	"golang.org/x/net/http2"
 )
 
 // The basic proxy type. Implements http.Handler.
@@ -68,6 +70,9 @@ type ProxyHttpServer struct {
 	// Accept-Encoding header. To disable this behavior, set
 	// Tr.DisableCompression to true.
 	KeepAcceptEncoding bool
+	// h2Server is the HTTP/2 server instance used for MITM.
+	// It is shared across all connections.
+	h2Server *http2.Server
 }
 
 var hasPort = regexp.MustCompile(`:\d+$`)
@@ -166,7 +171,8 @@ func NewProxyHttpServer() *ProxyHttpServer {
 		NonproxyHandler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, "This is a proxy server. Does not respond to non-proxy requests.", http.StatusInternalServerError)
 		}),
-		Tr: &http.Transport{TLSClientConfig: tlsClientSkipVerify, Proxy: http.ProxyFromEnvironment},
+		Tr:       &http.Transport{TLSClientConfig: tlsClientSkipVerify, Proxy: http.ProxyFromEnvironment},
+		h2Server: &http2.Server{},
 	}
 	proxy.ConnectDial = dialerFromEnv(&proxy)
 	return &proxy
