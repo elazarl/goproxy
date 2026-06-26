@@ -585,7 +585,7 @@ func httpError(w io.Writer, ctx *ProxyCtx, err error) {
 		var rw http.ResponseWriter
 		if r, ok := w.(http.ResponseWriter); ok {
 			rw = r
-		} else if h2, ok := w.(ResponseWriterProvider); ok {
+		} else if h2, ok := w.(responseWriterProvider); ok {
 			rw = h2.ResponseWriter()
 		}
 
