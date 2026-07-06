@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -183,11 +184,40 @@ func (proxy *ProxyHttpServer) handleH2MitmStream(
 		w.Header().Del("Content-Length")
 	}
 
+	// Announce pre-known trailers before WriteHeader (see handleHttp in http.go).
+	announcedTrailers := len(resp.Trailer)
+	if announcedTrailers > 0 {
+		trailerKeys := make([]string, 0, announcedTrailers)
+		for k := range resp.Trailer {
+			trailerKeys = append(trailerKeys, k)
+		}
+		w.Header().Add("Trailer", strings.Join(trailerKeys, ", "))
+	}
+
 	w.WriteHeader(resp.StatusCode)
 
 	if resp.Body != nil {
 		if _, err := io.Copy(w, resp.Body); err != nil {
 			ctx.Warnf("HTTP/2 MITM: error writing response body: %v", err)
+		}
+	}
+
+	// Forward response trailers after the body: pre-announced by name, the rest
+	// (h2/gRPC send them unannounced) via http.TrailerPrefix; Flush forces
+	// chunking. Mirrors handleHttp in http.go.
+	if len(resp.Trailer) > 0 {
+		if rc := http.NewResponseController(w); rc != nil {
+			_ = rc.Flush()
+		}
+		if len(resp.Trailer) == announcedTrailers {
+			copyHeaders(w.Header(), resp.Trailer, proxy.KeepDestinationHeaders)
+		} else {
+			for k, vs := range resp.Trailer {
+				k = http.TrailerPrefix + k
+				for _, v := range vs {
+					w.Header().Add(k, v)
+				}
+			}
 		}
 	}
 }
