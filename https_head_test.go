@@ -72,8 +72,7 @@ func TestMitmResponseHeadIsNotFragmented(t *testing.T) {
 	proxy.OnRequest(goproxy.ReqHostIs(upstream.Listener.Addr().String())).HandleConnect(goproxy.AlwaysMitm)
 
 	var writes atomic.Int32
-	lc := net.ListenConfig{}
-	ln, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
+	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	server := &http.Server{Handler: proxy, ReadHeaderTimeout: 10 * time.Second}
 	go func() {
