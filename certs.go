@@ -2,7 +2,6 @@ package goproxy
 
 import (
 	"crypto/tls"
-	"crypto/x509"
 )
 
 // GoproxyCa is the built-in self-signed CA certificate used by default for MITM interception.
@@ -20,10 +19,6 @@ func init() {
 	GoproxyCa, err = tls.X509KeyPair(CA_CERT, CA_KEY)
 	if err != nil {
 		panic("Error parsing builtin CA: " + err.Error())
-	}
-
-	if GoproxyCa.Leaf, err = x509.ParseCertificate(GoproxyCa.Certificate[0]); err != nil {
-		panic("Error parsing builtin CA leaf: " + err.Error())
 	}
 }
 
