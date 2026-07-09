@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/elazarl/goproxy/internal/http1parser"
 	"github.com/elazarl/goproxy/internal/signer"
@@ -317,54 +318,78 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			if f, ok := w.(http.Flusher); ok {
 				f.Flush()
 			}
-		} else {
-			_, _ = proxyClient.Write([]byte("HTTP/1.0 200 Connection established\r\n\r\n"))
-		}
 
-		targetTCP, targetOK := targetSiteCon.(halfClosable)
-		proxyClientTCP, clientOK := proxyClient.(halfClosable)
-		if targetOK && clientOK {
+			// H2 handler must block until the tunnel closes, the HTTP/2 server
+			// keeps the stream alive only while ServeHTTP is running.
+			var wg sync.WaitGroup
+			wg.Add(2)
 			go func() {
-				var wg sync.WaitGroup
-				wg.Add(2)
-				go copyAndClose(ctx, targetTCP, proxyClientTCP, &wg)
-				go copyAndClose(ctx, proxyClientTCP, targetTCP, &wg)
-				wg.Wait()
-				// Make sure to close the underlying TCP socket.
-				// CloseRead() and CloseWrite() keep it open until its timeout,
-				// causing error when there are thousands of requests.
-				proxyClientTCP.Close()
-				targetTCP.Close()
-			}()
-		} else {
-			// There is a race with the runtime here. In the case where the
-			// connection to the target site times out, we cannot control which
-			// io.Copy loop will receive the timeout signal first. This means
-			// that in some cases the error passed to the ConnErrorHandler will
-			// be the timeout error, and in other cases it will be an error raised
-			// by the use of a closed network connection.
-			//
-			// 2020/05/28 23:42:17 [001] WARN: Error copying to client: read tcp 127.0.0.1:33742->127.0.0.1:34763: i/o timeout
-			// 2020/05/28 23:42:17 [001] WARN: Error copying to client: read tcp 127.0.0.1:45145->127.0.0.1:60494: use of closed
-			//                                                          network connection
-			//
-			// It's also not possible to synchronize these connection closures due to
-			// TCP connections which are half-closed. When this happens, only the one
-			// side of the connection breaks out of its io.Copy loop. The other side
-			// of the connection remains open until it either times out or is reset by
-			// the client.
-			go func() {
+				defer wg.Done()
 				err := copyOrWarn(ctx, targetSiteCon, proxyClient)
 				if err != nil && proxy.ConnectionErrHandler != nil {
 					proxy.ConnectionErrHandler(proxyClient, ctx, err)
 				}
 				_ = targetSiteCon.Close()
+				// Goroutine 2 may be blocked writing to the H2 stream (flow-control
+				// stall). Set a past deadline to unblock it immediately.
+				_ = proxyClient.SetWriteDeadline(time.Now())
 			}()
-
 			go func() {
+				defer wg.Done()
 				_ = copyOrWarn(ctx, proxyClient, targetSiteCon)
+				// Close r.Body to unblock goroutine 1 if it is still reading from
+				// the H2 stream.
 				_ = proxyClient.Close()
 			}()
+			wg.Wait()
+		} else {
+			_, _ = proxyClient.Write([]byte("HTTP/1.0 200 Connection established\r\n\r\n"))
+
+			targetTCP, targetOK := targetSiteCon.(halfClosable)
+			proxyClientTCP, clientOK := proxyClient.(halfClosable)
+			if targetOK && clientOK {
+				go func() {
+					var wg sync.WaitGroup
+					wg.Add(2)
+					go copyAndClose(ctx, targetTCP, proxyClientTCP, &wg)
+					go copyAndClose(ctx, proxyClientTCP, targetTCP, &wg)
+					wg.Wait()
+					// Make sure to close the underlying TCP socket.
+					// CloseRead() and CloseWrite() keep it open until its timeout,
+					// causing error when there are thousands of requests.
+					proxyClientTCP.Close()
+					targetTCP.Close()
+				}()
+			} else {
+				// There is a race with the runtime here. In the case where the
+				// connection to the target site times out, we cannot control which
+				// io.Copy loop will receive the timeout signal first. This means
+				// that in some cases the error passed to the ConnErrorHandler will
+				// be the timeout error, and in other cases it will be an error raised
+				// by the use of a closed network connection.
+				//
+				// 2020/05/28 23:42:17 [001] WARN: Error copying to client: read tcp 127.0.0.1:33742->127.0.0.1:34763: i/o timeout
+				// 2020/05/28 23:42:17 [001] WARN: Error copying to client: read tcp 127.0.0.1:45145->127.0.0.1:60494: use of closed
+				//                                                          network connection
+				//
+				// It's also not possible to synchronize these connection closures due to
+				// TCP connections which are half-closed. When this happens, only the one
+				// side of the connection breaks out of its io.Copy loop. The other side
+				// of the connection remains open until it either times out or is reset by
+				// the client.
+				go func() {
+					err := copyOrWarn(ctx, targetSiteCon, proxyClient)
+					if err != nil && proxy.ConnectionErrHandler != nil {
+						proxy.ConnectionErrHandler(proxyClient, ctx, err)
+					}
+					_ = targetSiteCon.Close()
+				}()
+
+				go func() {
+					_ = copyOrWarn(ctx, proxyClient, targetSiteCon)
+					_ = proxyClient.Close()
+				}()
+			}
 		}
 
 	case ConnectHijack:
@@ -380,11 +405,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			_, _ = proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 		}
 		ctx.Logf("Received CONNECT request, mitm proxying it")
-		// this goes in a separate goroutine, so that the net/http server won't think we're
-		// still handling the request even after hijacking the connection. Those HTTP CONNECT
-		// request can take forever, and the server will be stuck when "closed".
-		// TODO: Allow Server.Close() mechanism to shut down this connection as nicely as possible
-		go func() {
+		// For HTTP/1.x (after Hijack), the MITM loop runs in a goroutine so the HTTP/1.x
+		// server is not blocked by the (potentially very long) tunnel and can shut down cleanly.
+		// For HTTP/2 (isH2Tunnel), the handler must block, the HTTP/2 server keeps the H2
+		// stream alive only while ServeHTTP is running; returning early closes the stream.
+		mitmWork := func() {
 			// Check if this is an HTTP or an HTTPS MITM request
 			readBuffer := bufio.NewReader(proxyClient)
 			peek, _ := readBuffer.Peek(1)
@@ -574,7 +599,12 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				}
 			}
 			ctx.Logf("Exiting on EOF")
-		}()
+		}
+		if isH2Tunnel {
+			mitmWork()
+		} else {
+			go mitmWork()
+		}
 	}
 }
 
