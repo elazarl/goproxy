@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"html"
 	"io"
 	"net"
@@ -15,6 +16,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/elazarl/goproxy"
 	"github.com/stretchr/testify/assert"
@@ -540,6 +542,168 @@ func createProxyClientH2(t *testing.T, proxyURL string) *http.Client {
 		Transport: tr,
 	}
 }
+
+// TestConnectAcceptProxyOverHTTP2 verifies transparent tunneling (ConnectAccept)
+// when the proxy itself is served over HTTP/2 (isH2Tunnel = true).
+func TestConnectAcceptProxyOverHTTP2(t *testing.T) {
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "hello-from-accept")
+	}))
+	defer target.Close()
+
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+		return goproxy.OkConnect, host
+	})
+
+	proxySrv := httptest.NewUnstartedServer(proxy)
+	proxySrv.EnableHTTP2 = true
+	proxySrv.StartTLS()
+	defer proxySrv.Close()
+
+	h2client := dialH2Proxy(t, proxySrv.URL)
+
+	targetURL, err := url.Parse(target.URL)
+	require.NoError(t, err)
+
+	// CONNECT over H2: the pipe is the bidirectional tunnel body.
+	pr, pw := io.Pipe()
+	connectReq, err := http.NewRequestWithContext(context.Background(), http.MethodConnect,
+		"https://"+targetURL.Host, pr)
+	require.NoError(t, err)
+
+	connectResp, err := h2client.RoundTrip(connectReq)
+	require.NoError(t, err)
+	defer connectResp.Body.Close()
+	require.Equal(t, http.StatusOK, connectResp.StatusCode)
+
+	tunnel := &h2TunnelConn{r: connectResp.Body, pw: pw}
+	_, err = fmt.Fprintf(tunnel, "GET / HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", targetURL.Host)
+	require.NoError(t, err)
+
+	resp, err := http.ReadResponse(bufio.NewReader(tunnel), nil)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Contains(t, string(body), "hello-from-accept")
+}
+
+// TestMitmProxyOverHTTP2 verifies MITM interception (ConnectMitm) when the proxy
+// itself is served over HTTP/2 (isH2Tunnel = true).
+func TestMitmProxyOverHTTP2(t *testing.T) {
+	target := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "hello-from-mitm-target")
+	}))
+	defer target.Close()
+
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.AllowHTTP2 = true
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	proxy.Tr = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+
+	mitmCalled := false
+	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		resp.Header.Set("X-Mitm-Proxy-H2", "intercepted")
+		mitmCalled = true
+		return resp
+	})
+
+	proxySrv := httptest.NewUnstartedServer(proxy)
+	proxySrv.EnableHTTP2 = true
+	proxySrv.StartTLS()
+	defer proxySrv.Close()
+
+	h2client := dialH2Proxy(t, proxySrv.URL)
+
+	targetURL, err := url.Parse(target.URL)
+	require.NoError(t, err)
+
+	pr, pw := io.Pipe()
+	connectReq, err := http.NewRequestWithContext(context.Background(), http.MethodConnect,
+		"https://"+targetURL.Host, pr)
+	require.NoError(t, err)
+
+	connectResp, err := h2client.RoundTrip(connectReq)
+	require.NoError(t, err)
+	defer connectResp.Body.Close()
+	require.Equal(t, http.StatusOK, connectResp.StatusCode)
+
+	// Do TLS over the H2 tunnel; the proxy has MITM'd it with GoproxyCa.
+	caPool := x509.NewCertPool()
+	caPool.AddCert(goproxy.GoproxyCa.Leaf)
+
+	tunnel := &h2TunnelConn{r: connectResp.Body, pw: pw}
+	tlsTunnel := tls.Client(tunnel, &tls.Config{
+		ServerName: targetURL.Hostname(),
+		RootCAs:    caPool,
+	})
+	require.NoError(t, tlsTunnel.HandshakeContext(context.Background()))
+
+	_, err = fmt.Fprintf(tlsTunnel, "GET / HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", targetURL.Host)
+	require.NoError(t, err)
+
+	resp, err := http.ReadResponse(bufio.NewReader(tlsTunnel), nil)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Contains(t, string(body), "hello-from-mitm-target")
+	assert.Equal(t, "intercepted", resp.Header.Get("X-Mitm-Proxy-H2"))
+	assert.True(t, mitmCalled)
+}
+
+// dialH2Proxy connects to proxyURL over TLS, negotiates H2, and returns an
+// *http2.ClientConn ready to send requests.
+func dialH2Proxy(t *testing.T, proxyURL string) *http2.ClientConn {
+	t.Helper()
+	parsed, err := url.Parse(proxyURL)
+	require.NoError(t, err)
+
+	conn, err := (&tls.Dialer{
+		Config: &tls.Config{
+			InsecureSkipVerify: true,
+			NextProtos:         []string{"h2"},
+		},
+	}).DialContext(context.Background(), "tcp", parsed.Host)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+
+	tlsConn, ok := conn.(*tls.Conn)
+	assert.True(t, ok)
+	require.Equal(t, "h2", tlsConn.ConnectionState().NegotiatedProtocol)
+
+	h2client, err := (&http2.Transport{}).NewClientConn(conn)
+	require.NoError(t, err)
+	return h2client
+}
+
+// h2TunnelConn wraps an HTTP/2 CONNECT stream as a net.Conn for use in tests.
+// r is the response body (proxy→client), pw is the pipe writer (client→proxy).
+type h2TunnelConn struct {
+	r  io.Reader
+	pw *io.PipeWriter
+}
+
+func (c *h2TunnelConn) Read(b []byte) (int, error)         { return c.r.Read(b) }
+func (c *h2TunnelConn) Write(b []byte) (int, error)        { return c.pw.Write(b) }
+func (c *h2TunnelConn) Close() error                       { return c.pw.Close() }
+func (c *h2TunnelConn) LocalAddr() net.Addr                { return h2testAddr("local") }
+func (c *h2TunnelConn) RemoteAddr() net.Addr               { return h2testAddr("remote") }
+func (c *h2TunnelConn) SetDeadline(_ time.Time) error      { return nil }
+func (c *h2TunnelConn) SetReadDeadline(_ time.Time) error  { return nil }
+func (c *h2TunnelConn) SetWriteDeadline(_ time.Time) error { return nil }
+
+type h2testAddr string
+
+func (a h2testAddr) Network() string { return "h2" }
+func (a h2testAddr) String() string  { return string(a) }
 
 type buffConn struct {
 	net.Conn
