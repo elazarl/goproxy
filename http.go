@@ -123,14 +123,14 @@ func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request)
 		if rc := http.NewResponseController(w); rc != nil {
 			_ = rc.Flush()
 		}
-	}
-	if len(resp.Trailer) == announcedTrailers {
-		copyHeaders(w.Header(), resp.Trailer, proxy.KeepDestinationHeaders)
-	} else {
-		for k, vs := range resp.Trailer {
-			k = http.TrailerPrefix + k
-			for _, v := range vs {
-				w.Header().Add(k, v)
+		if len(resp.Trailer) == announcedTrailers {
+			copyHeaders(w.Header(), resp.Trailer, proxy.KeepDestinationHeaders)
+		} else {
+			for k, vs := range resp.Trailer {
+				k = http.TrailerPrefix + k
+				for _, v := range vs {
+					w.Header().Add(k, v)
+				}
 			}
 		}
 	}
