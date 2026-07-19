@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"io"
+	"mime"
 	"net"
 	"net/http"
 	"strings"
@@ -197,8 +198,35 @@ func (proxy *ProxyHttpServer) handleH2MitmStream(
 	w.WriteHeader(resp.StatusCode)
 
 	if resp.Body != nil {
-		if _, err := io.Copy(w, resp.Body); err != nil {
-			ctx.Warnf("HTTP/2 MITM: error writing response body: %v", err)
+		if shouldFlushStreaming(resp) {
+			// Streaming (gRPC/Connect/SSE/chunked): flush each chunk so it reaches the
+			// client as it arrives. Mirrors net/http/httputil.ReverseProxy.flushInterval.
+			rc := http.NewResponseController(w)
+			buf := make([]byte, 32*1024)
+			for {
+				nr, er := resp.Body.Read(buf)
+				if nr > 0 {
+					if _, ew := w.Write(buf[:nr]); ew != nil {
+						ctx.Warnf("HTTP/2 MITM: error writing response body: %v", ew)
+						break
+					}
+					_ = rc.Flush()
+				}
+				if er != nil {
+					// Mirror net/http/httputil.ReverseProxy.copyBuffer: io.EOF is the
+					// normal end of stream and context.Canceled means the client went
+					// away or cancelled the request, so neither is worth logging.
+					if er != io.EOF && er != context.Canceled {
+						ctx.Warnf("HTTP/2 MITM: error reading response body: %v", er)
+					}
+					break
+				}
+			}
+		} else {
+			// Fixed-length response: let the h2 server batch writes for throughput.
+			if _, err := io.Copy(w, resp.Body); err != nil {
+				ctx.Warnf("HTTP/2 MITM: error writing response body: %v", err)
+			}
 		}
 	}
 
@@ -220,6 +248,16 @@ func (proxy *ProxyHttpServer) handleH2MitmStream(
 			}
 		}
 	}
+}
+
+// shouldFlushStreaming reports whether resp should be forwarded with a flush after
+// each chunk, mirroring net/http/httputil.ReverseProxy.flushInterval: Server-Sent
+// Events, or any response with an unknown (-1) Content-Length (gRPC, Connect, chunked).
+func shouldFlushStreaming(resp *http.Response) bool {
+	if baseCT, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type")); baseCT == "text/event-stream" {
+		return true
+	}
+	return resp.ContentLength == -1
 }
 
 // removeH2HopByHopHeaders deletes HTTP/1.x hop-by-hop headers that are
