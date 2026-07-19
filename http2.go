@@ -3,6 +3,7 @@ package goproxy
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"io"
 	"mime"
 	"net"
@@ -216,7 +217,7 @@ func (proxy *ProxyHttpServer) handleH2MitmStream(
 					// Mirror net/http/httputil.ReverseProxy.copyBuffer: io.EOF is the
 					// normal end of stream and context.Canceled means the client went
 					// away or cancelled the request, so neither is worth logging.
-					if er != io.EOF && er != context.Canceled {
+					if er != io.EOF && !errors.Is(er, context.Canceled) {
 						ctx.Warnf("HTTP/2 MITM: error reading response body: %v", er)
 					}
 					break
