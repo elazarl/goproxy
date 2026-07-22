@@ -303,8 +303,12 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				req.RemoteAddr = r.RemoteAddr
 				ctx.Logf("req %v", r.Host)
 
-				if !strings.HasPrefix(req.URL.String(), scheme+"://") {
+				if !req.URL.IsAbs() {
+					// Origin-form request target (/path)
 					req.URL, err = url.Parse(scheme + "://" + r.Host + req.URL.String())
+				} else {
+					// Absolute-form request target
+					req.URL.Scheme = scheme
 				}
 
 				if continueLoop := func(req *http.Request) bool {
