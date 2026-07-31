@@ -426,6 +426,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						return
 					}
 				}
+				tlsConfig = tlsConfig.Clone()
 
 				if proxy.AllowHTTP2 {
 					if !slices.Contains(tlsConfig.NextProtos, "h2") {
