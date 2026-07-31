@@ -233,11 +233,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				}
 			} else {
 				// HTTP/2: write the rejection as a proper HTTP response.
-				for k, vv := range ctx.Resp.Header {
-					for _, v := range vv {
-						w.Header().Add(k, v)
-					}
-				}
+				copyHeaders(w.Header(), ctx.Resp.Header, proxy.KeepDestinationHeaders)
 				w.WriteHeader(ctx.Resp.StatusCode)
 				if ctx.Resp.Body != nil {
 					_, _ = io.Copy(w, ctx.Resp.Body)

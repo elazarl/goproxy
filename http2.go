@@ -174,11 +174,7 @@ func (proxy *ProxyHttpServer) handleH2MitmStream(
 	resp = proxy.filterResponse(resp, ctx)
 	defer resp.Body.Close()
 
-	for k, vv := range resp.Header {
-		for _, v := range vv {
-			w.Header().Add(k, v)
-		}
-	}
+	copyHeaders(w.Header(), resp.Header, proxy.KeepDestinationHeaders)
 
 	// If the body was replaced by a filter, drop Content-Length so
 	// the http2 framer can stream it without a length mismatch.
