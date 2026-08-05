@@ -2,6 +2,7 @@ package goproxy
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -18,6 +19,48 @@ import (
 	"github.com/elazarl/goproxy/internal/http1parser"
 	"github.com/elazarl/goproxy/internal/signer"
 )
+
+var responseHeadTerminator = []byte("\r\n\r\n")
+
+type responseHeadWriter struct {
+	writer    io.Writer
+	head      bytes.Buffer
+	wroteHead bool
+}
+
+func (w *responseHeadWriter) Write(p []byte) (int, error) {
+	if w.wroteHead {
+		return w.writer.Write(p)
+	}
+
+	buffered := w.head.Len()
+	_, _ = w.head.Write(p)
+	headEnd := bytes.Index(w.head.Bytes(), responseHeadTerminator)
+	if headEnd < 0 {
+		return len(p), nil
+	}
+	headEnd += len(responseHeadTerminator)
+
+	data := w.head.Bytes()
+	n, err := w.writer.Write(data[:headEnd])
+	if err != nil || n != headEnd {
+		current := max(0, min(len(p), n-buffered))
+		if err == nil {
+			err = io.ErrShortWrite
+		}
+		return current, err
+	}
+
+	w.wroteHead = true
+	body := data[headEnd:]
+	w.head.Reset()
+	if len(body) == 0 {
+		return len(p), nil
+	}
+
+	n, err = w.writer.Write(body)
+	return headEnd - buffered + n, err
+}
 
 // ConnectActionLiteral defines the action the proxy should take
 // when it receives an HTTP CONNECT request from a client.
@@ -426,13 +469,9 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						return false
 					}
 
-					bw := bufio.NewWriter(client)
-					if err := resp.Write(bw); err != nil {
+					writer := &responseHeadWriter{writer: client}
+					if err := resp.Write(writer); err != nil {
 						ctx.Warnf("Cannot write response from mitm'd client: %v", err)
-						return false
-					}
-					if err := bw.Flush(); err != nil {
-						ctx.Warnf("Cannot flush response from mitm'd client: %v", err)
 						return false
 					}
 
