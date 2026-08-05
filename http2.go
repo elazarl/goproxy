@@ -160,6 +160,12 @@ func (proxy *ProxyHttpServer) handleH2MitmStream(
 			RemoveProxyHeaders(ctx, req)
 		}
 
+		// bodyless h2 requests arrive with a non-nil empty Body; forwarding as-is
+		// makes the upstream transport send a phantom body (-1). keep it bodyless.
+		if req.ContentLength == 0 {
+			req.Body = http.NoBody
+		}
+
 		var err error
 		resp, err = ctx.RoundTrip(req)
 		if err != nil {
