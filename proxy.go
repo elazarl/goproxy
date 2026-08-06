@@ -6,7 +6,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"regexp"
 
 	"golang.org/x/net/http2"
 )
@@ -75,7 +74,10 @@ type ProxyHttpServer struct {
 	h2Server *http2.Server
 }
 
-var hasPort = regexp.MustCompile(`:\d+$`)
+func hasPort(s string) bool {
+	_, _, err := net.SplitHostPort(s)
+	return err == nil
+}
 
 func copyHeaders(dst, src http.Header, keepDestHeaders bool) {
 	if !keepDestHeaders {
