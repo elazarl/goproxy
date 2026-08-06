@@ -143,25 +143,11 @@ type ConnectAction struct {
 }
 
 func stripPort(s string) string {
-	var ix int
-	if strings.Contains(s, "[") && strings.Contains(s, "]") {
-		// ipv6 address example: [2606:4700:4700::1111]:443
-		// strip '[' and ']'
-		s = strings.ReplaceAll(s, "[", "")
-		s = strings.ReplaceAll(s, "]", "")
-
-		ix = strings.LastIndexAny(s, ":")
-		if ix == -1 {
-			return s
-		}
-	} else {
-		// ipv4
-		ix = strings.IndexRune(s, ':')
-		if ix == -1 {
-			return s
-		}
+	host, _, err := net.SplitHostPort(s)
+	if err != nil {
+		return s
 	}
-	return s[:ix]
+	return host
 }
 
 func (proxy *ProxyHttpServer) dial(ctx *ProxyCtx, network, addr string) (c net.Conn, err error) {
@@ -297,7 +283,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 
 	switch todo.Action {
 	case ConnectAccept:
-		if !hasPort.MatchString(host) {
+		if !hasPort(host) {
 			host += ":80"
 		}
 		targetSiteCon, err := proxy.connectDial(ctx, "tcp", host)
