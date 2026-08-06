@@ -15,7 +15,6 @@ linters:
     - errchkjson
     - errname
     - errorlint
-    - exhaustive
     - fatcontext
     - forbidigo
     - forcetypeassert
@@ -24,7 +23,7 @@ linters:
     - gocritic
     - godot
     - goheader
-    - gomodguard
+    - gomodguard_v2
     - goprintffuncname
     - gosec
     - gosmopolitan
@@ -67,6 +66,7 @@ linters:
     - dupl
     - dupword
     - err113
+    - exhaustive
     - exhaustruct
     - funlen
     - ginkgolinter

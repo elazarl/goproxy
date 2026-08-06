@@ -40,8 +40,7 @@ func (r *RequestReader) IsEOF() bool {
 	return errors.Is(err, io.EOF)
 }
 
-// Reader is used to take over the buffered connection data
-// (e.g. with HTTP/2 data).
+// Reader is used to take over the buffered connection data.
 // After calling this function, make sure to consume all the data related
 // to the current request.
 func (r *RequestReader) Reader() *bufio.Reader {

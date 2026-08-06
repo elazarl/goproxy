@@ -31,7 +31,7 @@ func fatalOnErr(t *testing.T, err error, msg string) {
 }
 
 func TestCounterEncDifferentConsecutive(t *testing.T) {
-	k, err := rsa.GenerateKey(&RandSeedReader{*rand.New(rand.NewSource(0xFF43109))}, 128)
+	k, err := rsa.GenerateKey(&RandSeedReader{*rand.New(rand.NewSource(0xFF43109))}, 1024)
 	fatalOnErr(t, err, "rsa.GenerateKey")
 	c, err := signer.NewCounterEncryptorRandFromKey(k, []byte("the quick brown fox run over the lazy dog"))
 	fatalOnErr(t, err, "NewCounterEncryptorRandFromKey")
@@ -46,7 +46,7 @@ func TestCounterEncDifferentConsecutive(t *testing.T) {
 }
 
 func TestCounterEncIdenticalStreams(t *testing.T) {
-	k, err := rsa.GenerateKey(&RandSeedReader{*rand.New(rand.NewSource(0xFF43109))}, 128)
+	k, err := rsa.GenerateKey(&RandSeedReader{*rand.New(rand.NewSource(0xFF43109))}, 1024)
 	fatalOnErr(t, err, "rsa.GenerateKey")
 	c1, err := signer.NewCounterEncryptorRandFromKey(k, []byte("the quick brown fox run over the lazy dog"))
 	fatalOnErr(t, err, "NewCounterEncryptorRandFromKey")
@@ -82,7 +82,7 @@ func stddev(data []int) float64 {
 }
 
 func TestCounterEncStreamHistogram(t *testing.T) {
-	k, err := rsa.GenerateKey(&RandSeedReader{*rand.New(rand.NewSource(0xFF43109))}, 128)
+	k, err := rsa.GenerateKey(&RandSeedReader{*rand.New(rand.NewSource(0xFF43109))}, 1024)
 	fatalOnErr(t, err, "rsa.GenerateKey")
 	c, err := signer.NewCounterEncryptorRandFromKey(k, []byte("the quick brown fox run over the lazy dog"))
 	fatalOnErr(t, err, "NewCounterEncryptorRandFromKey")
