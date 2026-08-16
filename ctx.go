@@ -3,9 +3,11 @@ package goproxy
 import (
 	"context"
 	"crypto/tls"
+	"io"
 	"mime"
 	"net"
 	"net/http"
+	"sync"
 )
 
 // ProxyCtx is the Proxy context, contains useful information about every request. It is passed to
@@ -45,10 +47,43 @@ func (f RoundTripperFunc) RoundTrip(req *http.Request, ctx *ProxyCtx) (*http.Res
 }
 
 func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
+	var resp *http.Response
+	var err error
 	if ctx.RoundTripper != nil {
-		return ctx.RoundTripper.RoundTrip(req, ctx)
+		resp, err = ctx.RoundTripper.RoundTrip(req, ctx)
+	} else {
+		resp, err = ctx.Proxy.Tr.RoundTrip(req)
 	}
-	return ctx.Proxy.Tr.RoundTrip(req)
+	// Both response paths close the body more than once: handleHttp pairs
+	// a deferred Close with an explicit Close after io.Copy, and the MITM
+	// path pairs a deferred Close with Response.Write (which consumes the
+	// body). Standard net/http bodies tolerate double Close, but bodies
+	// from custom RoundTrippers may not — make Close idempotent at the
+	// single point every response enters the proxy.
+	//
+	// http.NoBody stays unwrapped so identity checks against it keep
+	// working (e.g. the MITM chunked-encoding decision), and 101 bodies
+	// stay unwrapped because WebSocket proxying type-asserts them to
+	// io.ReadWriter.
+	if resp != nil && resp.Body != nil && resp.Body != http.NoBody &&
+		resp.StatusCode != http.StatusSwitchingProtocols {
+		resp.Body = &onceCloseBody{ReadCloser: resp.Body}
+	}
+	return resp, err
+}
+
+// onceCloseBody is a response body whose Close is idempotent: the first
+// call closes the underlying body and records its error; later calls
+// return the same error without closing again.
+type onceCloseBody struct {
+	io.ReadCloser
+	once sync.Once
+	err  error
+}
+
+func (b *onceCloseBody) Close() error {
+	b.once.Do(func() { b.err = b.ReadCloser.Close() })
+	return b.err
 }
 
 func (ctx *ProxyCtx) printf(msg string, argv ...any) {

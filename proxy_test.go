@@ -968,22 +968,25 @@ func TestHttpsMitmURLRewrite(t *testing.T) {
 func TestSimpleHttpRequest(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
 
-	var server *http.Server
+	// Bind an ephemeral port: a fixed port silently collides with other
+	// listeners (macOS AirPlay squats on :5000) and the client then talks
+	// to the wrong server.
+	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal("Cannot listen", err)
+	}
+	server := &http.Server{
+		Handler:           proxy,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 	go func() {
-		t.Log("serving end proxy server at localhost:5000")
-		server = &http.Server{
-			Addr:              "localhost:5000",
-			Handler:           proxy,
-			ReadHeaderTimeout: 10 * time.Second,
-		}
-		err := server.ListenAndServe()
-		if err == nil {
+		t.Logf("serving end proxy server at %s", listener.Addr())
+		if err := server.Serve(listener); err == nil {
 			t.Error("Error shutdown should always return error", err)
 		}
 	}()
 
-	time.Sleep(1 * time.Second)
-	u, _ := url.Parse("http://localhost:5000")
+	u, _ := url.Parse("http://" + listener.Addr().String())
 	tr := &http.Transport{
 		Proxy: http.ProxyURL(u),
 		// Disable HTTP/2.

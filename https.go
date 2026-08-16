@@ -378,6 +378,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					origBody := resp.Body
 					resp = proxy.filterResponse(resp, ctx)
 					bodyModified := resp.Body != origBody
+					if bodyModified {
+						// The response filter replaced the body; nothing
+						// downstream closes the original.
+						defer origBody.Close()
+					}
 					defer resp.Body.Close()
 					if resp.Body != http.NoBody && (bodyModified ||
 						(resp.ContentLength <= 0 && resp.Header.Get("Content-Length") == "")) {
