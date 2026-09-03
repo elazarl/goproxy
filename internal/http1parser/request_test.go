@@ -1,9 +1,6 @@
 package http1parser_test
 
 import (
-	"bufio"
-	"bytes"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -16,7 +13,8 @@ import (
 )
 
 const (
-	_data = "POST /index.html HTTP/1.1\r\n" +
+	// postRequest has a non-canonical "lowercase" header and a 17 byte JSON body.
+	postRequest = "POST /index.html HTTP/1.1\r\n" +
 		"Host: www.test.com\r\n" +
 		"Accept: */*\r\n" +
 		"Content-Length: 17\r\n" +
@@ -24,7 +22,8 @@ const (
 		"\r\n" +
 		`{"hello":"world"}`
 
-	_data2 = "GET /index.html HTTP/1.1\r\n" +
+	// getRequest has a non-canonical "lowercase" header and no body.
+	getRequest = "GET /index.html HTTP/1.1\r\n" +
 		"Host: www.test.com\r\n" +
 		"Accept: */*\r\n" +
 		"lowercase: 3z\r\n" +
@@ -32,11 +31,10 @@ const (
 )
 
 func TestCanonicalRequest(t *testing.T) {
-	// Here we are simulating two requests on the same connection
-	http1Data := bytes.NewReader(append([]byte(_data), _data2...))
-	parser := http1parser.NewRequestReader(false, http1Data)
+	// Here we are simulating two requests on the same connection.
+	parser := http1parser.NewRequestReader(false, strings.NewReader(postRequest+getRequest))
 
-	// 1st request
+	// 1st request: header names are canonicalized.
 	req, err := parser.ReadRequest()
 	require.NoError(t, err)
 	assert.NotEmpty(t, req.Header)
@@ -49,13 +47,12 @@ func TestCanonicalRequest(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, req.Header)
 
-	// Make sure that the buffers are empty after all requests have been processed
+	// Make sure that the buffers are empty after all requests have been processed.
 	assert.True(t, parser.IsEOF())
 }
 
 func TestNonCanonicalRequest(t *testing.T) {
-	http1Data := bytes.NewReader([]byte(_data))
-	parser := http1parser.NewRequestReader(true, http1Data)
+	parser := http1parser.NewRequestReader(true, strings.NewReader(postRequest))
 
 	req, err := parser.ReadRequest()
 	require.NoError(t, err)
@@ -65,8 +62,7 @@ func TestNonCanonicalRequest(t *testing.T) {
 }
 
 func TestMultipleNonCanonicalRequests(t *testing.T) {
-	http1Data := bytes.NewReader(append([]byte(_data), _data2...))
-	parser := http1parser.NewRequestReader(true, http1Data)
+	parser := http1parser.NewRequestReader(true, strings.NewReader(postRequest+getRequest))
 
 	req, err := parser.ReadRequest()
 	require.NoError(t, err)
@@ -88,6 +84,7 @@ func TestMultipleNonCanonicalRequests(t *testing.T) {
 
 // reqTest is inspired by https://github.com/golang/go/blob/master/src/net/http/readrequest_test.go
 type reqTest struct {
+	Name    string
 	Raw     string
 	Req     *http.Request
 	Body    string
@@ -95,16 +92,11 @@ type reqTest struct {
 	Error   string
 }
 
-var (
-	noError   = ""
-	noBodyStr = ""
-	noTrailer http.Header
-)
-
 var reqTests = []reqTest{
 	// Baseline test; All Request fields included for template use
 	{
-		"GET http://www.techcrunch.com/ HTTP/1.1\r\n" +
+		Name: "all fields",
+		Raw: "GET http://www.techcrunch.com/ HTTP/1.1\r\n" +
 			"Host: www.techcrunch.com\r\n" +
 			"user-agent: Fake\r\n" +
 			"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\n" +
@@ -115,7 +107,7 @@ var reqTests = []reqTest{
 			"Content-Length: 7\r\n" +
 			"Proxy-Connection: keep-alive\r\n\r\n" +
 			"abcdef\n???",
-		&http.Request{
+		Req: &http.Request{
 			Method: http.MethodGet,
 			URL: &url.URL{
 				Scheme: "http",
@@ -140,16 +132,15 @@ var reqTests = []reqTest{
 			Host:          "www.techcrunch.com",
 			RequestURI:    "http://www.techcrunch.com/",
 		},
-		"abcdef\n",
-		noTrailer,
-		noError,
+		Body: "abcdef\n",
 	},
 
 	// GET request with no body (the normal case)
 	{
-		"GET / HTTP/1.1\r\n" +
+		Name: "GET without body",
+		Raw: "GET / HTTP/1.1\r\n" +
 			"Host: foo.com\r\n\r\n",
-		&http.Request{
+		Req: &http.Request{
 			Method: http.MethodGet,
 			URL: &url.URL{
 				Path: "/",
@@ -163,39 +154,31 @@ var reqTests = []reqTest{
 			Host:          "foo.com",
 			RequestURI:    "/",
 		},
-		noBodyStr,
-		noTrailer,
-		noError,
 	},
 }
 
 func TestReadRequest(t *testing.T) {
-	for i := range reqTests {
-		tt := &reqTests[i]
-
-		testName := fmt.Sprintf("Test %d (%q)", i, tt.Raw)
-		t.Run(testName, func(t *testing.T) {
-			r := bufio.NewReader(strings.NewReader(tt.Raw))
-			parser := http1parser.NewRequestReader(true, r)
+	for _, tt := range reqTests {
+		t.Run(tt.Name, func(t *testing.T) {
+			parser := http1parser.NewRequestReader(true, strings.NewReader(tt.Raw))
 			req, err := parser.ReadRequest()
-			if err != nil && err.Error() == tt.Error {
-				// Test finished, we expected an error
+			if tt.Error != "" {
+				require.EqualError(t, err, tt.Error)
 				return
 			}
 			require.NoError(t, err)
 
-			// Check request equality (excluding body)
-			rbody := req.Body
+			// Check request equality (excluding the body, compared separately below).
+			body := req.Body
 			req.Body = nil
 			assert.Equal(t, tt.Req, req)
 
-			// Check if the two bodies match
 			var bodyString string
-			if rbody != nil {
-				data, err := io.ReadAll(rbody)
+			if body != nil {
+				data, err := io.ReadAll(body)
 				require.NoError(t, err)
+				require.NoError(t, body.Close())
 				bodyString = string(data)
-				_ = rbody.Close()
 			}
 			assert.Equal(t, tt.Body, bodyString)
 			assert.Equal(t, tt.Trailer, req.Trailer)

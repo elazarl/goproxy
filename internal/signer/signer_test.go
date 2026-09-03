@@ -1,7 +1,6 @@
 package signer_test
 
 import (
-	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"io"
@@ -12,110 +11,112 @@ import (
 
 	"github.com/elazarl/goproxy"
 	"github.com/elazarl/goproxy/internal/signer"
+	"github.com/elazarl/goproxy/internal/testutil"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func orFatal(t *testing.T, msg string, err error) {
+// signedHosts are the names every certificate signed in this file is valid for.
+var signedHosts = []string{"example.com", "1.1.1.1", "localhost"}
+
+// signHost signs signedHosts with ca and returns the certificate with its
+// leaf already parsed.
+func signHost(t *testing.T, ca tls.Certificate) *tls.Certificate {
 	t.Helper()
-	if err != nil {
-		t.Fatal(msg, err)
-	}
-}
-
-type ConstantHanlder string
-
-func (h ConstantHanlder) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
-	_, _ = io.WriteString(w, string(h))
-}
-
-func testSignerX509(t *testing.T, ca tls.Certificate) {
-	t.Helper()
-	cert, err := signer.SignHost(ca, []string{"example.com", "1.1.1.1", "localhost"})
-	orFatal(t, "singHost", err)
+	cert, err := signer.SignHost(ca, signedHosts)
+	require.NoError(t, err)
 	cert.Leaf, err = x509.ParseCertificate(cert.Certificate[0])
-	orFatal(t, "ParseCertificate", err)
-	certpool := x509.NewCertPool()
-	certpool.AddCert(ca.Leaf)
-	orFatal(t, "VerifyHostname", cert.Leaf.VerifyHostname("example.com"))
-	orFatal(t, "CheckSignatureFrom", cert.Leaf.CheckSignatureFrom(ca.Leaf))
-	_, err = cert.Leaf.Verify(x509.VerifyOptions{
+	require.NoError(t, err)
+	return cert
+}
+
+// assertSignedCertIsValid checks that a certificate signed by ca verifies
+// against ca with the x509 package alone, without any TLS handshake.
+func assertSignedCertIsValid(t *testing.T, ca tls.Certificate) {
+	t.Helper()
+	cert := signHost(t, ca)
+
+	require.NoError(t, cert.Leaf.VerifyHostname("example.com"))
+	require.NoError(t, cert.Leaf.CheckSignatureFrom(ca.Leaf))
+
+	certPool := x509.NewCertPool()
+	certPool.AddCert(ca.Leaf)
+	_, err := cert.Leaf.Verify(x509.VerifyOptions{
 		DNSName: "example.com",
-		Roots:   certpool,
+		Roots:   certPool,
 	})
-	orFatal(t, "Verify", err)
+	require.NoError(t, err)
 }
 
-func testSignerTLS(t *testing.T, ca tls.Certificate) {
+// assertSignedCertServesTLS checks that a certificate signed by ca is accepted
+// by the Go TLS client when ca is the only trusted root.
+func assertSignedCertServesTLS(t *testing.T, ca tls.Certificate) {
 	t.Helper()
-	cert, err := signer.SignHost(ca, []string{"example.com", "1.1.1.1", "localhost"})
-	orFatal(t, "singHost", err)
-	cert.Leaf, err = x509.ParseCertificate(cert.Certificate[0])
-	orFatal(t, "ParseCertificate", err)
-	expected := "key verifies with Go"
-	server := httptest.NewUnstartedServer(ConstantHanlder(expected))
-	defer server.Close()
+	cert := signHost(t, ca)
+
+	const expected = "key verifies with Go"
+	server := httptest.NewUnstartedServer(testutil.ConstantHandler(expected))
 	server.TLS = &tls.Config{
 		Certificates: []tls.Certificate{*cert, ca},
 		MinVersion:   tls.VersionTLS12,
 	}
 	server.StartTLS()
-	certpool := x509.NewCertPool()
-	certpool.AddCert(ca.Leaf)
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{RootCAs: certpool},
+	t.Cleanup(server.Close)
+
+	certPool := x509.NewCertPool()
+	certPool.AddCert(ca.Leaf)
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{RootCAs: certPool},
 	}
+
+	// The signed certificate covers "localhost" but not "127.0.0.1".
 	asLocalhost := strings.ReplaceAll(server.URL, "127.0.0.1", "localhost")
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, asLocalhost, nil)
-	orFatal(t, "NewRequest", err)
-	resp, err := tr.RoundTrip(req)
-	orFatal(t, "RoundTrip", err)
-	txt, err := io.ReadAll(resp.Body)
-	orFatal(t, "io.ReadAll", err)
-	if string(txt) != expected {
-		t.Errorf("Expected '%s' got '%s'", expected, string(txt))
-	}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, asLocalhost, nil)
+	require.NoError(t, err)
+	resp, err := transport.RoundTrip(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	assert.Equal(t, expected, string(body))
 }
 
 func TestSignerRsaTls(t *testing.T) {
-	testSignerTLS(t, goproxy.GoproxyCa)
+	assertSignedCertServesTLS(t, goproxy.GoproxyCa)
 }
 
 func TestSignerRsaX509(t *testing.T) {
-	testSignerX509(t, goproxy.GoproxyCa)
+	assertSignedCertIsValid(t, goproxy.GoproxyCa)
 }
 
 func TestSignerEcdsaTls(t *testing.T) {
-	testSignerTLS(t, EcdsaCa)
+	assertSignedCertServesTLS(t, ecdsaCA)
 }
 
 func TestSignerEcdsaX509(t *testing.T) {
-	testSignerX509(t, EcdsaCa)
+	assertSignedCertIsValid(t, ecdsaCA)
 }
 
 func BenchmarkSignRsa(b *testing.B) {
-	var cert *tls.Certificate
-	var err error
-	for n := 0; n < b.N; n++ {
-		cert, err = signer.SignHost(goproxy.GoproxyCa, []string{"example.com", "1.1.1.1", "localhost"})
+	for range b.N {
+		_, err := signer.SignHost(goproxy.GoproxyCa, signedHosts)
+		require.NoError(b, err)
 	}
-	_ = cert
-	_ = err
 }
 
 func BenchmarkSignEcdsa(b *testing.B) {
-	var cert *tls.Certificate
-	var err error
-	for n := 0; n < b.N; n++ {
-		cert, err = signer.SignHost(EcdsaCa, []string{"example.com", "1.1.1.1", "localhost"})
+	for range b.N {
+		_, err := signer.SignHost(ecdsaCA, signedHosts)
+		require.NoError(b, err)
 	}
-	_ = cert
-	_ = err
 }
 
 //
-// Eliptic Curve certificate and key for testing
+// Elliptic curve certificate and key for testing
 //
 
-var EcdsaCaCert = []byte(`-----BEGIN CERTIFICATE-----
+var ecdsaCACert = []byte(`-----BEGIN CERTIFICATE-----
 MIICGDCCAb8CFEkSgqYhlT0+Yyr9anQNJgtclTL0MAoGCCqGSM49BAMDMIGOMQsw
 CQYDVQQGEwJJTDEPMA0GA1UECAwGQ2VudGVyMQwwCgYDVQQHDANMb2QxEDAOBgNV
 BAoMB0dvUHJveHkxEDAOBgNVBAsMB0dvUHJveHkxGjAYBgNVBAMMEWdvcHJveHku
@@ -130,20 +131,22 @@ svyoAcrcDsynClO9aQtsC9ivZ+Pmr3MwCgYIKoZIzj0EAwMDRwAwRAIgGRSSJVSE
 98Bb3nddk2xys6a9
 -----END CERTIFICATE-----`)
 
-var EcdsaCaKey = []byte(`-----BEGIN PRIVATE KEY-----
+var ecdsaCAKey = []byte(`-----BEGIN PRIVATE KEY-----
 MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgEsc8m+2aZfagnesg
 qMgXe8ph4LtVu2VOUYhHttuEDsChRANCAAQ5R+GK3bpDxQI2zvMfoEfRfCA+3glP
 Dq4W2vzCG5Uka0VXnaY9PJSvtrL8qAHK3A7MpwpTvWkLbAvYr2fj5q9z
 -----END PRIVATE KEY-----`)
 
-var EcdsaCa, ecdsaCaErr = tls.X509KeyPair(EcdsaCaCert, EcdsaCaKey)
+var ecdsaCA = mustParseEcdsaCA()
 
-func init() {
-	if ecdsaCaErr != nil {
-		panic("Error parsing ecdsa CA " + ecdsaCaErr.Error())
+func mustParseEcdsaCA() tls.Certificate {
+	ca, err := tls.X509KeyPair(ecdsaCACert, ecdsaCAKey)
+	if err != nil {
+		panic("error parsing ecdsa CA: " + err.Error())
 	}
-	var err error
-	if EcdsaCa.Leaf, err = x509.ParseCertificate(EcdsaCa.Certificate[0]); err != nil {
-		panic("Error parsing ecdsa CA " + err.Error())
+	ca.Leaf, err = x509.ParseCertificate(ca.Certificate[0])
+	if err != nil {
+		panic("error parsing ecdsa CA leaf: " + err.Error())
 	}
+	return ca
 }

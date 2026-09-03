@@ -37,7 +37,7 @@ func NewProxyClient(t *testing.T, proxyURL string) *http.Client {
 	u, err := url.Parse(proxyURL)
 	require.NoError(t, err)
 	return &http.Client{Transport: &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		Proxy:           http.ProxyURL(u),
 	}}
 }

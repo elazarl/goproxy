@@ -1,7 +1,6 @@
 package signer_test
 
 import (
-	"bytes"
 	"crypto/rsa"
 	"encoding/binary"
 	"io"
@@ -10,68 +9,104 @@ import (
 	"testing"
 
 	"github.com/elazarl/goproxy/internal/signer"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-type RandSeedReader struct {
+// counterEncryptorSeed is the seed shared by every CounterEncryptorRand built
+// in this file, so that streams built from the same key are comparable.
+var counterEncryptorSeed = []byte("the quick brown fox run over the lazy dog")
+
+// randSeedReader is a deterministic io.Reader, so that RSA key generation
+// always produces the same key.
+type randSeedReader struct {
 	r rand.Rand
 }
 
-func (r *RandSeedReader) Read(b []byte) (n int, err error) {
+func (r *randSeedReader) Read(b []byte) (int, error) {
 	for i := range b {
 		b[i] = byte(r.r.Int() & 0xFF)
 	}
 	return len(b), nil
 }
 
-func fatalOnErr(t *testing.T, err error, msg string) {
+// newTestKey generates an RSA key from a deterministic source of randomness.
+func newTestKey(t *testing.T) *rsa.PrivateKey {
 	t.Helper()
-	if err != nil {
-		t.Fatal(msg, err)
-	}
+	key, err := rsa.GenerateKey(&randSeedReader{*rand.New(rand.NewSource(0xFF43109))}, 1024)
+	require.NoError(t, err)
+	return key
+}
+
+// newCounterEncryptor returns a CSPRNG built from key. Two CSPRNGs built from
+// the same key produce the same stream.
+func newCounterEncryptor(t *testing.T, key *rsa.PrivateKey) signer.CounterEncryptorRand {
+	t.Helper()
+	c, err := signer.NewCounterEncryptorRandFromKey(key, counterEncryptorSeed)
+	require.NoError(t, err)
+	return c
 }
 
 func TestCounterEncDifferentConsecutive(t *testing.T) {
-	k, err := rsa.GenerateKey(&RandSeedReader{*rand.New(rand.NewSource(0xFF43109))}, 1024)
-	fatalOnErr(t, err, "rsa.GenerateKey")
-	c, err := signer.NewCounterEncryptorRandFromKey(k, []byte("the quick brown fox run over the lazy dog"))
-	fatalOnErr(t, err, "NewCounterEncryptorRandFromKey")
+	c := newCounterEncryptor(t, newTestKey(t))
+
 	for i := 0; i < 100*1000; i++ {
 		var a, b int64
-		fatalOnErr(t, binary.Read(&c, binary.BigEndian, &a), "read a")
-		fatalOnErr(t, binary.Read(&c, binary.BigEndian, &b), "read b")
-		if a == b {
-			t.Fatal("two consecutive equal int64", a, b)
-		}
+		require.NoError(t, binary.Read(&c, binary.BigEndian, &a))
+		require.NoError(t, binary.Read(&c, binary.BigEndian, &b))
+		require.NotEqual(t, a, b, "two consecutive equal int64 at iteration %d", i)
 	}
 }
 
 func TestCounterEncIdenticalStreams(t *testing.T) {
-	k, err := rsa.GenerateKey(&RandSeedReader{*rand.New(rand.NewSource(0xFF43109))}, 1024)
-	fatalOnErr(t, err, "rsa.GenerateKey")
-	c1, err := signer.NewCounterEncryptorRandFromKey(k, []byte("the quick brown fox run over the lazy dog"))
-	fatalOnErr(t, err, "NewCounterEncryptorRandFromKey")
-	c2, err := signer.NewCounterEncryptorRandFromKey(k, []byte("the quick brown fox run over the lazy dog"))
-	fatalOnErr(t, err, "NewCounterEncryptorRandFromKey")
+	key := newTestKey(t)
+	c1, c2 := newCounterEncryptor(t, key), newCounterEncryptor(t, key)
+
 	const nOut = 1000
-	out1, out2 := make([]byte, nOut), make([]byte, nOut)
-	_, _ = io.ReadFull(&c1, out1)
-	tmp := out2
-	for len(tmp) > 0 {
-		n := 1 + rand.Intn(256)
-		if n > len(tmp) {
-			n = len(tmp)
-		}
-		n, err := c2.Read(tmp[:n])
-		fatalOnErr(t, err, "CounterEncryptorRand.Read")
-		tmp = tmp[n:]
+
+	// Read the first stream in one go...
+	out1 := make([]byte, nOut)
+	_, err := io.ReadFull(&c1, out1)
+	require.NoError(t, err)
+
+	// ...and the second one in chunks of random size.
+	out2 := make([]byte, nOut)
+	for remaining := out2; len(remaining) > 0; {
+		n := min(1+rand.Intn(256), len(remaining))
+		n, err := c2.Read(remaining[:n])
+		require.NoError(t, err)
+		remaining = remaining[n:]
 	}
-	if !bytes.Equal(out1, out2) {
-		t.Error("identical CSPRNG does not produce the same output")
-	}
+
+	assert.Equal(t, out1, out2, "identical CSPRNG does not produce the same output")
 }
 
-func stddev(data []int) float64 {
-	var sum, sumSqr float64 = 0, 0
+func TestCounterEncStreamHistogram(t *testing.T) {
+	c := newCounterEncryptor(t, newTestKey(t))
+
+	const nOut = 100 * 1000
+	out := make([]byte, nOut)
+	_, err := io.ReadFull(&c, out)
+	require.NoError(t, err)
+
+	refHist := make([]int, 512)
+	for range nOut {
+		refHist[rand.Intn(256)]++
+	}
+	hist := make([]int, 512)
+	for _, b := range out {
+		hist[int(b)]++
+	}
+
+	// The CSPRNG output should be distributed like the standard PRNG output.
+	// The tolerance below is a guesstimate.
+	refStdDev, stdDev := stdDev(refHist), stdDev(hist)
+	assert.InDelta(t, refStdDev, stdDev, 1,
+		"stddev of ref histogram different than regular PRNG")
+}
+
+func stdDev(data []int) float64 {
+	var sum, sumSqr float64
 	for _, h := range data {
 		sum += float64(h)
 		sumSqr += float64(h) * float64(h)
@@ -79,28 +114,4 @@ func stddev(data []int) float64 {
 	n := float64(len(data))
 	variance := (sumSqr - ((sum * sum) / n)) / (n - 1)
 	return math.Sqrt(variance)
-}
-
-func TestCounterEncStreamHistogram(t *testing.T) {
-	k, err := rsa.GenerateKey(&RandSeedReader{*rand.New(rand.NewSource(0xFF43109))}, 1024)
-	fatalOnErr(t, err, "rsa.GenerateKey")
-	c, err := signer.NewCounterEncryptorRandFromKey(k, []byte("the quick brown fox run over the lazy dog"))
-	fatalOnErr(t, err, "NewCounterEncryptorRandFromKey")
-	nout := 100 * 1000
-	out := make([]byte, nout)
-	_, _ = io.ReadFull(&c, out)
-	refhist := make([]int, 512)
-	for i := 0; i < nout; i++ {
-		refhist[rand.Intn(256)]++
-	}
-	hist := make([]int, 512)
-	for _, b := range out {
-		hist[int(b)]++
-	}
-	refstddev, stddev := stddev(refhist), stddev(hist)
-	// due to lack of time, I guestimate
-	t.Logf("ref:%v - act:%v = %v", refstddev, stddev, math.Abs(refstddev-stddev))
-	if math.Abs(refstddev-stddev) >= 1 {
-		t.Errorf("stddev of ref histogram different than regular PRNG: %v %v", refstddev, stddev)
-	}
 }
