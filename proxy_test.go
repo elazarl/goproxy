@@ -203,10 +203,10 @@ func TestReplaceReponseForUrl(t *testing.T) {
 	client, l := oneShotProxy(proxy)
 	defer l.Close()
 
-	if result := string(getOrFail(t, srv.URL+("/koko"), client)); result != "chico" {
+	if result := string(getOrFail(t, srv.URL+"/koko", client)); result != "chico" {
 		t.Error("hooked 'koko', should be chico, instead:", result)
 	}
-	if result := string(getOrFail(t, srv.URL+("/bobo"), client)); result != "bobo" {
+	if result := string(getOrFail(t, srv.URL+"/bobo", client)); result != "bobo" {
 		t.Error("still, bobo should stay as usual, instead:", result)
 	}
 }
