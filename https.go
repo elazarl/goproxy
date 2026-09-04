@@ -543,7 +543,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					resp = proxy.filterResponse(resp, ctx)
 					bodyModified := resp.Body != origBody
 					defer resp.Body.Close()
-					if resp.Body != http.NoBody && (bodyModified ||
+					if responseBodyAllowed(ctx.Req, resp) && resp.Body != http.NoBody && (bodyModified ||
 						(resp.ContentLength <= 0 && resp.Header.Get("Content-Length") == "")) {
 						// Return chunked encoded response when we don't know the length of the resp, if the body
 						// has been modified by the response handler or if there is no content length in the response.

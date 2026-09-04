@@ -42,3 +42,25 @@ const (
 func TextResponse(r *http.Request, text string) *http.Response {
 	return NewResponse(r, ContentTypeText, http.StatusAccepted, text)
 }
+
+// responseBodyAllowed reports whether a response may carry a message body.
+// RFC 9112 6.3: a response to HEAD, or with a 1xx, 204, or 304 status, ends at
+// the first empty line "regardless of the header fields present", so framing one
+// leaves those bytes to be misread as the next response.
+//
+// Keyed on status and method, not on the body value: an empty HTTP/1 body is
+// http.NoBody, but the HTTP/2 transport uses its own unexported value, so a
+// bodiless HTTP/2 response is not http.NoBody.
+func responseBodyAllowed(req *http.Request, resp *http.Response) bool {
+	if req != nil && req.Method == http.MethodHead {
+		return false
+	}
+	switch {
+	case resp.StatusCode >= 100 && resp.StatusCode <= 199:
+		return false
+	case resp.StatusCode == http.StatusNoContent, resp.StatusCode == http.StatusNotModified:
+		return false
+	default:
+		return true
+	}
+}
