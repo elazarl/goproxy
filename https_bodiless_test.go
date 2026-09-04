@@ -3,9 +3,11 @@ package goproxy_test
 import (
 	"context"
 	"crypto/tls"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/elazarl/goproxy"
@@ -21,13 +23,16 @@ import (
 // an HTTP/1-only test proves nothing about the HTTP/2 path.
 func TestMitmBodilessResponseIsNotChunked(t *testing.T) {
 	cases := []struct {
-		name   string
-		method string
-		status int
+		name        string
+		method      string
+		status      int
+		replaceBody bool
 	}{
 		{name: "no content", method: http.MethodGet, status: http.StatusNoContent},
 		{name: "not modified", method: http.MethodGet, status: http.StatusNotModified},
 		{name: "head", method: http.MethodHead, status: http.StatusOK},
+		{name: "no content with replaced body", method: http.MethodGet, status: http.StatusNoContent, replaceBody: true},
+		{name: "not modified with replaced body", method: http.MethodGet, status: http.StatusNotModified, replaceBody: true},
 	}
 
 	for _, upstreamHTTP2 := range []bool{false, true} {
@@ -72,6 +77,12 @@ func TestMitmBodilessResponseIsNotChunked(t *testing.T) {
 					proxy.Tr.TLSClientConfig.NextProtos = []string{"h2"}
 				}
 				proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+				if tc.replaceBody {
+					proxy.OnResponse().DoFunc(func(resp *http.Response, _ *goproxy.ProxyCtx) *http.Response {
+						resp.Body = io.NopCloser(strings.NewReader(""))
+						return resp
+					})
+				}
 
 				proxySrv := httptest.NewServer(proxy)
 				defer proxySrv.Close()
@@ -98,10 +109,43 @@ func TestMitmBodilessResponseIsNotChunked(t *testing.T) {
 				assert.Empty(t, resp.TransferEncoding,
 					"a response without a message body must not be framed as chunked")
 
-				// Reuse proves no stray framing bytes were left behind.
+				// Exercise a subsequent request on the client's persistent transport.
 				second := do()
 				assert.Equal(t, tc.status, second.StatusCode)
 			})
 		}
 	}
+}
+
+func TestMitmBodilessDirectResponseIsNotChunked(t *testing.T) {
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("direct response unexpectedly reached the upstream server")
+	}))
+	defer upstream.Close()
+
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	proxy.OnRequest().DoFunc(func(req *http.Request, _ *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		return nil, goproxy.NewResponse(req, goproxy.ContentTypeText, http.StatusOK, "")
+	})
+
+	proxySrv := httptest.NewServer(proxy)
+	defer proxySrv.Close()
+	proxyURL, err := url.Parse(proxySrv.URL)
+	require.NoError(t, err)
+
+	client := &http.Client{Transport: &http.Transport{
+		Proxy:           http.ProxyURL(proxyURL),
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}}
+	defer client.CloseIdleConnections()
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodHead, upstream.URL, http.NoBody)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Empty(t, resp.TransferEncoding,
+		"a direct response to HEAD must not be framed as chunked")
 }
