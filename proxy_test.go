@@ -1650,7 +1650,6 @@ func TestTransparentTunnelClosesClientConnOnTargetError(t *testing.T) {
 	}
 }
 
-
 // TestMitmConnectNormalizesDefaultPortInURL verifies that when a client sends a CONNECT
 // request with a default port (e.g., example.com:443), but the inner HTTP/1.1 request
 // contains a Host header without the port (e.g., Host: example.com), the proxy
