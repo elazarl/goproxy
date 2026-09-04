@@ -153,7 +153,7 @@ func TestSimpleHook(t *testing.T) {
 	client, l := oneShotProxy(proxy)
 	defer l.Close()
 
-	if result := string(getOrFail(t, srv.URL+("/momo"), client)); result != "bobo" {
+	if result := string(getOrFail(t, srv.URL+"/momo", client)); result != "bobo" {
 		t.Error("Redirecting all requests from 127.0.0.1 to bobo, didn't work." +
 			" (Might break if Go's client sets RemoteAddr to IPv6 address). Got: " +
 			result)
@@ -169,7 +169,7 @@ func TestAlwaysHook(t *testing.T) {
 	client, l := oneShotProxy(proxy)
 	defer l.Close()
 
-	if result := string(getOrFail(t, srv.URL+("/momo"), client)); result != "bobo" {
+	if result := string(getOrFail(t, srv.URL+"/momo", client)); result != "bobo" {
 		t.Error("Redirecting all requests from 127.0.0.1 to bobo, didn't work." +
 			" (Might break if Go's client sets RemoteAddr to IPv6 address). Got: " +
 			result)
@@ -187,7 +187,7 @@ func TestReplaceResponse(t *testing.T) {
 	client, l := oneShotProxy(proxy)
 	defer l.Close()
 
-	if result := string(getOrFail(t, srv.URL+("/momo"), client)); result != "chico" {
+	if result := string(getOrFail(t, srv.URL+"/momo", client)); result != "chico" {
 		t.Error("hooked response, should be chico, instead:", result)
 	}
 }
