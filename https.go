@@ -185,6 +185,19 @@ type halfClosable interface {
 
 var _ halfClosable = (*net.TCPConn)(nil)
 
+// connectResponseLine builds a CONNECT tunnel status line that echoes the
+// requesting client's HTTP version. These replies were previously hardcoded as
+// HTTP/1.0, so an HTTP/1.1 CONNECT received an HTTP/1.0 status line on an
+// otherwise HTTP/1.1 connection (issue #802). Falls back to HTTP/1.1 when the
+// request version is unset.
+func connectResponseLine(r *http.Request, code int, text string) string {
+	major, minor := r.ProtoMajor, r.ProtoMinor
+	if major == 0 {
+		major, minor = 1, 1
+	}
+	return fmt.Sprintf("HTTP/%d.%d %d %s\r\n\r\n", major, minor, code, text)
+}
+
 func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request) {
 	ctx := &ProxyCtx{Req: r, Session: atomic.AddInt64(&proxy.sess, 1), Proxy: proxy, certStore: proxy.CertStore}
 
@@ -325,7 +338,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			}()
 			wg.Wait()
 		} else {
-			_, _ = proxyClient.Write([]byte("HTTP/1.0 200 Connection established\r\n\r\n"))
+			_, _ = proxyClient.Write([]byte(connectResponseLine(r, http.StatusOK, "Connection established")))
 
 			targetTCP, targetOK := targetSiteCon.(halfClosable)
 			proxyClientTCP, clientOK := proxyClient.(halfClosable)
@@ -384,7 +397,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				f.Flush()
 			}
 		} else {
-			_, _ = proxyClient.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
+			_, _ = proxyClient.Write([]byte(connectResponseLine(r, http.StatusOK, "OK")))
 		}
 		ctx.Logf("Received CONNECT request, mitm proxying it")
 		// For HTTP/1.x (after Hijack), the MITM loop runs in a goroutine so the HTTP/1.x
