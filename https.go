@@ -474,7 +474,17 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 
 				if !req.URL.IsAbs() {
 					// Origin-form request target (/path)
-					req.URL, err = url.Parse(scheme + "://" + r.Host + req.URL.String())
+					// We prioritize req.Host (from the internal request), over r.Host (from the CONNECT request).
+					hostToUse := req.Host
+					if hostToUse == "" {
+						hostToUse = r.Host // Fallback, if the internal Host header is missing
+					}
+
+					req.URL, err = url.Parse(scheme + "://" + hostToUse + req.URL.String())
+					if err != nil {
+						ctx.Warnf("Cannot parse URL %s: %v", scheme+"://"+hostToUse+req.URL.String(), err)
+						return
+					}
 				} else {
 					// Absolute-form request target
 					req.URL.Scheme = scheme

@@ -153,7 +153,7 @@ func TestSimpleHook(t *testing.T) {
 	client, l := oneShotProxy(proxy)
 	defer l.Close()
 
-	if result := string(getOrFail(t, srv.URL+("/momo"), client)); result != "bobo" {
+	if result := string(getOrFail(t, srv.URL+"/momo", client)); result != "bobo" {
 		t.Error("Redirecting all requests from 127.0.0.1 to bobo, didn't work." +
 			" (Might break if Go's client sets RemoteAddr to IPv6 address). Got: " +
 			result)
@@ -169,7 +169,7 @@ func TestAlwaysHook(t *testing.T) {
 	client, l := oneShotProxy(proxy)
 	defer l.Close()
 
-	if result := string(getOrFail(t, srv.URL+("/momo"), client)); result != "bobo" {
+	if result := string(getOrFail(t, srv.URL+"/momo", client)); result != "bobo" {
 		t.Error("Redirecting all requests from 127.0.0.1 to bobo, didn't work." +
 			" (Might break if Go's client sets RemoteAddr to IPv6 address). Got: " +
 			result)
@@ -187,7 +187,7 @@ func TestReplaceResponse(t *testing.T) {
 	client, l := oneShotProxy(proxy)
 	defer l.Close()
 
-	if result := string(getOrFail(t, srv.URL+("/momo"), client)); result != "chico" {
+	if result := string(getOrFail(t, srv.URL+"/momo", client)); result != "chico" {
 		t.Error("hooked response, should be chico, instead:", result)
 	}
 }
@@ -203,10 +203,10 @@ func TestReplaceReponseForUrl(t *testing.T) {
 	client, l := oneShotProxy(proxy)
 	defer l.Close()
 
-	if result := string(getOrFail(t, srv.URL+("/koko"), client)); result != "chico" {
+	if result := string(getOrFail(t, srv.URL+"/koko", client)); result != "chico" {
 		t.Error("hooked 'koko', should be chico, instead:", result)
 	}
-	if result := string(getOrFail(t, srv.URL+("/bobo"), client)); result != "bobo" {
+	if result := string(getOrFail(t, srv.URL+"/bobo", client)); result != "bobo" {
 		t.Error("still, bobo should stay as usual, instead:", result)
 	}
 }
@@ -1648,4 +1648,54 @@ func TestTransparentTunnelClosesClientConnOnTargetError(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("client connection was not closed after target closed; client would hang indefinitely")
 	}
+}
+
+// TestMitmConnectNormalizesDefaultPortInURL verifies that when a client sends a CONNECT
+// request with a default port (e.g., example.com:443), but the inner HTTP/1.1 request
+// contains a Host header without the port (e.g., Host: example.com), the proxy
+// normalizes req.URL.Host to match the inner Host header.
+//
+// Regression test for URL normalization during MITM interception.
+func TestMitmConnectNormalizesDefaultPortInURL(t *testing.T) {
+	proxy := goproxy.NewProxyHttpServer()
+
+	var capturedReq *http.Request
+
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		capturedReq = req
+		// Return a synthetic response to avoid a real network request to example.com
+		return nil, goproxy.TextResponse(req, "ok")
+	})
+
+	client, l := oneShotProxy(proxy)
+	defer l.Close()
+
+	proxyURL, _ := url.Parse(l.URL)
+	tr := &http.Transport{
+		Proxy: http.ProxyURL(proxyURL),
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+		// Forcefully disable HTTP/2 on the client to guarantee the use of the CONNECT method (HTTP/1.1).
+		TLSNextProto: make(map[string]func(authority string, c *tls.Conn) http.RoundTripper),
+	}
+	client.Transport = tr
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://example.com/bobo", nil)
+	require.NoError(t, err)
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.NotNil(t, capturedReq, "Request was not captured by the OnRequest hook")
+	require.NotNil(t, capturedReq.URL, "capturedReq.URL is nil")
+
+	assert.Equal(t, "example.com", capturedReq.URL.Host,
+		"Expected req.URL.Host to be normalized to 'example.com' without ':443'")
+
+	urlStr := capturedReq.URL.String()
+	assert.NotContains(t, urlStr, ":443",
+		"Expected req.URL.String() to not contain ':443'")
 }
