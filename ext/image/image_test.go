@@ -2,170 +2,119 @@ package goproxy_image_test
 
 import (
 	"bytes"
-	"crypto/tls"
-	"github.com/elazarl/goproxy"
-	goproxy_image "github.com/elazarl/goproxy/ext/image"
 	"image"
-	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
+	"path"
 	"testing"
+
+	"github.com/elazarl/goproxy"
+	goproxy_image "github.com/elazarl/goproxy/ext/image"
+	"github.com/elazarl/goproxy/internal/testutil"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-var acceptAllCerts = &tls.Config{InsecureSkipVerify: true}
+// repoRoot is the directory holding the shared test_data images. The tests run
+// from ext/image, while the images live at the root of the repository.
+const repoRoot = "../.."
 
-func oneShotProxy(proxy *goproxy.ProxyHttpServer, t *testing.T) (client *http.Client, s *httptest.Server) {
-	s = httptest.NewServer(proxy)
-
-	proxyUrl, _ := url.Parse(s.URL)
-	tr := &http.Transport{TLSClientConfig: acceptAllCerts, Proxy: http.ProxyURL(proxyUrl)}
-	client = &http.Client{Transport: tr}
-	return
-}
-
-func getImage(file string, t *testing.T) image.Image {
-	newimage, err := os.ReadFile(file)
-	if err != nil {
-		t.Fatal("Cannot read file", file, err)
-	}
-	img, _, err := image.Decode(bytes.NewReader(newimage))
-	if err != nil {
-		t.Fatal("Cannot decode image", file, err)
-	}
+// loadImage decodes one of the images in test_data from disk.
+func loadImage(t *testing.T, name string) image.Image {
+	t.Helper()
+	raw, err := os.ReadFile(path.Join(repoRoot, "test_data", name))
+	require.NoError(t, err, "cannot read test_data/%s", name)
+	img, _, err := image.Decode(bytes.NewReader(raw))
+	require.NoError(t, err, "cannot decode test_data/%s", name)
 	return img
 }
 
-func compareImage(eImg, aImg image.Image, t *testing.T) {
-	if eImg.Bounds().Dx() != aImg.Bounds().Dx() || eImg.Bounds().Dy() != aImg.Bounds().Dy() {
-		t.Error("image sizes different")
+// newFileServer serves the repository root, so that test_data images are
+// reachable under /test_data/<name>. It returns a function building the URL of
+// an image served that way.
+func newFileServer(t *testing.T) func(name string) string {
+	t.Helper()
+	s := httptest.NewServer(http.FileServer(http.Dir(repoRoot)))
+	t.Cleanup(s.Close)
+	return func(name string) string { return s.URL + "/test_data/" + name }
+}
+
+// assertSameImage compares two images pixel by pixel.
+func assertSameImage(t *testing.T, expected, actual image.Image) {
+	t.Helper()
+	if !assert.Equal(t, expected.Bounds().Size(), actual.Bounds().Size(), "image size") {
 		return
 	}
-	for i := 0; i < eImg.Bounds().Dx(); i++ {
-		for j := 0; j < eImg.Bounds().Dy(); j++ {
-			er, eg, eb, ea := eImg.At(i, j).RGBA()
-			ar, ag, ab, aa := aImg.At(i, j).RGBA()
-			if er != ar || eg != ag || eb != ab || ea != aa {
-				t.Error("images different at", i, j, "vals\n", er, eg, eb, ea, "\n", ar, ag, ab, aa, aa)
+	for x := 0; x < expected.Bounds().Dx(); x++ {
+		for y := 0; y < expected.Bounds().Dy(); y++ {
+			er, eg, eb, ea := expected.At(x, y).RGBA()
+			ar, ag, ab, aa := actual.At(x, y).RGBA()
+			expectedPixel := [4]uint32{er, eg, eb, ea}
+			actualPixel := [4]uint32{ar, ag, ab, aa}
+			if !assert.Equal(t, expectedPixel, actualPixel, "pixel at (%d,%d)", x, y) {
 				return
 			}
 		}
 	}
 }
 
-var fs = httptest.NewServer(http.FileServer(http.Dir(".")))
+// decodeImage decodes an image the proxy returned in a response body.
+func decodeImage(t *testing.T, body []byte) image.Image {
+	t.Helper()
+	img, _, err := image.Decode(bytes.NewReader(body))
+	require.NoError(t, err, "cannot decode proxied image")
+	return img
+}
 
-func localFile(url string) string { return fs.URL + "/" + url }
+func replaceWith(replacement image.Image) goproxy.RespHandler {
+	return goproxy_image.HandleImage(func(_ image.Image, _ *goproxy.ProxyCtx) image.Image {
+		return replacement
+	})
+}
 
-func TestConstantImageHandler(t *testing.T) {
+func TestHandleImageReplacesEveryImage(t *testing.T) {
+	football := loadImage(t, "football.png")
+
 	proxy := goproxy.NewProxyHttpServer()
-	football := getImage("test_data/football.png", t)
-	proxy.OnResponse().Do(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
-		return football
-	}))
+	proxy.OnResponse().Do(replaceWith(football))
+	client, _ := testutil.NewProxy(t, proxy)
+	fileURL := newFileServer(t)
 
-	client, l := oneShotProxy(proxy, t)
-	defer l.Close()
+	body := testutil.GetOrFail(t, client, fileURL("panda.png"))
 
-	resp, err := client.Get(localFile("test_data/panda.png"))
-	if err != nil {
-		t.Fatal("Cannot get panda.png", err)
-	}
-
-	img, _, err := image.Decode(resp.Body)
-	if err != nil {
-		t.Error("decode", err)
-	} else {
-		compareImage(football, img, t)
-	}
+	assertSameImage(t, football, decodeImage(t, body))
 }
 
-func TestImageHandler(t *testing.T) {
+func TestHandleImageReplacesMatchingURLOnRepeatedRequests(t *testing.T) {
+	football := loadImage(t, "football.png")
+
 	proxy := goproxy.NewProxyHttpServer()
-	football := getImage("test_data/football.png", t)
+	proxy.OnResponse(goproxy.UrlIs("/test_data/panda.png")).Do(replaceWith(football))
+	client, _ := testutil.NewProxy(t, proxy)
+	fileURL := newFileServer(t)
 
-	proxy.OnResponse(goproxy.UrlIs("/test_data/panda.png")).Do(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
-		return football
-	}))
-
-	client, l := oneShotProxy(proxy, t)
-	defer l.Close()
-
-	resp, err := client.Get(localFile("test_data/panda.png"))
-	if err != nil {
-		t.Fatal("Cannot get panda.png", err)
-	}
-
-	img, _, err := image.Decode(resp.Body)
-	if err != nil {
-		t.Error("decode", err)
-	} else {
-		compareImage(football, img, t)
-	}
-
-	// and again
-	resp, err = client.Get(localFile("test_data/panda.png"))
-	if err != nil {
-		t.Fatal("Cannot get panda.png", err)
-	}
-
-	img, _, err = image.Decode(resp.Body)
-	if err != nil {
-		t.Error("decode", err)
-	} else {
-		compareImage(football, img, t)
+	// The handler must keep working when the same image is requested again.
+	for i := range 2 {
+		body := testutil.GetOrFail(t, client, fileURL("panda.png"))
+		require.NotEmpty(t, body, "request %d returned an empty body", i+1)
+		assertSameImage(t, football, decodeImage(t, body))
 	}
 }
 
-func fatalOnErr(err error, msg string, t *testing.T) {
-	if err != nil {
-		t.Fatal(msg, err)
-	}
-}
+func TestHandleImageSwapsTwoImages(t *testing.T) {
+	panda := loadImage(t, "panda.png")
+	football := loadImage(t, "football.png")
 
-func get(url string, client *http.Client) ([]byte, error) {
-	resp, err := client.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	txt, err := io.ReadAll(resp.Body)
-	defer resp.Body.Close()
-	if err != nil {
-		return nil, err
-	}
-	return txt, nil
-}
-
-func getOrFail(url string, client *http.Client, t *testing.T) []byte {
-	txt, err := get(url, client)
-	if err != nil {
-		t.Fatal("Can't fetch url", url, err)
-	}
-	return txt
-}
-
-func TestReplaceImage(t *testing.T) {
 	proxy := goproxy.NewProxyHttpServer()
+	proxy.OnResponse(goproxy.UrlIs("/test_data/panda.png")).Do(replaceWith(football))
+	proxy.OnResponse(goproxy.UrlIs("/test_data/football.png")).Do(replaceWith(panda))
+	client, _ := testutil.NewProxy(t, proxy)
+	fileURL := newFileServer(t)
 
-	panda := getImage("test_data/panda.png", t)
-	football := getImage("test_data/football.png", t)
+	pandaResponse := testutil.GetOrFail(t, client, fileURL("panda.png"))
+	assertSameImage(t, football, decodeImage(t, pandaResponse))
 
-	proxy.OnResponse(goproxy.UrlIs("/test_data/panda.png")).Do(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
-		return football
-	}))
-	proxy.OnResponse(goproxy.UrlIs("/test_data/football.png")).Do(goproxy_image.HandleImage(func(img image.Image, ctx *goproxy.ProxyCtx) image.Image {
-		return panda
-	}))
-
-	client, l := oneShotProxy(proxy, t)
-	defer l.Close()
-
-	imgByPandaReq, _, err := image.Decode(bytes.NewReader(getOrFail(localFile("test_data/panda.png"), client, t)))
-	fatalOnErr(err, "decode panda", t)
-	compareImage(football, imgByPandaReq, t)
-
-	imgByFootballReq, _, err := image.Decode(bytes.NewReader(getOrFail(localFile("test_data/football.png"), client, t)))
-	fatalOnErr(err, "decode football", t)
-	compareImage(panda, imgByFootballReq, t)
+	footballResponse := testutil.GetOrFail(t, client, fileURL("football.png"))
+	assertSameImage(t, panda, decodeImage(t, footballResponse))
 }

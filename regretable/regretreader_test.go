@@ -3,174 +3,136 @@ package regretable_test
 import (
 	"bytes"
 	"io"
-	"strings"
 	"testing"
 
 	"github.com/elazarl/goproxy/regretable"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func assertEqual(t *testing.T, expected, actual string) {
+// word is the payload every reader in this file is created with.
+const word = "12345678"
+
+// newReader returns a RegretableReader over word.
+func newReader() *regretable.Reader {
+	buf := new(bytes.Buffer)
+	buf.WriteString(word)
+	return regretable.NewRegretableReader(buf)
+}
+
+// readAll reads the reader to completion and returns its content as a string.
+func readAll(t *testing.T, r io.Reader) string {
 	t.Helper()
-	if expected != actual {
-		t.Fatal("Expected", expected, "actual", actual)
-	}
+	data, err := io.ReadAll(r)
+	require.NoError(t, err)
+	return string(data)
 }
 
-func assertReadAll(t *testing.T, r io.Reader) string {
-	t.Helper()
-	s, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatal("error when reading", err)
-	}
-	return string(s)
-}
+func TestRegretableRegretAfterPartialRead(t *testing.T) {
+	mb := newReader()
 
-func TestRegretableReader(t *testing.T) {
-	buf := new(bytes.Buffer)
-	mb := regretable.NewRegretableReader(buf)
-	word := "12345678"
-	buf.WriteString(word)
-
-	fivebytes := make([]byte, 5)
-	_, _ = mb.Read(fivebytes)
+	_, err := mb.Read(make([]byte, 5))
+	require.NoError(t, err)
 	mb.Regret()
 
-	s, _ := io.ReadAll(mb)
-	if string(s) != word {
-		t.Errorf("Uncommitted read is gone, [%d,%d] actual '%v' expected '%v'\n", len(s), len(word), string(s), word)
-	}
+	assert.Equal(t, word, readAll(t, mb), "uncommitted read is gone")
 }
 
-func TestRegretableEmptyRead(t *testing.T) {
-	buf := new(bytes.Buffer)
-	mb := regretable.NewRegretableReader(buf)
-	word := "12345678"
-	buf.WriteString(word)
+func TestRegretableRegretAfterEmptyRead(t *testing.T) {
+	mb := newReader()
 
-	zero := make([]byte, 0)
-	_, _ = mb.Read(zero)
+	_, err := mb.Read(make([]byte, 0))
+	require.NoError(t, err)
 	mb.Regret()
 
-	s, err := io.ReadAll(mb)
-	if string(s) != word {
-		t.Error("Uncommitted read is gone, actual:", string(s), "expected:", word, "err:", err)
-	}
+	assert.Equal(t, word, readAll(t, mb), "uncommitted read is gone")
 }
 
-func TestRegretableAlsoEmptyRead(t *testing.T) {
-	buf := new(bytes.Buffer)
-	mb := regretable.NewRegretableReader(buf)
-	word := "12345678"
-	buf.WriteString(word)
+func TestRegretableRegretAfterMixedReads(t *testing.T) {
+	mb := newReader()
 
-	one := make([]byte, 1)
-	zero := make([]byte, 0)
-	five := make([]byte, 5)
-	_, _ = mb.Read(one)
-	_, _ = mb.Read(zero)
-	_, _ = mb.Read(five)
+	for _, size := range []int{1, 0, 5} {
+		_, err := mb.Read(make([]byte, size))
+		require.NoError(t, err, "read of %d bytes", size)
+	}
 	mb.Regret()
 
-	s, _ := io.ReadAll(mb)
-	if string(s) != word {
-		t.Error("Uncommitted read is gone", string(s), "expected", word)
-	}
+	assert.Equal(t, word, readAll(t, mb), "uncommitted read is gone")
 }
 
 func TestRegretableRegretBeforeRead(t *testing.T) {
-	buf := new(bytes.Buffer)
-	mb := regretable.NewRegretableReader(buf)
-	word := "12345678"
-	buf.WriteString(word)
+	mb := newReader()
 
-	five := make([]byte, 5)
+	// Regretting before reading anything is a no-op, so the five bytes read
+	// afterwards are really consumed.
 	mb.Regret()
-	_, _ = mb.Read(five)
+	_, err := mb.Read(make([]byte, 5))
+	require.NoError(t, err)
 
-	s, err := io.ReadAll(mb)
-	if string(s) != "678" {
-		t.Error("Uncommitted read is gone", string(s), len(string(s)), "expected", "678", len("678"), "err:", err)
-	}
+	assert.Equal(t, "678", readAll(t, mb))
 }
 
-func TestRegretableFullRead(t *testing.T) {
-	buf := new(bytes.Buffer)
-	mb := regretable.NewRegretableReader(buf)
-	word := "12345678"
-	buf.WriteString(word)
+func TestRegretableRegretAfterFullRead(t *testing.T) {
+	mb := newReader()
 
-	twenty := make([]byte, 20)
-	_, _ = mb.Read(twenty)
+	// Ask for more bytes than the reader holds, then take them all back.
+	_, err := mb.Read(make([]byte, 20))
+	require.NoError(t, err)
 	mb.Regret()
 
-	s, _ := io.ReadAll(mb)
-	if string(s) != word {
-		t.Error("Uncommitted read is gone", string(s), len(string(s)), "expected", word, len(word))
-	}
+	assert.Equal(t, word, readAll(t, mb), "uncommitted read is gone")
 }
 
 func TestRegretableRegretTwice(t *testing.T) {
-	buf := new(bytes.Buffer)
-	mb := regretable.NewRegretableReader(buf)
-	word := "12345678"
-	buf.WriteString(word)
+	mb := newReader()
 
-	assertEqual(t, word, assertReadAll(t, mb))
+	assert.Equal(t, word, readAll(t, mb))
 	mb.Regret()
-	assertEqual(t, word, assertReadAll(t, mb))
+	assert.Equal(t, word, readAll(t, mb))
 	mb.Regret()
-	assertEqual(t, word, assertReadAll(t, mb))
+	assert.Equal(t, word, readAll(t, mb))
 }
 
-type CloseCounter struct {
+func TestRegretableCloserSizeRegrets(t *testing.T) {
+	buf := new(bytes.Buffer)
+	buf.WriteString("123456")
+	mb := regretable.NewRegretableReaderCloserSize(io.NopCloser(buf), 3)
+
+	// The reader overflows its 3 byte buffer, so it cannot regret any more.
+	_, err := mb.Read(make([]byte, 4))
+	require.NoError(t, err)
+
+	assert.PanicsWithValue(t, "regretting after overflow makes no sense", mb.Regret)
+}
+
+// closeCounter counts how many times it was closed.
+type closeCounter struct {
 	r      io.Reader
 	closed int
 }
 
-func (cc *CloseCounter) Read(b []byte) (int, error) {
+func (cc *closeCounter) Read(b []byte) (int, error) {
 	return cc.r.Read(b)
 }
 
-func (cc *CloseCounter) Close() error {
+func (cc *closeCounter) Close() error {
 	cc.closed++
 	return nil
 }
 
-func TestRegretableCloserSizeRegrets(t *testing.T) {
-	defer func() {
-		r := recover()
-		if r == nil {
-			t.Error("Did not panic when regretting overread buffer:", r)
-		}
-
-		stringValue, ok := r.(string)
-		if !ok || !strings.Contains(stringValue, "regret") {
-			t.Error("Invalid panic value when regretting overread buffer:", r)
-		}
-	}()
-	buf := new(bytes.Buffer)
-	buf.WriteString("123456")
-	mb := regretable.NewRegretableReaderCloserSize(io.NopCloser(buf), 3)
-	_, _ = mb.Read(make([]byte, 4))
-	mb.Regret()
-}
-
 func TestRegretableCloserRegretsClose(t *testing.T) {
 	buf := new(bytes.Buffer)
-	cc := &CloseCounter{buf, 0}
-	mb := regretable.NewRegretableReaderCloser(cc)
-	word := "12345678"
 	buf.WriteString(word)
+	cc := &closeCounter{r: buf}
+	mb := regretable.NewRegretableReaderCloser(cc)
 
-	_, _ = mb.Read([]byte{0})
-	_ = mb.Close()
-	if cc.closed != 1 {
-		t.Error("RegretableReaderCloser ignores Close")
-	}
+	_, err := mb.Read([]byte{0})
+	require.NoError(t, err)
+	require.NoError(t, mb.Close())
+	assert.Equal(t, 1, cc.closed, "RegretableReaderCloser ignores Close")
+
 	mb.Regret()
-	_ = mb.Close()
-	if cc.closed != 2 {
-		t.Error("RegretableReaderCloser does ignore Close after regret")
-	}
+	require.NoError(t, mb.Close())
+	assert.Equal(t, 2, cc.closed, "RegretableReaderCloser does ignore Close after regret")
 	// TODO(elazar): return an error if client issues Close more than once after regret
 }

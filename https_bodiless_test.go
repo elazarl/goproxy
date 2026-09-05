@@ -6,11 +6,11 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
 
 	"github.com/elazarl/goproxy"
+	"github.com/elazarl/goproxy/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -84,15 +84,7 @@ func TestMitmBodilessResponseIsNotChunked(t *testing.T) {
 					})
 				}
 
-				proxySrv := httptest.NewServer(proxy)
-				defer proxySrv.Close()
-				proxyURL, err := url.Parse(proxySrv.URL)
-				require.NoError(t, err)
-
-				client := &http.Client{Transport: &http.Transport{
-					Proxy:           http.ProxyURL(proxyURL),
-					TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-				}}
+				client, _ := testutil.NewProxy(t, proxy)
 				defer client.CloseIdleConnections()
 
 				do := func() *http.Response {
@@ -129,15 +121,7 @@ func TestMitmBodilessDirectResponseIsNotChunked(t *testing.T) {
 		return nil, goproxy.NewResponse(req, goproxy.ContentTypeText, http.StatusOK, "")
 	})
 
-	proxySrv := httptest.NewServer(proxy)
-	defer proxySrv.Close()
-	proxyURL, err := url.Parse(proxySrv.URL)
-	require.NoError(t, err)
-
-	client := &http.Client{Transport: &http.Transport{
-		Proxy:           http.ProxyURL(proxyURL),
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}}
+	client, _ := testutil.NewProxy(t, proxy)
 	defer client.CloseIdleConnections()
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodHead, upstream.URL, http.NoBody)
