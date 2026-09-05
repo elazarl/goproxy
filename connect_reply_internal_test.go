@@ -3,6 +3,8 @@ package goproxy
 import (
 	"net/http"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // TestConnectResponseLineEchoesVersion verifies that CONNECT tunnel replies
@@ -22,9 +24,7 @@ func TestConnectResponseLineEchoesVersion(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			r := &http.Request{ProtoMajor: c.major, ProtoMinor: c.minor}
-			if got := connectResponseLine(r, http.StatusOK, c.text); got != c.want {
-				t.Errorf("connectResponseLine(%d.%d) = %q, want %q", c.major, c.minor, got, c.want)
-			}
+			assert.Equal(t, c.want, connectResponseLine(r, http.StatusOK, c.text))
 		})
 	}
 }

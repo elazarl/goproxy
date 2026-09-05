@@ -1279,11 +1279,11 @@ func TestMitmConnectNormalizesDefaultPortInURL(t *testing.T) {
 		return nil, goproxy.TextResponse(req, "ok")
 	})
 
-	client, l := oneShotProxy(proxy)
-	defer l.Close()
+	client, proxySrv := testutil.NewProxy(t, proxy)
 
-	proxyURL, _ := url.Parse(l.URL)
-	tr := &http.Transport{
+	proxyURL, err := url.Parse(proxySrv.URL)
+	require.NoError(t, err)
+	client.Transport = &http.Transport{
 		Proxy: http.ProxyURL(proxyURL),
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: true,
@@ -1291,7 +1291,6 @@ func TestMitmConnectNormalizesDefaultPortInURL(t *testing.T) {
 		// Forcefully disable HTTP/2 on the client to guarantee the use of the CONNECT method (HTTP/1.1).
 		TLSNextProto: make(map[string]func(authority string, c *tls.Conn) http.RoundTripper),
 	}
-	client.Transport = tr
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://example.com/bobo", nil)
 	require.NoError(t, err)
