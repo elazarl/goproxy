@@ -560,7 +560,9 @@ func TestMitmHTTP2NilFilteredResponse(t *testing.T) {
 	client := createProxyClientH2(t, proxySrv.URL)
 	client.Timeout = 5 * time.Second
 	defer client.CloseIdleConnections()
-	resp, err := client.Get("https://example.com/")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://example.com/", nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
