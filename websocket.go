@@ -70,7 +70,12 @@ func bufferedClientReader(br *bufio.Reader, conn io.Reader) io.Reader {
 // one side closes. The client read and write sides are passed separately so the
 // caller can hand over a reader that still holds bytes buffered while parsing
 // the upgrade request (e.g. a client frame that arrived in the same write).
-func (proxy *ProxyHttpServer) proxyWebsocket(ctx *ProxyCtx, remoteConn io.ReadWriter, clientReader io.Reader, clientWriter io.Writer) {
+func (proxy *ProxyHttpServer) proxyWebsocket(
+	ctx *ProxyCtx,
+	remoteConn io.ReadWriter,
+	clientReader io.Reader,
+	clientWriter io.Writer,
+) {
 	// 2 is the number of goroutines, this code is implemented according to
 	// https://stackoverflow.com/questions/52031332/wait-for-one-goroutine-to-finish
 	waitChan := make(chan struct{}, 2)
