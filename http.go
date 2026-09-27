@@ -89,7 +89,7 @@ func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request)
 				ctx.Warnf("Unable to use Websocket connection")
 				return
 			}
-			proxy.proxyWebsocket(ctx, wsConn, clientReader, clientConn)
+			proxy.proxyWebsocket(ctx, wsConn, bufferedClientReader(clientReader, clientConn), clientConn)
 		}
 		return
 	}

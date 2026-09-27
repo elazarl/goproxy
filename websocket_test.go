@@ -118,6 +118,18 @@ func readHTTPHead(t *testing.T, r io.Reader) string {
 }
 
 func TestWebSocketMitmEarlyClientFrame(t *testing.T) {
+	for _, preventCanonicalization := range []bool{false, true} {
+		name := "default"
+		if preventCanonicalization {
+			name = "prevent-canonicalization"
+		}
+		t.Run(name, func(t *testing.T) {
+			runMitmEarlyClientFrame(t, preventCanonicalization)
+		})
+	}
+}
+
+func runMitmEarlyClientFrame(t *testing.T, preventCanonicalization bool) {
 	// Start a WebSocket echo server
 	backend := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
@@ -148,6 +160,7 @@ func TestWebSocketMitmEarlyClientFrame(t *testing.T) {
 	// Start goproxy
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.Tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	proxy.PreventCanonicalization = preventCanonicalization
 	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 
 	proxyServer := httptest.NewServer(proxy)

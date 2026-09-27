@@ -1,6 +1,8 @@
 package goproxy
 
 import (
+	"bufio"
+	"bytes"
 	"io"
 	"net"
 	"net/http"
@@ -23,7 +25,7 @@ func isWebSocketHandshake(header http.Header) bool {
 		headerContains(header, "Upgrade", "websocket")
 }
 
-func (proxy *ProxyHttpServer) hijackConnection(ctx *ProxyCtx, w http.ResponseWriter) (net.Conn, io.Reader, error) {
+func (proxy *ProxyHttpServer) hijackConnection(ctx *ProxyCtx, w http.ResponseWriter) (net.Conn, *bufio.Reader, error) {
 	// Connect to Client
 	hj, ok := w.(http.Hijacker)
 	if !ok {
@@ -36,8 +38,32 @@ func (proxy *ProxyHttpServer) hijackConnection(ctx *ProxyCtx, w http.ResponseWri
 	}
 	// rw.Reader still holds any bytes the HTTP server buffered while parsing the
 	// request (e.g. the first WebSocket frame sent in the same write as the
-	// upgrade). Read through it before the raw connection, or those bytes are lost.
+	// upgrade). The caller must relay them via bufferedClientReader.
 	return clientConn, rw.Reader, nil
+}
+
+// bufferedClientReader returns a reader that first replays the bytes already
+// buffered in br by the HTTP request parser, then continues from conn.
+//
+// A WebSocket client may send its first frame in the same write as the upgrade
+// request. Those bytes are read off the socket into the parser's buffer, so a
+// relay that reads only from conn would strand them.
+//
+// We deliberately replay a copy of the buffered bytes instead of reading through
+// br itself: with PreventCanonicalization enabled, br wraps an io.TeeReader that
+// retains every byte read from it, so relaying the whole session through br
+// would grow that buffer unbounded for the connection's lifetime.
+func bufferedClientReader(br *bufio.Reader, conn io.Reader) io.Reader {
+	if br == nil {
+		return conn
+	}
+	// Peek never advances the reader, and requesting Buffered() bytes always
+	// succeeds, so this is a snapshot of the currently buffered bytes.
+	buffered, _ := br.Peek(br.Buffered())
+	if len(buffered) == 0 {
+		return conn
+	}
+	return io.MultiReader(bytes.NewReader(buffered), conn)
 }
 
 // proxyWebsocket relays frames between the client and the upstream server until

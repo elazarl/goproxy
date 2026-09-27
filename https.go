@@ -593,10 +593,9 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						}
 						// The client may have sent its first WebSocket frame in the
 						// same write as the upgrade request, so those bytes are still
-						// in the request parser's buffer. Reading from that buffered
-						// reader (which falls back to the raw connection once drained)
-						// relays them instead of leaving them stranded.
-						proxy.proxyWebsocket(ctx, wsConn, clientReader.Reader(), client)
+						// in the request parser's buffer. Replay them before the raw
+						// connection instead of leaving them stranded.
+						proxy.proxyWebsocket(ctx, wsConn, bufferedClientReader(clientReader.Reader(), client), client)
 						return false
 					}
 
