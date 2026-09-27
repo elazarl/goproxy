@@ -83,13 +83,13 @@ func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request)
 
 		// We have already written the "101 Switching Protocols" response,
 		// now we hijack the connection to send WebSocket data
-		if clientConn, err := proxy.hijackConnection(ctx, w); err == nil {
+		if clientConn, clientReader, err := proxy.hijackConnection(ctx, w); err == nil {
 			wsConn, ok := resp.Body.(io.ReadWriter)
 			if !ok {
 				ctx.Warnf("Unable to use Websocket connection")
 				return
 			}
-			proxy.proxyWebsocket(ctx, wsConn, clientConn)
+			proxy.proxyWebsocket(ctx, wsConn, bufferedClientReader(clientReader, clientConn), clientConn)
 		}
 		return
 	}

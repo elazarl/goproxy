@@ -591,7 +591,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 							ctx.Warnf("Cannot flush response header from mitm'd client: %v", err)
 							return false
 						}
-						proxy.proxyWebsocket(ctx, wsConn, client)
+						// The client may have sent its first WebSocket frame in the
+						// same write as the upgrade request, so those bytes are still
+						// in the request parser's buffer. Replay them before the raw
+						// connection instead of leaving them stranded.
+						proxy.proxyWebsocket(ctx, wsConn, bufferedClientReader(clientReader.Reader(), client), client)
 						return false
 					}
 
