@@ -591,15 +591,12 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 							ctx.Warnf("Cannot flush response header from mitm'd client: %v", err)
 							return false
 						}
-						// The client can send its first WebSocket frame in the same write as the
-						// upgrade request, so those bytes are already in the request parser buffer.
-						// Relay them before the raw connection, or they never reach the origin.
-						br := clientReader.Reader()
-						buffered, _ := br.Peek(br.Buffered())
-						proxy.proxyWebsocket(ctx, wsConn, struct {
-							io.Reader
-							io.Writer
-						}{io.MultiReader(bytes.NewReader(buffered), client), client})
+						// The client may have sent its first WebSocket frame in the
+						// same write as the upgrade request, so those bytes are still
+						// in the request parser's buffer. Reading from that buffered
+						// reader (which falls back to the raw connection once drained)
+						// relays them instead of leaving them stranded.
+						proxy.proxyWebsocket(ctx, wsConn, clientReader.Reader(), client)
 						return false
 					}
 

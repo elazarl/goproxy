@@ -23,31 +23,38 @@ func isWebSocketHandshake(header http.Header) bool {
 		headerContains(header, "Upgrade", "websocket")
 }
 
-func (proxy *ProxyHttpServer) hijackConnection(ctx *ProxyCtx, w http.ResponseWriter) (net.Conn, error) {
+func (proxy *ProxyHttpServer) hijackConnection(ctx *ProxyCtx, w http.ResponseWriter) (net.Conn, io.Reader, error) {
 	// Connect to Client
 	hj, ok := w.(http.Hijacker)
 	if !ok {
 		panic("httpserver does not support hijacking")
 	}
-	clientConn, _, err := hj.Hijack()
+	clientConn, rw, err := hj.Hijack()
 	if err != nil {
 		ctx.Warnf("Hijack error: %v", err)
-		return nil, err
+		return nil, nil, err
 	}
-	return clientConn, nil
+	// rw.Reader still holds any bytes the HTTP server buffered while parsing the
+	// request (e.g. the first WebSocket frame sent in the same write as the
+	// upgrade). Read through it before the raw connection, or those bytes are lost.
+	return clientConn, rw.Reader, nil
 }
 
-func (proxy *ProxyHttpServer) proxyWebsocket(ctx *ProxyCtx, remoteConn io.ReadWriter, proxyClient io.ReadWriter) {
+// proxyWebsocket relays frames between the client and the upstream server until
+// one side closes. The client read and write sides are passed separately so the
+// caller can hand over a reader that still holds bytes buffered while parsing
+// the upgrade request (e.g. a client frame that arrived in the same write).
+func (proxy *ProxyHttpServer) proxyWebsocket(ctx *ProxyCtx, remoteConn io.ReadWriter, clientReader io.Reader, clientWriter io.Writer) {
 	// 2 is the number of goroutines, this code is implemented according to
 	// https://stackoverflow.com/questions/52031332/wait-for-one-goroutine-to-finish
 	waitChan := make(chan struct{}, 2)
 	go func() {
-		_ = copyOrWarn(ctx, remoteConn, proxyClient)
+		_ = copyOrWarn(ctx, remoteConn, clientReader)
 		waitChan <- struct{}{}
 	}()
 
 	go func() {
-		_ = copyOrWarn(ctx, proxyClient, remoteConn)
+		_ = copyOrWarn(ctx, clientWriter, remoteConn)
 		waitChan <- struct{}{}
 	}()
 

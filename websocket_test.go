@@ -205,3 +205,79 @@ func TestWebSocketMitmEarlyClientFrame(t *testing.T) {
 
 	assert.Equal(t, "ECHO: Hello", string(payload))
 }
+
+func TestWebSocketHttpEarlyClientFrame(t *testing.T) {
+	// Start a plain-HTTP WebSocket echo server
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+			InsecureSkipVerify: true,
+		})
+		if err != nil {
+			return
+		}
+		defer func() {
+			_ = c.Close(websocket.StatusNormalClosure, "")
+		}()
+
+		ctx := r.Context()
+		for {
+			mt, message, err := c.Read(ctx)
+			if err != nil {
+				break
+			}
+			err = c.Write(ctx, mt, append([]byte("ECHO: "), message...))
+			if err != nil {
+				break
+			}
+		}
+	}))
+	defer backend.Close()
+
+	// No HandleConnect: the upgrade request goes through the plain HTTP path.
+	proxy := goproxy.NewProxyHttpServer()
+	proxyServer := httptest.NewServer(proxy)
+	defer proxyServer.Close()
+
+	backendURL, err := url.Parse(backend.URL)
+	require.NoError(t, err)
+	proxyURL, err := url.Parse(proxyServer.URL)
+	require.NoError(t, err)
+
+	// A raw client is required: the bug only shows up when the first WebSocket
+	// frame is sent in the same write as the upgrade request.
+	var dialer net.Dialer
+	raw, err := dialer.DialContext(context.Background(), "tcp", proxyURL.Host)
+	require.NoError(t, err)
+	defer func() {
+		_ = raw.Close()
+	}()
+	require.NoError(t, raw.SetDeadline(time.Now().Add(5*time.Second)))
+
+	// Absolute-form request target, as an HTTP proxy expects.
+	upgrade := "GET " + backend.URL + "/ HTTP/1.1\r\n" +
+		"Host: " + backendURL.Host + "\r\n" +
+		"Upgrade: websocket\r\n" +
+		"Connection: Upgrade\r\n" +
+		"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
+		"Sec-WebSocket-Version: 13\r\n" +
+		"\r\n"
+	_, err = raw.Write(append([]byte(upgrade), maskedTextFrame("Hello")...))
+	require.NoError(t, err)
+
+	br := bufio.NewReader(raw)
+	resp, err := http.ReadResponse(br, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusSwitchingProtocols, resp.StatusCode)
+
+	// Server to client frames are not masked
+	header := make([]byte, 2)
+	_, err = io.ReadFull(br, header)
+	require.NoError(t, err)
+	assert.Equal(t, byte(0x81), header[0])
+
+	payload := make([]byte, int(header[1]&0x7f))
+	_, err = io.ReadFull(br, payload)
+	require.NoError(t, err)
+
+	assert.Equal(t, "ECHO: Hello", string(payload))
+}
