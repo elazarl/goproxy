@@ -493,11 +493,13 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						hostToUse = r.Host // Fallback, if the internal Host header is missing
 					}
 
-					req.URL, err = url.Parse(scheme + "://" + hostToUse + req.URL.String())
+					urlToParse := scheme + "://" + hostToUse + req.URL.String()
+					parsedUrl, err := url.Parse(urlToParse)
 					if err != nil {
-						ctx.Warnf("Cannot parse URL %s: %v", scheme+"://"+hostToUse+req.URL.String(), err)
+						ctx.Warnf("Cannot parse URL %s: %v", urlToParse, err)
 						return
 					}
+					req.URL = parsedUrl
 				} else {
 					// Absolute-form request target
 					req.URL.Scheme = scheme
