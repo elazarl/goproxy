@@ -31,7 +31,10 @@ jobs:
       - name: Test
         # -count=2 ensures that test fixtures cleanup after themselves
         # because any leftover state will generally cause the second run to fail.
-        run: go test -race -p 1 -v -shuffle=on -count=2 ./...
+        run: |
+          go test -race -p 1 -v -shuffle=on -count=2 ./...
+          (cd ext && go test -race -p 1 -v -shuffle=on -count=2 ./...)
+          (cd examples && go test -race -p 1 -v -shuffle=on -count=2 ./...)
 
       - name: Linter
         uses: golangci/golangci-lint-action@v9

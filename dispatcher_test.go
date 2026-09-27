@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/elazarl/goproxy"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIsLocalHost(t *testing.T) {
@@ -38,12 +40,8 @@ func TestIsLocalHost(t *testing.T) {
 			}
 			t.Run(addr, func(t *testing.T) {
 				req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://"+addr, http.NoBody)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if !goproxy.IsLocalHost(req, nil) {
-					t.Fatal("expected true")
-				}
+				require.NoError(t, err)
+				assert.True(t, goproxy.IsLocalHost(req, nil))
 			})
 		}
 	}

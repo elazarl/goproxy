@@ -2,8 +2,9 @@ package http1parser_test
 
 import (
 	"bufio"
-	"bytes"
+	"io"
 	"net/textproto"
+	"strings"
 	"testing"
 
 	"github.com/elazarl/goproxy/internal/http1parser"
@@ -11,12 +12,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func newTextReader(data string) *textproto.Reader {
+	return textproto.NewReader(bufio.NewReader(strings.NewReader(data)))
+}
+
 func TestHttp1ExtractHeaders_Empty(t *testing.T) {
 	http1Data := "POST /index.html HTTP/1.1\r\n" +
 		"\r\n"
 
-	textParser := textproto.NewReader(bufio.NewReader(bytes.NewReader([]byte(http1Data))))
-	headers, err := http1parser.Http1ExtractHeaders(textParser)
+	headers, err := http1parser.Http1ExtractHeaders(newTextReader(http1Data))
 	require.NoError(t, err)
 	assert.Empty(t, headers)
 }
@@ -30,19 +34,17 @@ func TestHttp1ExtractHeaders(t *testing.T) {
 		"\r\n" +
 		`{"hello":"world"}`
 
-	textParser := textproto.NewReader(bufio.NewReader(bytes.NewReader([]byte(http1Data))))
-	headers, err := http1parser.Http1ExtractHeaders(textParser)
+	headers, err := http1parser.Http1ExtractHeaders(newTextReader(http1Data))
 	require.NoError(t, err)
-	assert.Len(t, headers, 4)
-	assert.Contains(t, headers, "Content-Length")
-	assert.Contains(t, headers, "lowercase")
+	// Header names are returned as they were received, without canonicalization.
+	assert.Equal(t, []string{"Host", "Accept", "Content-Length", "lowercase"}, headers)
 }
 
 func TestHttp1ExtractHeaders_InvalidData(t *testing.T) {
 	http1Data := "POST /index.html HTTP/1.1\r\n" +
 		`{"hello":"world"}`
 
-	textParser := textproto.NewReader(bufio.NewReader(bytes.NewReader([]byte(http1Data))))
-	_, err := http1parser.Http1ExtractHeaders(textParser)
-	require.Error(t, err)
+	_, err := http1parser.Http1ExtractHeaders(newTextReader(http1Data))
+	// The header block is never terminated, so the reader hits the end of the data.
+	require.ErrorIs(t, err, io.EOF)
 }

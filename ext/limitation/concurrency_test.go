@@ -8,89 +8,81 @@ import (
 
 	"github.com/elazarl/goproxy"
 	"github.com/elazarl/goproxy/ext/limitation"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
+// maximumDuration is how long a handler may take before we consider it blocked.
+const maximumDuration = 100 * time.Millisecond
+
+// newRequest returns a request whose context is cancelled when the test ends,
+// so the limiter releases its slot and no goroutine is left behind.
+func newRequest(t *testing.T) *http.Request {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	return (&http.Request{Host: "test.com"}).WithContext(ctx)
+}
+
+// handleAsync runs limiter.Handle in a goroutine and returns a channel that is
+// closed when it returns.
+func handleAsync(limiter goproxy.ReqHandler, req *http.Request) <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		limiter.Handle(req, &goproxy.ProxyCtx{})
+		close(done)
+	}()
+	return done
+}
+
+func requireDone(t *testing.T, done <-chan struct{}, msg string) {
+	t.Helper()
+	select {
+	case <-done:
+	case <-time.After(maximumDuration):
+		require.Fail(t, msg)
+	}
+}
+
+func assertBlocked(t *testing.T, done <-chan struct{}, msg string) {
+	t.Helper()
+	select {
+	case <-done:
+		assert.Fail(t, msg)
+	case <-time.After(maximumDuration):
+	}
+}
+
 func TestConcurrentRequests(t *testing.T) {
-	mockRequest := &http.Request{Host: "test.com"}
-	ctx := &goproxy.ProxyCtx{}
-	maximumDuration := 100 * time.Millisecond
-
 	t.Run("empty limitation", func(t *testing.T) {
-		timer := time.NewTimer(maximumDuration)
-		defer timer.Stop()
-		done := make(chan struct{})
-
-		go func() {
-			zeroLimiter := limitation.ConcurrentRequests(0)
-			zeroLimiter.Handle(mockRequest, ctx)
-			done <- struct{}{}
-		}()
-
-		select {
-		case <-timer.C:
-			t.Error("Limiter took too long")
-		case <-done:
-		}
+		limiter := limitation.ConcurrentRequests(0)
+		requireDone(t, handleAsync(limiter, newRequest(t)), "limiter took too long")
 	})
 
 	t.Run("normal limitation", func(t *testing.T) {
-		timer := time.NewTimer(maximumDuration)
-		defer timer.Stop()
-		done := make(chan struct{})
-
-		go func() {
-			oneLimiter := limitation.ConcurrentRequests(1)
-			oneLimiter.Handle(mockRequest, ctx)
-			done <- struct{}{}
-		}()
-
-		select {
-		case <-timer.C:
-			t.Error("Limiter took too long")
-		case <-done:
-		}
+		limiter := limitation.ConcurrentRequests(1)
+		requireDone(t, handleAsync(limiter, newRequest(t)), "limiter took too long")
 	})
 
 	t.Run("more than the limit", func(t *testing.T) {
-		timer := time.NewTimer(maximumDuration)
-		defer timer.Stop()
-		done := make(chan struct{})
+		limiter := limitation.ConcurrentRequests(1)
+		first := newRequest(t)
+		requireDone(t, handleAsync(limiter, first), "first request took too long")
 
-		go func() {
-			oneLimiter := limitation.ConcurrentRequests(1)
-			oneLimiter.Handle(mockRequest, ctx)
-			oneLimiter.Handle(mockRequest, ctx)
-			done <- struct{}{}
-		}()
-
-		select {
-		case <-timer.C:
-			// Do nothing, we expect to reach the timeout
-		case <-done:
-			t.Error("Limiter was too fast")
-		}
+		second := handleAsync(limiter, newRequest(t))
+		assertBlocked(t, second, "limiter was too fast, the second request should block")
 	})
 
 	t.Run("more than the limit but one request finishes", func(t *testing.T) {
-		timer := time.NewTimer(maximumDuration)
-		defer timer.Stop()
-		done := make(chan struct{})
+		limiter := limitation.ConcurrentRequests(1)
+		firstCtx, cancelFirst := context.WithCancel(context.Background())
+		first := (&http.Request{Host: "test.com"}).WithContext(firstCtx)
+		requireDone(t, handleAsync(limiter, first), "first request took too long")
 
-		timeoutCtx, cancel := context.WithCancel(mockRequest.Context())
-		mockRequestWithCancel := mockRequest.WithContext(timeoutCtx)
+		second := handleAsync(limiter, newRequest(t))
+		assertBlocked(t, second, "second request should block while the first holds the slot")
 
-		go func() {
-			oneLimiter := limitation.ConcurrentRequests(1)
-			oneLimiter.Handle(mockRequestWithCancel, ctx)
-			cancel()
-			oneLimiter.Handle(mockRequest, ctx)
-			done <- struct{}{}
-		}()
-
-		select {
-		case <-timer.C:
-			t.Error("Limiter took too long")
-		case <-done:
-		}
+		cancelFirst() // releases the slot taken by the first request
+		requireDone(t, second, "second request should proceed after the first finishes")
 	})
 }

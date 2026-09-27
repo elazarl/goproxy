@@ -2,38 +2,46 @@ package main
 
 import (
 	"bytes"
-	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
-	"strings"
 	"testing"
+
+	"github.com/elazarl/goproxy/internal/testutil"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func equal(u, v []string) bool {
-	if len(u) != len(v) {
-		return false
-	}
-	for i := range u {
-		if u[i] != v[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func readFile(fname string, t *testing.T) string {
+func readTestFile(t *testing.T, fname string) string {
+	t.Helper()
 	b, err := os.ReadFile(fname)
-	if err != nil {
-		t.Fatal("readFile", err)
-	}
+	require.NoError(t, err, "cannot read %s", fname)
 	return string(b)
 }
 
+// newJQueryProxy starts a jQuery version checking proxy and returns a client
+// routed through it, plus the buffer that collects the proxy warnings.
+func newJQueryProxy(t *testing.T) (*http.Client, *bytes.Buffer) {
+	t.Helper()
+	var warnings bytes.Buffer
+	proxy := NewJQueryVersionProxy()
+	proxy.Logger = log.New(&warnings, "", 0)
+	client, _ := testutil.NewProxy(t, proxy)
+	return client, &warnings
+}
+
+// newFileServer serves the HTML fixtures of this directory.
+func newFileServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	fs := httptest.NewServer(http.FileServer(http.Dir(".")))
+	t.Cleanup(fs.Close)
+	return fs
+}
+
 func TestDefectiveScriptParser(t *testing.T) {
-	if l := len(findScriptSrc(`<!DOCTYPE HTML>
+	// A page without script tags has no script sources.
+	assert.Empty(t, findScriptSrc(`<!DOCTYPE HTML>
     <html>
     <body>
 
@@ -45,75 +53,54 @@ func TestDefectiveScriptParser(t *testing.T) {
 	  </video>
 
 	  </body>
-	  </html>`)); l != 0 {
-		t.Fail()
-	}
-	urls := findScriptSrc(readFile("w3schools.html", t))
-	if !equal(urls, []string{"http://partner.googleadservices.com/gampad/google_service.js",
-		"//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"}) {
-		t.Error("w3schools.html", "src scripts are not recognized", urls)
-	}
-	urls = findScriptSrc(readFile("jquery_homepage.html", t))
-	if !equal(urls, []string{"http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js",
+	  </html>`))
+
+	assert.Equal(t, []string{
+		"http://partner.googleadservices.com/gampad/google_service.js",
+		"//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit",
+	}, findScriptSrc(readTestFile(t, "w3schools.html")), "w3schools.html src scripts are not recognized")
+
+	assert.Equal(t, []string{
+		"http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js",
 		"http://code.jquery.com/jquery-1.4.2.min.js",
 		"http://static.jquery.com/files/rocker/scripts/custom.js",
-		"http://static.jquery.com/donate/donate.js"}) {
-		t.Error("jquery_homepage.html", "src scripts are not recognized", urls)
-	}
+		"http://static.jquery.com/donate/donate.js",
+	}, findScriptSrc(readTestFile(t, "jquery_homepage.html")), "jquery_homepage.html src scripts are not recognized")
 }
 
-func proxyWithLog() (*http.Client, *bytes.Buffer) {
-	proxy := NewJQueryVersionProxy()
-	proxyServer := httptest.NewServer(proxy)
-	buf := new(bytes.Buffer)
-	proxy.Logger = log.New(buf, "", 0)
-	proxyUrl, _ := url.Parse(proxyServer.URL)
-	tr := &http.Transport{Proxy: http.ProxyURL(proxyUrl)}
-	client := &http.Client{Transport: tr}
-	return client, buf
-}
-
-func get(t *testing.T, server *httptest.Server, client *http.Client, url string) {
-	resp, err := client.Get(server.URL + url)
-	if err != nil {
-		t.Fatal("cannot get proxy", err)
-	}
-	io.ReadAll(resp.Body)
-	resp.Body.Close()
-}
-
+// TestProxyServiceTwoVersions checks that the proxy stays quiet while a host
+// serves a single jQuery version, and warns once a second page of the same
+// host references a different one.
 func TestProxyServiceTwoVersions(t *testing.T) {
-	var fs = httptest.NewServer(http.FileServer(http.Dir(".")))
-	defer fs.Close()
+	fs := newFileServer(t)
+	client, warnings := newJQueryProxy(t)
 
-	client, buf := proxyWithLog()
+	testutil.GetOrFail(t, client, fs.URL+"/w3schools.html")
+	testutil.GetOrFail(t, client, fs.URL+"/php_man.html")
 
-	get(t, fs, client, "/w3schools.html")
-	get(t, fs, client, "/php_man.html")
-	if buf.String() != "" &&
-		!strings.Contains(buf.String(), " uses jquery ") {
-		t.Error("shouldn't warn on a single URL", buf.String())
+	if firstWarnings := warnings.String(); firstWarnings != "" {
+		assert.Contains(t, firstWarnings, " uses jquery ", "shouldn't warn on a single URL")
 	}
-	get(t, fs, client, "/jquery1.html")
-	warnings := buf.String()
-	if !strings.Contains(warnings, "http://ajax.googleapis.com/ajax/libs/jquery/1.3.2/jquery.min.js") ||
-		!strings.Contains(warnings, "jquery.1.4.js") ||
-		!strings.Contains(warnings, "Contradicting") {
-		t.Error("contradicting jquery versions (php_man.html, w3schools.html) does not issue warning", warnings)
-	}
+
+	testutil.GetOrFail(t, client, fs.URL+"/jquery1.html")
+
+	// php_man.html uses jQuery 1.3.2, jquery1.html uses 1.4.
+	contradiction := warnings.String()
+	assert.Contains(t, contradiction, "http://ajax.googleapis.com/ajax/libs/jquery/1.3.2/jquery.min.js")
+	assert.Contains(t, contradiction, "jquery.1.4.js")
+	assert.Contains(t, contradiction, "Contradicting")
 }
 
+// TestProxyService checks that two contradicting jQuery versions on a single
+// page are reported.
 func TestProxyService(t *testing.T) {
-	var fs = httptest.NewServer(http.FileServer(http.Dir(".")))
-	defer fs.Close()
+	fs := newFileServer(t)
+	client, warnings := newJQueryProxy(t)
 
-	client, buf := proxyWithLog()
+	testutil.GetOrFail(t, client, fs.URL+"/jquery_homepage.html")
 
-	get(t, fs, client, "/jquery_homepage.html")
-	warnings := buf.String()
-	if !strings.Contains(warnings, "http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js") ||
-		!strings.Contains(warnings, "http://code.jquery.com/jquery-1.4.2.min.js") ||
-		!strings.Contains(warnings, "Contradicting") {
-		t.Error("contradicting jquery versions does not issue warning")
-	}
+	contradiction := warnings.String()
+	assert.Contains(t, contradiction, "http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js")
+	assert.Contains(t, contradiction, "http://code.jquery.com/jquery-1.4.2.min.js")
+	assert.Contains(t, contradiction, "Contradicting")
 }
