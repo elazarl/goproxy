@@ -25,6 +25,18 @@ import (
 
 var responseHeadTerminator = []byte("\r\n\r\n")
 
+// onceCloseBody shares cleanup between Response.Write and the deferred close.
+type onceCloseBody struct {
+	io.ReadCloser
+	once sync.Once
+	err  error
+}
+
+func (b *onceCloseBody) Close() error {
+	b.once.Do(func() { b.err = b.ReadCloser.Close() })
+	return b.err
+}
+
 type responseHeadWriter struct {
 	writer    io.Writer
 	head      bytes.Buffer
@@ -558,7 +570,6 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					origBody := resp.Body
 					resp = proxy.filterResponse(resp, ctx)
 					bodyModified := resp.Body != origBody
-					defer resp.Body.Close()
 					if responseBodyAllowed(ctx.Req, resp) && resp.Body != http.NoBody && (bodyModified ||
 						(resp.ContentLength <= 0 && resp.Header.Get("Content-Length") == "")) {
 						// Return chunked encoded response when we don't know the length of the resp, if the body
@@ -580,6 +591,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					resp.ProtoMinor = 1
 
 					if isWebSocketHandshake(resp.Header) {
+						defer resp.Body.Close()
 						ctx.Logf("Response looks like websocket upgrade.")
 
 						// According to resp.Body documentation:
@@ -621,6 +633,8 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						resp.Close = true
 					}
 
+					resp.Body = &onceCloseBody{ReadCloser: resp.Body}
+					defer resp.Body.Close()
 					writer := &responseHeadWriter{writer: client}
 					if err := resp.Write(writer); err != nil {
 						ctx.Warnf("Cannot write response from mitm'd client: %v", err)
