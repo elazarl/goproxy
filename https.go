@@ -605,7 +605,8 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						return false
 					}
 
-					return true
+					// A "close" from either side ends the connection (RFC 9112 §9.6).
+					return !ctx.Req.Close && !resp.Close
 				}(req); !continueLoop {
 					return
 				}
