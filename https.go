@@ -269,7 +269,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 	// In HTTP/1.1 mode we hijack the connection.
 	// In HTTP/2 mode (r.ProtoMajor == 2), we take the H2 path as explained in RFC 8441 extended-CONNECT.
 	var proxyClient net.Conn
-	var clientReader *bufio.Reader
+	var hijackedReader *bufio.Reader
 	isH2Tunnel := false
 
 	if canHijack {
@@ -282,7 +282,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		}
 		// rw.Reader still holds any bytes the HTTP server buffered while parsing the
 		// CONNECT request (e.g. a TLS ClientHello sent in the same write).
-		clientReader = rw.Reader
+		hijackedReader = rw.Reader
 	} else if r.ProtoMajor == 2 {
 		// The incoming CONNECT arrived over HTTP/2 (no hijacking available).
 		// Use h2StreamConn so reads/writes go directly against the H2 stream.
@@ -349,7 +349,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 			// same write as the CONNECT request, so those bytes are still in the request
 			// parser's buffer. Replay them before the raw connection instead of leaving
 			// them stranded.
-			clientSrc := bufferedClientReader(clientReader, proxyClient)
+			clientSrc := bufferedClientReader(hijackedReader, proxyClient)
 
 			targetTCP, targetOK := targetSiteCon.(halfClosable)
 			proxyClientTCP, clientOK := proxyClient.(halfClosable)
@@ -416,8 +416,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		// For HTTP/2 (isH2Tunnel), the handler must block, the HTTP/2 server keeps the H2
 		// stream alive only while ServeHTTP is running; returning early closes the stream.
 		mitmWork := func() {
-			// Check if this is an HTTP or an HTTPS MITM request
-			readBuffer := bufio.NewReader(proxyClient)
+			// Check if this is an HTTP or an HTTPS MITM request. The CONNECT
+			// request was parsed through the hijacked reader, so any bytes the
+			// client sent in the same write (e.g. a TLS ClientHello) are buffered
+			// there and must be replayed before the raw connection.
+			readBuffer := bufio.NewReader(bufferedClientReader(hijackedReader, proxyClient))
 			peek, _ := readBuffer.Peek(1)
 			isTLS := len(peek) > 0 && peek[0] == _tlsRecordTypeHandshake
 
