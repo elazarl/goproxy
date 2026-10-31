@@ -599,14 +599,21 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						return false
 					}
 
+					// A "close" from either side ends the connection (RFC 9112 §9.6).
+					// A response filter or a custom RoundTripper may set
+					// "Connection: close" on the header without setting resp.Close,
+					// so normalize it before writing the response.
+					if ctx.Req.Close || headerContains(resp.Header, "Connection", "close") {
+						resp.Close = true
+					}
+
 					writer := &responseHeadWriter{writer: client}
 					if err := resp.Write(writer); err != nil {
 						ctx.Warnf("Cannot write response from mitm'd client: %v", err)
 						return false
 					}
 
-					// A "close" from either side ends the connection (RFC 9112 §9.6).
-					return !ctx.Req.Close && !resp.Close
+					return !resp.Close
 				}(req); !continueLoop {
 					return
 				}
