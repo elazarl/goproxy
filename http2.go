@@ -178,6 +178,18 @@ func (proxy *ProxyHttpServer) handleH2MitmStream(
 
 	origBody := resp.Body
 	resp = proxy.filterResponse(resp, ctx)
+	if resp == nil {
+		if origBody != nil {
+			_ = origBody.Close()
+		}
+		errorString := "error read response " + ctx.Req.URL.Host
+		if ctx.Error != nil {
+			errorString = ctx.Error.Error()
+		}
+		ctx.Logf("HTTP/2 MITM: %s", errorString)
+		http.Error(w, errorString, http.StatusInternalServerError)
+		return
+	}
 	defer resp.Body.Close()
 
 	copyHeaders(w.Header(), resp.Header, proxy.KeepDestinationHeaders)

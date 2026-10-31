@@ -543,6 +543,31 @@ func createProxyClientH2(t *testing.T, proxyURL string) *http.Client {
 	}
 }
 
+func TestMitmHTTP2NilFilteredResponse(t *testing.T) {
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.AllowHTTP2 = true
+	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		return req, goproxy.NewResponse(req, goproxy.ContentTypeText, http.StatusOK, "discarded")
+	})
+	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+		assert.Equal(t, 2, ctx.Req.ProtoMajor)
+		return nil
+	})
+	proxySrv := httptest.NewServer(proxy)
+	defer proxySrv.Close()
+
+	client := createProxyClientH2(t, proxySrv.URL)
+	client.Timeout = 5 * time.Second
+	defer client.CloseIdleConnections()
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://example.com/", nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+}
+
 // TestConnectAcceptProxyOverHTTP2 verifies transparent tunneling (ConnectAccept)
 // when the proxy itself is served over HTTP/2 (isH2Tunnel = true).
 func TestConnectAcceptProxyOverHTTP2(t *testing.T) {
