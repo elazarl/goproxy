@@ -25,6 +25,18 @@ import (
 
 var responseHeadTerminator = []byte("\r\n\r\n")
 
+// onceCloseBody shares cleanup between Response.Write and the deferred close.
+type onceCloseBody struct {
+	io.ReadCloser
+	once sync.Once
+	err  error
+}
+
+func (b *onceCloseBody) Close() error {
+	b.once.Do(func() { b.err = b.ReadCloser.Close() })
+	return b.err
+}
+
 type continueOnRead struct {
 	io.ReadCloser
 	client   io.Writer
@@ -296,15 +308,20 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 	// In HTTP/1.1 mode we hijack the connection.
 	// In HTTP/2 mode (r.ProtoMajor == 2), we take the H2 path as explained in RFC 8441 extended-CONNECT.
 	var proxyClient net.Conn
+	var hijackedReader *bufio.Reader
 	isH2Tunnel := false
 
 	if canHijack {
+		var rw *bufio.ReadWriter
 		var e error
-		proxyClient, _, e = hij.Hijack()
+		proxyClient, rw, e = hij.Hijack()
 		if e != nil {
 			ctx.Warnf("Cannot hijack connection: %v", e)
 			return
 		}
+		// rw.Reader still holds any bytes the HTTP server buffered while parsing the
+		// CONNECT request (e.g. a TLS ClientHello sent in the same write).
+		hijackedReader = rw.Reader
 	} else if r.ProtoMajor == 2 {
 		// The incoming CONNECT arrived over HTTP/2 (no hijacking available).
 		// Use h2StreamConn so reads/writes go directly against the H2 stream.
@@ -367,14 +384,20 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		} else {
 			_, _ = proxyClient.Write([]byte(connectResponseLine(r, http.StatusOK, "Connection established")))
 
+			// The client may have sent its first bytes (e.g. a TLS ClientHello) in the
+			// same write as the CONNECT request, so those bytes are still in the request
+			// parser's buffer. Replay them before the raw connection instead of leaving
+			// them stranded.
+			clientSrc := bufferedClientReader(hijackedReader, proxyClient)
+
 			targetTCP, targetOK := targetSiteCon.(halfClosable)
 			proxyClientTCP, clientOK := proxyClient.(halfClosable)
 			if targetOK && clientOK {
 				go func() {
 					var wg sync.WaitGroup
 					wg.Add(2)
-					go copyAndClose(ctx, targetTCP, proxyClientTCP, &wg)
-					go copyAndClose(ctx, proxyClientTCP, targetTCP, &wg)
+					go copyAndClose(ctx, targetTCP, proxyClientTCP, clientSrc, &wg)
+					go copyAndClose(ctx, proxyClientTCP, targetTCP, targetTCP, &wg)
 					wg.Wait()
 					// Make sure to close the underlying TCP socket.
 					// CloseRead() and CloseWrite() keep it open until its timeout,
@@ -400,7 +423,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				// of the connection remains open until it either times out or is reset by
 				// the client.
 				go func() {
-					err := copyOrWarn(ctx, targetSiteCon, proxyClient)
+					err := copyOrWarn(ctx, targetSiteCon, clientSrc)
 					if err != nil && proxy.ConnectionErrHandler != nil {
 						proxy.ConnectionErrHandler(proxyClient, ctx, err)
 					}
@@ -432,8 +455,11 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 		// For HTTP/2 (isH2Tunnel), the handler must block, the HTTP/2 server keeps the H2
 		// stream alive only while ServeHTTP is running; returning early closes the stream.
 		mitmWork := func() {
-			// Check if this is an HTTP or an HTTPS MITM request
-			readBuffer := bufio.NewReader(proxyClient)
+			// Check if this is an HTTP or an HTTPS MITM request. The CONNECT
+			// request was parsed through the hijacked reader, so any bytes the
+			// client sent in the same write (e.g. a TLS ClientHello) are buffered
+			// there and must be replayed before the raw connection.
+			readBuffer := bufio.NewReader(bufferedClientReader(hijackedReader, proxyClient))
 			peek, _ := readBuffer.Peek(1)
 			isTLS := len(peek) > 0 && peek[0] == _tlsRecordTypeHandshake
 
@@ -580,7 +606,6 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					origBody := resp.Body
 					resp = proxy.filterResponse(resp, ctx)
 					bodyModified := resp.Body != origBody
-					defer resp.Body.Close()
 					if responseBodyAllowed(ctx.Req, resp) && resp.Body != http.NoBody && (bodyModified ||
 						(resp.ContentLength <= 0 && resp.Header.Get("Content-Length") == "")) {
 						// Return chunked encoded response when we don't know the length of the resp, if the body
@@ -605,6 +630,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					}
 
 					if isWebSocketHandshake(resp.Header) {
+						defer resp.Body.Close()
 						ctx.Logf("Response looks like websocket upgrade.")
 
 						// According to resp.Body documentation:
@@ -638,13 +664,23 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						return false
 					}
 
+					// A "close" from either side ends the connection (RFC 9112 §9.6).
+					// A response filter or a custom RoundTripper may set
+					// "Connection: close" on the header without setting resp.Close,
+					// so normalize it before writing the response.
+					if ctx.Req.Close || headerContains(resp.Header, "Connection", "close") {
+						resp.Close = true
+					}
+
+					resp.Body = &onceCloseBody{ReadCloser: resp.Body}
+					defer resp.Body.Close()
 					writer := &responseHeadWriter{writer: client}
 					if err := resp.Write(writer); err != nil {
 						ctx.Warnf("Cannot write response from mitm'd client: %v", err)
 						return false
 					}
 
-					return true
+					return !resp.Close
 				}(req); !continueLoop {
 					return
 				}
@@ -702,8 +738,10 @@ func copyOrWarn(ctx *ProxyCtx, dst io.Writer, src io.Reader) error {
 	return err
 }
 
-func copyAndClose(ctx *ProxyCtx, dst, src halfClosable, wg *sync.WaitGroup) {
-	_, err := io.Copy(dst, src)
+// copyAndClose copies from srcReader to dst, then half-closes both. srcReader reads
+// src, possibly after bytes already buffered from it (see bufferedClientReader).
+func copyAndClose(ctx *ProxyCtx, dst, src halfClosable, srcReader io.Reader, wg *sync.WaitGroup) {
+	_, err := io.Copy(dst, srcReader)
 	if err != nil {
 		if !errors.Is(err, net.ErrClosed) {
 			ctx.Warnf("Error copying to client: %s", err.Error())

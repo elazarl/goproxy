@@ -50,9 +50,11 @@ func (proxy *ProxyHttpServer) hijackConnection(ctx *ProxyCtx, w http.ResponseWri
 // bufferedClientReader returns a reader that first replays the bytes already
 // buffered in br by the HTTP request parser, then continues from conn.
 //
-// A WebSocket client may send its first frame in the same write as the upgrade
-// request. Those bytes are read off the socket into the parser's buffer, so a
-// relay that reads only from conn would strand them.
+// A client may send its first tunnel or upgrade bytes (a TLS ClientHello, an
+// HTTP/2 preface, or a WebSocket frame) in the same write as the CONNECT or
+// upgrade request. Those bytes are read off the socket into the parser's
+// buffer, so a relay that reads only from conn would strand them. Both the
+// CONNECT tunnel path and the MITM path use this helper.
 //
 // We deliberately replay a copy of the buffered bytes instead of reading through
 // br itself: with PreventCanonicalization enabled, br wraps an io.TeeReader that
