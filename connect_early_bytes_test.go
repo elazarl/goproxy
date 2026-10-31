@@ -1,6 +1,7 @@
 package goproxy_test
 
 import (
+	"context"
 	"crypto/tls"
 	"io"
 	"net"
@@ -24,16 +25,18 @@ func clientHelloRecord(t *testing.T, serverName string) []byte {
 	defer func() { _ = a.Close() }()
 	defer func() { _ = b.Close() }()
 	go func() {
-		_ = tls.Client(a, &tls.Config{ServerName: serverName, InsecureSkipVerify: true}).Handshake()
+		client := tls.Client(a, &tls.Config{ServerName: serverName, InsecureSkipVerify: true})
+		_ = client.HandshakeContext(context.Background())
 	}()
 	require.NoError(t, b.SetReadDeadline(time.Now().Add(5*time.Second)))
 	head := make([]byte, 5)
 	_, err := io.ReadFull(b, head)
 	require.NoError(t, err)
-	body := make([]byte, int(head[3])<<8|int(head[4]))
-	_, err = io.ReadFull(b, body)
+	record := make([]byte, 5+(int(head[3])<<8|int(head[4])))
+	copy(record, head)
+	_, err = io.ReadFull(b, record[5:])
 	require.NoError(t, err)
-	return append(head, body...)
+	return record
 }
 
 // A client may send its first bytes in the same write as the CONNECT request (a TLS ClientHello, for
@@ -55,7 +58,7 @@ func TestConnectEarlyClientBytes(t *testing.T) {
 	proxyURL, err := url.Parse(proxyServer.URL)
 	require.NoError(t, err)
 
-	conn, err := net.Dial("tcp", proxyURL.Host)
+	conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyURL.Host)
 	require.NoError(t, err)
 	defer func() { _ = conn.Close() }()
 	require.NoError(t, conn.SetDeadline(time.Now().Add(5*time.Second)))
@@ -96,7 +99,7 @@ func TestMitmConnectEarlyClientBytes(t *testing.T) {
 	proxyURL, err := url.Parse(proxyServer.URL)
 	require.NoError(t, err)
 
-	conn, err := net.Dial("tcp", proxyURL.Host)
+	conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyURL.Host)
 	require.NoError(t, err)
 	defer func() { _ = conn.Close() }()
 	require.NoError(t, conn.SetDeadline(time.Now().Add(5*time.Second)))
