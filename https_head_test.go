@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/elazarl/goproxy"
+	"github.com/elazarl/goproxy/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -60,16 +61,8 @@ func TestMitmResponseStreamsSSE(t *testing.T) {
 	proxy.Tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
 
-	proxyServer := httptest.NewServer(proxy)
-	defer proxyServer.Close()
+	client, _ := testutil.NewProxy(t, proxy)
 	defer close(release)
-	proxyURL, err := url.Parse(proxyServer.URL)
-	require.NoError(t, err)
-
-	client := &http.Client{Transport: &http.Transport{
-		Proxy:           http.ProxyURL(proxyURL),
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}}
 
 	result := make(chan error, 1)
 	go func() {

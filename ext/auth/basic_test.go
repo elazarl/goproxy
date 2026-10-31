@@ -1,174 +1,176 @@
 package auth_test
 
 import (
+	"context"
 	"encoding/base64"
+	"errors"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
+	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/elazarl/goproxy"
 	"github.com/elazarl/goproxy/ext/auth"
+	"github.com/elazarl/goproxy/internal/testutil"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-type ConstantHanlder string
+const (
+	authRealm    = "my_realm"
+	authUser     = "user"
+	authPassword = "open sesame"
+)
 
-func (h ConstantHanlder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	io.WriteString(w, string(h))
+// validCredentials is the authentication callback used by the tests below.
+func validCredentials(user, password string) bool {
+	return user == authUser && password == authPassword
 }
 
-func oneShotProxy(proxy *goproxy.ProxyHttpServer) (client *http.Client, s *httptest.Server) {
-	s = httptest.NewServer(proxy)
-
-	proxyUrl, _ := url.Parse(s.URL)
-	tr := &http.Transport{Proxy: http.ProxyURL(proxyUrl)}
-	client = &http.Client{Transport: tr}
-	return
-}
-
-func times(n int, s string) string {
-	r := make([]byte, 0, n*len(s))
-	for i := 0; i < n; i++ {
-		r = append(r, s...)
+// curlPath returns the path of the curl binary, skipping the test if curl
+// is not installed.
+func curlPath(t *testing.T) string {
+	t.Helper()
+	path, err := exec.LookPath("curl")
+	if err != nil {
+		t.Skipf("curl is not available: %v", err)
 	}
-	return string(r)
+	return path
 }
 
 func TestBasicConnectAuthWithCurl(t *testing.T) {
-	expected := ":c>"
-	background := httptest.NewTLSServer(ConstantHanlder(expected))
-	defer background.Close()
-	proxy := goproxy.NewProxyHttpServer()
-	proxy.OnRequest().HandleConnect(auth.BasicConnect("my_realm", func(user, passwd string) bool {
-		return user == "user" && passwd == "open sesame"
-	}))
-	_, proxyserver := oneShotProxy(proxy)
-	defer proxyserver.Close()
+	const body = ":c>"
+	curl := curlPath(t)
 
-	cmd := exec.Command("curl",
+	backend := httptest.NewTLSServer(testutil.ConstantHandler(body))
+	t.Cleanup(backend.Close)
+
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.OnRequest().HandleConnect(auth.BasicConnect(authRealm, validCredentials))
+	_, proxyServer := testutil.NewProxy(t, proxy)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// CombinedOutput so that a curl error message shows up in the failure.
+	out, err := exec.CommandContext(ctx, curl,
 		"--silent", "--show-error", "--insecure",
-		"-x", proxyserver.URL,
-		"-U", "user:open sesame",
+		"-x", proxyServer.URL,
+		"-U", authUser+":"+authPassword,
 		"-p",
-		"--url", background.URL+"/[1-3]",
-	)
-	out, err := cmd.CombinedOutput() // if curl got error, it'll show up in stderr
-	if err != nil {
-		t.Fatal(err, string(out))
-	}
-	finalexpected := times(3, expected)
-	if string(out) != finalexpected {
-		t.Error("Expected", finalexpected, "got", string(out))
-	}
+		"--url", backend.URL+"/[1-3]",
+	).CombinedOutput()
+	require.NoError(t, err, "curl output: %s", out)
+	assert.Equal(t, strings.Repeat(body, 3), string(out))
 }
 
 func TestBasicAuthWithCurl(t *testing.T) {
-	expected := ":c>"
-	background := httptest.NewServer(ConstantHanlder(expected))
-	defer background.Close()
-	proxy := goproxy.NewProxyHttpServer()
-	proxy.OnRequest().Do(auth.Basic("my_realm", func(user, passwd string) bool {
-		return user == "user" && passwd == "open sesame"
-	}))
-	_, proxyserver := oneShotProxy(proxy)
-	defer proxyserver.Close()
+	const body = ":c>"
+	curl := curlPath(t)
 
-	cmd := exec.Command("curl",
+	backend := httptest.NewServer(testutil.ConstantHandler(body))
+	t.Cleanup(backend.Close)
+
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.OnRequest().Do(auth.Basic(authRealm, validCredentials))
+	_, proxyServer := testutil.NewProxy(t, proxy)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// CombinedOutput so that a curl error message shows up in the failure.
+	out, err := exec.CommandContext(ctx, curl,
 		"--silent", "--show-error",
-		"-x", proxyserver.URL,
-		"-U", "user:open sesame",
-		"--url", background.URL+"/[1-3]",
-	)
-	out, err := cmd.CombinedOutput() // if curl got error, it'll show up in stderr
-	if err != nil {
-		t.Fatal(err, string(out))
-	}
-	finalexpected := times(3, expected)
-	if string(out) != finalexpected {
-		t.Error("Expected", finalexpected, "got", string(out))
-	}
+		"-x", proxyServer.URL,
+		"-U", authUser+":"+authPassword,
+		"--url", backend.URL+"/[1-3]",
+	).CombinedOutput()
+	require.NoError(t, err, "curl output: %s", out)
+	assert.Equal(t, strings.Repeat(body, 3), string(out))
 }
 
 func TestBasicAuth(t *testing.T) {
-	expected := "hello"
-	background := httptest.NewServer(ConstantHanlder(expected))
-	defer background.Close()
+	const body = "hello"
+	backend := httptest.NewServer(testutil.ConstantHandler(body))
+	t.Cleanup(backend.Close)
+
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.OnRequest().Do(auth.Basic("my_realm", func(user, passwd string) bool {
-		return user == "user" && passwd == "open sesame"
-	}))
-	client, proxyserver := oneShotProxy(proxy)
-	defer proxyserver.Close()
+	proxy.OnRequest().Do(auth.Basic(authRealm, validCredentials))
+	client, _ := testutil.NewProxy(t, proxy)
 
-	// without auth
-	resp, err := client.Get(background.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if resp.Header.Get("Proxy-Authenticate") != "Basic realm=my_realm" {
-		t.Error("Expected Proxy-Authenticate header got", resp.Header.Get("Proxy-Authenticate"))
-	}
-	if resp.StatusCode != http.StatusProxyAuthRequired {
-		t.Error("Expected status 407 Proxy Authentication Required, got", resp.Status)
+	newRequest := func() *http.Request {
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, backend.URL, nil)
+		require.NoError(t, err)
+		return req
 	}
 
-	// with auth
-	req, err := http.NewRequest(http.MethodGet, background.URL, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Without credentials the proxy must ask for them.
+	resp, err := client.Do(newRequest())
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusProxyAuthRequired, resp.StatusCode)
+	assert.Equal(t, "Basic realm="+authRealm, resp.Header.Get("Proxy-Authenticate"))
+	require.NoError(t, resp.Body.Close())
+
+	// With valid credentials the request reaches the backend.
+	req := newRequest()
 	req.Header.Set("Proxy-Authorization",
-		"Basic "+base64.StdEncoding.EncodeToString([]byte("user:open sesame")))
+		"Basic "+base64.StdEncoding.EncodeToString([]byte(authUser+":"+authPassword)))
 	resp, err = client.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Error("Expected status 200 OK, got", resp.Status)
-	}
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	msg, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(msg) != "hello" {
-		t.Errorf("Expected '%s', actual '%s'", expected, string(msg))
-	}
+	require.NoError(t, err)
+	assert.Equal(t, body, string(msg))
 }
 
+// TestWithBrowser is a manual test: an easy way to check that authentication
+// works with a real browser. To run it:
+//
+//	$ go test -v -run TestWithBrowser -- server
+//
+// Configure a browser to use the printed proxy address, browse through the
+// proxy, then stop the test with Ctrl-C. It fails if the proxy was never used.
 func TestWithBrowser(t *testing.T) {
-	// an easy way to check if auth works with webserver
-	// to test, run with
-	// $ go test -run TestWithBrowser -- server
-	// configure a browser to use the printed proxy address, use the proxy
-	// and exit with Ctrl-C. It will throw error if your haven't actually used the proxy
 	if os.Args[len(os.Args)-1] != "server" {
-		return
+		t.Skip("manual test, run with: go test -v -run TestWithBrowser -- server")
 	}
+
+	const browserUser, browserPassword = "user", "1234"
+	var accesses atomic.Int32
+
 	proxy := goproxy.NewProxyHttpServer()
-	println("proxy localhost port 8082")
-	access := int32(0)
-	proxy.OnRequest().Do(auth.Basic("my_realm", func(user, passwd string) bool {
-		atomic.AddInt32(&access, 1)
-		return user == "user" && passwd == "1234"
+	proxy.OnRequest().Do(auth.Basic(authRealm, func(user, password string) bool {
+		accesses.Add(1)
+		return user == browserUser && password == browserPassword
 	}))
-	l, err := net.Listen("tcp", "localhost:8082")
-	if err != nil {
-		t.Fatal(err)
-	}
-	ch := make(chan os.Signal)
-	signal.Notify(ch, os.Interrupt)
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	var listenConfig net.ListenConfig
+	listener, err := listenConfig.Listen(ctx, "tcp", "localhost:0")
+	require.NoError(t, err)
+	t.Logf("proxy listening on %s, user %q, password %q",
+		listener.Addr(), browserUser, browserPassword)
+
 	go func() {
-		<-ch
-		l.Close()
+		<-ctx.Done()
+		_ = listener.Close()
 	}()
-	http.Serve(l, proxy)
-	if access <= 0 {
-		t.Error("No one accessed the proxy")
+
+	server := &http.Server{Handler: proxy, ReadHeaderTimeout: 10 * time.Second}
+	err = server.Serve(listener)
+	if !errors.Is(err, net.ErrClosed) {
+		require.NoError(t, err)
 	}
+	assert.Positive(t, accesses.Load(), "no one accessed the proxy")
 }
