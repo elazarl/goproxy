@@ -64,6 +64,22 @@ func (r *continueOnRead) stop() {
 	r.mu.Unlock()
 }
 
+func (r *continueOnRead) sentContinue() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.sent
+}
+
+// Close does not drain a body the client was never asked to send. The response
+// path advertises "Connection: close" for that case instead, so the connection
+// is torn down rather than blocking on bytes that will never arrive.
+func (r *continueOnRead) Close() error {
+	if !r.sentContinue() {
+		return nil
+	}
+	return r.ReadCloser.Close()
+}
+
 type responseHeadWriter struct {
 	writer    io.Writer
 	head      bytes.Buffer
@@ -667,8 +683,12 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					// A "close" from either side ends the connection (RFC 9112 §9.6).
 					// A response filter or a custom RoundTripper may set
 					// "Connection: close" on the header without setting resp.Close,
-					// so normalize it before writing the response.
-					if ctx.Req.Close || headerContains(resp.Header, "Connection", "close") {
+					// so normalize it before writing the response. The same applies
+					// when a final response is sent before the client was told to
+					// send the request body: the body is unread, so the connection
+					// cannot be reused (RFC 9110 §10.1.1).
+					if ctx.Req.Close || headerContains(resp.Header, "Connection", "close") ||
+						(continueBody != nil && !continueBody.sentContinue()) {
 						resp.Close = true
 					}
 

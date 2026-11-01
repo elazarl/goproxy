@@ -117,7 +117,16 @@ func TestMitmSendsContinueBeforeReadingBody(t *testing.T) {
 			rejected, err := http.ReadResponse(reader, nil)
 			require.NoError(t, err)
 			require.Equal(t, http.StatusForbidden, rejected.StatusCode)
+			rejectedBody, err := io.ReadAll(rejected.Body)
+			require.NoError(t, err)
+			require.Equal(t, "blocked", string(rejectedBody))
 			require.NoError(t, rejected.Body.Close())
+			// No 100 Continue was sent, so the client will not send the body.
+			// The proxy must announce the close instead of leaving the
+			// connection blocked waiting for bytes that never arrive.
+			require.True(t, rejected.Close, "final response without 100 Continue must close the connection")
+			_, err = reader.ReadByte()
+			require.ErrorIs(t, err, io.EOF)
 		})
 	}
 }
