@@ -37,6 +37,49 @@ func (b *onceCloseBody) Close() error {
 	return b.err
 }
 
+type continueOnRead struct {
+	io.ReadCloser
+	client   io.Writer
+	mu       sync.Mutex
+	canWrite bool
+	sent     bool
+}
+
+func (r *continueOnRead) Read(p []byte) (int, error) {
+	r.mu.Lock()
+	if r.canWrite && !r.sent {
+		r.sent = true
+		if _, err := io.WriteString(r.client, "HTTP/1.1 100 Continue\r\n\r\n"); err != nil {
+			r.mu.Unlock()
+			return 0, err
+		}
+	}
+	r.mu.Unlock()
+	return r.ReadCloser.Read(p)
+}
+
+func (r *continueOnRead) stop() {
+	r.mu.Lock()
+	r.canWrite = false
+	r.mu.Unlock()
+}
+
+func (r *continueOnRead) sentContinue() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.sent
+}
+
+// Close does not drain a body the client was never asked to send. The response
+// path advertises "Connection: close" for that case instead, so the connection
+// is torn down rather than blocking on bytes that will never arrive.
+func (r *continueOnRead) Close() error {
+	if !r.sentContinue() {
+		return nil
+	}
+	return r.ReadCloser.Close()
+}
+
 type responseHeadWriter struct {
 	writer    io.Writer
 	head      bytes.Buffer
@@ -505,6 +548,15 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				if err != nil {
 					return
 				}
+				// The hijacked MITM connection has no net/http server to send
+				// 100 Continue when a handler reads the request body.
+				hasBody := req.Body != nil && req.Body != http.NoBody
+				expectsContinue := headerContains(req.Header, "Expect", "100-continue")
+				var continueBody *continueOnRead
+				if req.ProtoAtLeast(1, 1) && hasBody && expectsContinue {
+					continueBody = &continueOnRead{ReadCloser: req.Body, client: client, canWrite: true}
+					req.Body = continueBody
+				}
 
 				// since we're converting the request, need to carry over the
 				// original connecting IP as well
@@ -589,6 +641,9 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					resp.Proto = "HTTP/1.1"
 					resp.ProtoMajor = 1
 					resp.ProtoMinor = 1
+					if continueBody != nil {
+						continueBody.stop()
+					}
 
 					if isWebSocketHandshake(resp.Header) {
 						defer resp.Body.Close()
@@ -628,8 +683,12 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 					// A "close" from either side ends the connection (RFC 9112 §9.6).
 					// A response filter or a custom RoundTripper may set
 					// "Connection: close" on the header without setting resp.Close,
-					// so normalize it before writing the response.
-					if ctx.Req.Close || headerContains(resp.Header, "Connection", "close") {
+					// so normalize it before writing the response. The same applies
+					// when a final response is sent before the client was told to
+					// send the request body: the body is unread, so the connection
+					// cannot be reused (RFC 9110 §10.1.1).
+					if ctx.Req.Close || headerContains(resp.Header, "Connection", "close") ||
+						(continueBody != nil && !continueBody.sentContinue()) {
 						resp.Close = true
 					}
 
