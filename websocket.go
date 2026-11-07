@@ -10,10 +10,15 @@ import (
 )
 
 func headerContains(header http.Header, name string, value string) bool {
-	for _, v := range header[name] {
-		for _, s := range strings.Split(v, ",") {
-			if strings.EqualFold(value, strings.TrimSpace(s)) {
-				return true
+	for key, values := range header {
+		if !strings.EqualFold(key, name) {
+			continue
+		}
+		for _, v := range values {
+			for _, s := range strings.Split(v, ",") {
+				if strings.EqualFold(value, strings.TrimSpace(s)) {
+					return true
+				}
 			}
 		}
 	}
