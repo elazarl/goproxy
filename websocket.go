@@ -3,11 +3,18 @@ package goproxy
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"io"
 	"net"
 	"net/http"
 	"strings"
 )
+
+var errCopyDone = errors.New("hijacked connection copy complete")
+
+type closeWriter interface {
+	CloseWrite() error
+}
 
 func headerContains(header http.Header, name string, value string) bool {
 	for key, values := range header {
@@ -103,19 +110,34 @@ func (proxy *ProxyHttpServer) proxyWebsocket(
 	clientReader io.Reader,
 	clientWriter io.Writer,
 ) {
-	// 2 is the number of goroutines, this code is implemented according to
-	// https://stackoverflow.com/questions/52031332/wait-for-one-goroutine-to-finish
-	waitChan := make(chan struct{}, 2)
+	// Mirror net/http/httputil.ReverseProxy's switchProtocolCopier: propagate
+	// CloseWrite on EOF and wait for the reverse direction when supported.
+	errc := make(chan error, 2)
 	go func() {
-		_ = copyOrWarn(ctx, remoteConn, clientReader)
-		waitChan <- struct{}{}
+		if err := copyOrWarn(ctx, remoteConn, clientReader); err != nil {
+			errc <- err
+			return
+		}
+		if cw, ok := remoteConn.(closeWriter); ok {
+			errc <- cw.CloseWrite()
+			return
+		}
+		errc <- errCopyDone
 	}()
 
 	go func() {
-		_ = copyOrWarn(ctx, clientWriter, remoteConn)
-		waitChan <- struct{}{}
+		if err := copyOrWarn(ctx, clientWriter, remoteConn); err != nil {
+			errc <- err
+			return
+		}
+		if cw, ok := clientWriter.(closeWriter); ok {
+			errc <- cw.CloseWrite()
+			return
+		}
+		errc <- errCopyDone
 	}()
 
-	// Wait until one end closes the connection
-	<-waitChan
+	if err := <-errc; err == nil {
+		<-errc
+	}
 }
