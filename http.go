@@ -96,6 +96,9 @@ func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request)
 
 	var copyWriter io.Writer = w
 	if shouldFlushStreaming(resp) {
+		if responseBodyAllowed(r, resp) && resp.Body != http.NoBody {
+			_ = http.NewResponseController(w).Flush()
+		}
 		copyWriter = &flushWriter{w: w}
 	}
 
