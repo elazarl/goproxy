@@ -78,18 +78,19 @@ func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request)
 	}
 	w.WriteHeader(resp.StatusCode)
 
-	if isWebSocketHandshake(resp.Header) {
-		ctx.Logf("Response looks like websocket upgrade.")
+	if isProtocolSwitchResponse(resp) {
+		ctx.Logf("Response looks like protocol upgrade.")
 
 		// We have already written the "101 Switching Protocols" response,
-		// now we hijack the connection to send WebSocket data
+		// now we hijack the connection to relay upgraded stream data.
 		if clientConn, clientReader, err := proxy.hijackConnection(ctx, w); err == nil {
-			wsConn, ok := resp.Body.(io.ReadWriter)
+			defer clientConn.Close()
+			upgConn, ok := resp.Body.(io.ReadWriter)
 			if !ok {
-				ctx.Warnf("Unable to use Websocket connection")
+				ctx.Warnf("Unable to use upgraded connection")
 				return
 			}
-			proxy.proxyWebsocket(ctx, wsConn, bufferedClientReader(clientReader, clientConn), clientConn)
+			proxy.proxyWebsocket(ctx, upgConn, bufferedClientReader(clientReader, clientConn), clientConn)
 		}
 		return
 	}

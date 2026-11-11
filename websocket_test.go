@@ -290,3 +290,82 @@ func TestWebSocketHttpEarlyClientFrame(t *testing.T) {
 
 	assert.Equal(t, "ECHO: Hello", string(payload))
 }
+
+func TestGenericProtocolUpgrade(t *testing.T) {
+	for _, useTLS := range []bool{false, true} {
+		name := "http"
+		if useTLS {
+			name = "mitm"
+		}
+		t.Run(name, func(t *testing.T) {
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				hasConnUpgrade := strings.EqualFold(r.Header.Get("Connection"), "Upgrade")
+				if r.Header.Get("Upgrade") != "tcp" || !hasConnUpgrade {
+					http.Error(w, "missing upgrade headers", http.StatusBadRequest)
+					return
+				}
+				conn, brw, err := http.NewResponseController(w).Hijack()
+				if err != nil {
+					return
+				}
+				defer func() { _ = conn.Close() }()
+				_, _ = brw.WriteString(
+					"HTTP/1.1 101 Switching Protocols\r\n" +
+						"Connection: Upgrade\r\n" +
+						"Upgrade: tcp\r\n\r\n",
+				)
+				_ = brw.Flush()
+
+				buf := make([]byte, 4)
+				if _, err := io.ReadFull(brw, buf); err == nil {
+					_, _ = conn.Write(append([]byte("pong:"), buf...))
+				}
+			})
+			backend := httptest.NewUnstartedServer(handler)
+			if useTLS {
+				backend.StartTLS()
+			} else {
+				backend.Start()
+			}
+			defer backend.Close()
+
+			proxy := goproxy.NewProxyHttpServer()
+			proxy.Tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+			proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+			proxyServer := httptest.NewServer(proxy)
+			defer proxyServer.Close()
+
+			proxyURL, err := url.Parse(proxyServer.URL)
+			require.NoError(t, err)
+			client := &http.Client{
+				Transport: &http.Transport{
+					Proxy:           http.ProxyURL(proxyURL),
+					TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+				},
+			}
+
+			req, err := http.NewRequestWithContext(
+				context.Background(),
+				http.MethodPost,
+				backend.URL+"/exec",
+				http.NoBody,
+			)
+			require.NoError(t, err)
+			req.Header.Set("Connection", "Upgrade")
+			req.Header.Set("Upgrade", "tcp")
+
+			resp, err := client.Do(req)
+			require.NoError(t, err)
+			defer func() { _ = resp.Body.Close() }()
+			require.Equal(t, http.StatusSwitchingProtocols, resp.StatusCode)
+
+			rw, ok := resp.Body.(io.ReadWriter)
+			require.True(t, ok)
+			_, err = rw.Write([]byte("ping"))
+			require.NoError(t, err)
+			reply, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			assert.Equal(t, "pong:ping", string(reply))
+		})
+	}
+}

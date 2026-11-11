@@ -25,9 +25,29 @@ func headerContains(header http.Header, name string, value string) bool {
 	return false
 }
 
-func isWebSocketHandshake(header http.Header) bool {
-	return headerContains(header, "Connection", "Upgrade") &&
-		headerContains(header, "Upgrade", "websocket")
+func hasHeader(header http.Header, name string) bool {
+	for key, values := range header {
+		if !strings.EqualFold(key, name) {
+			continue
+		}
+		for _, v := range values {
+			if strings.TrimSpace(v) != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func isProtocolSwitchHeader(header http.Header) bool {
+	return hasHeader(header, "Upgrade") &&
+		headerContains(header, "Connection", "Upgrade")
+}
+
+func isProtocolSwitchResponse(resp *http.Response) bool {
+	return resp != nil &&
+		resp.StatusCode == http.StatusSwitchingProtocols &&
+		isProtocolSwitchHeader(resp.Header)
 }
 
 func (proxy *ProxyHttpServer) hijackConnection(ctx *ProxyCtx, w http.ResponseWriter) (net.Conn, *bufio.Reader, error) {

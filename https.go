@@ -645,9 +645,9 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						continueBody.stop()
 					}
 
-					if isWebSocketHandshake(resp.Header) {
+					if isProtocolSwitchResponse(resp) {
 						defer resp.Body.Close()
-						ctx.Logf("Response looks like websocket upgrade.")
+						ctx.Logf("Response looks like protocol upgrade.")
 
 						// According to resp.Body documentation:
 						// As of Go 1.12, the Body will also implement io.Writer
