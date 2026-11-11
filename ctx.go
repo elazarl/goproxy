@@ -28,6 +28,7 @@ type ProxyCtx struct {
 	Session   int64
 	certStore CertStorage
 	Proxy     *ProxyHttpServer
+	cleanups  []func()
 }
 
 type RoundTripper interface {
@@ -49,6 +50,24 @@ func (ctx *ProxyCtx) RoundTrip(req *http.Request) (*http.Response, error) {
 		return ctx.RoundTripper.RoundTrip(req, ctx)
 	}
 	return ctx.Proxy.Tr.RoundTrip(req)
+}
+
+// Cleanup registers a function to run after the current request's response has
+// been written and flushed to the client, or when request handling aborts on
+// error. Cleanup functions run in last-added, first-called order.
+func (ctx *ProxyCtx) Cleanup(fn func()) {
+	if fn == nil {
+		return
+	}
+	ctx.cleanups = append(ctx.cleanups, fn)
+}
+
+func (ctx *ProxyCtx) runCleanups() {
+	cleanups := ctx.cleanups
+	ctx.cleanups = nil
+	for i := len(cleanups) - 1; i >= 0; i-- {
+		cleanups[i]()
+	}
 }
 
 func (ctx *ProxyCtx) printf(msg string, argv ...any) {
