@@ -187,6 +187,13 @@ func (c *readBufferedConn) Read(p []byte) (int, error) {
 	return c.r.Read(p)
 }
 
+func (c *readBufferedConn) CloseWrite() error {
+	if cw, ok := c.Conn.(closeWriter); ok {
+		return cw.CloseWrite()
+	}
+	return http.ErrNotSupported
+}
+
 // ConnectAction enables the caller to override the standard connect flow.
 // When Action is ConnectHijack, it is up to the implementer to send the
 // HTTP 200, or any other valid http response back to the client from within the
@@ -645,9 +652,9 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						continueBody.stop()
 					}
 
-					if isWebSocketHandshake(resp.Header) {
+					if isProtocolSwitchResponse(resp) {
 						defer resp.Body.Close()
-						ctx.Logf("Response looks like websocket upgrade.")
+						ctx.Logf("Response looks like protocol upgrade.")
 
 						// According to resp.Body documentation:
 						// As of Go 1.12, the Body will also implement io.Writer
