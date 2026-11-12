@@ -95,11 +95,10 @@ func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request)
 	}
 
 	var copyWriter io.Writer = w
-	// Content-Type header may also contain charset definition, so here we need to check the prefix.
-	// Transfer-Encoding can be a list of comma separated values, so we use Contains() for it.
-	if strings.HasPrefix(w.Header().Get("content-type"), "text/event-stream") ||
-		strings.Contains(w.Header().Get("transfer-encoding"), "chunked") {
-		// server-side events, flush the buffered data to the client.
+	if shouldFlushStreaming(resp) {
+		if responseBodyAllowed(r, resp) && resp.Body != http.NoBody {
+			_ = http.NewResponseController(w).Flush()
+		}
 		copyWriter = &flushWriter{w: w}
 	}
 
