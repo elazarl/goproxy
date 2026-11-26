@@ -178,6 +178,10 @@ var _errorRespMaxLength int64 = 500
 
 const _tlsRecordTypeHandshake = byte(22)
 
+type closeWriter interface {
+	CloseWrite() error
+}
+
 type readBufferedConn struct {
 	net.Conn
 	r io.Reader
@@ -185,6 +189,15 @@ type readBufferedConn struct {
 
 func (c *readBufferedConn) Read(p []byte) (int, error) {
 	return c.r.Read(p)
+}
+
+// CloseWrite forwards a write-side shutdown to the wrapped connection when it
+// supports one, so upgraded streams can propagate a client half-close.
+func (c *readBufferedConn) CloseWrite() error {
+	if cw, ok := c.Conn.(closeWriter); ok {
+		return cw.CloseWrite()
+	}
+	return nil
 }
 
 // ConnectAction enables the caller to override the standard connect flow.
@@ -645,6 +658,17 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						continueBody.stop()
 					}
 
+					// A 101 without a valid Upgrade/Connection handshake cannot be
+					// framed as a tunnel. Forwarding it would leave the client
+					// waiting on a stream the proxy will never relay, so report it
+					// as a bad gateway instead.
+					if resp.StatusCode == http.StatusSwitchingProtocols && !isProtocolSwitchResponse(resp) {
+						ctx.Warnf("Ignoring invalid 101 Switching Protocols response without a valid Upgrade handshake")
+						_ = resp.Body.Close()
+						httpError(client, ctx, errors.New("invalid protocol switch response"))
+						return false
+					}
+
 					if isProtocolSwitchResponse(resp) {
 						defer resp.Body.Close()
 						ctx.Logf("Response looks like protocol upgrade.")
@@ -664,7 +688,7 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						resp.Body = nil
 						// Buffer the head so it ships as one TLS record, not one tiny record per header (trips strict clients).
 						bw := bufio.NewWriter(client)
-						if err := resp.Write(bw); err != nil {
+						if err := writeProtocolSwitchHead(bw, resp); err != nil {
 							ctx.Warnf("Cannot write response header from mitm'd client: %v", err)
 							return false
 						}

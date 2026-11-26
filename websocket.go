@@ -3,10 +3,12 @@ package goproxy
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 )
 
 func headerContains(header http.Header, name string, value string) bool {
@@ -48,6 +50,23 @@ func isProtocolSwitchResponse(resp *http.Response) bool {
 	return resp != nil &&
 		resp.StatusCode == http.StatusSwitchingProtocols &&
 		isProtocolSwitchHeader(resp.Header)
+}
+
+// writeProtocolSwitchHead writes the head of a 101 response. http.Response.Write
+// synthesizes "Content-Length: 0" for bodiless POST/PUT/PATCH responses, which
+// RFC 9110 §8.6 forbids on 1xx responses, so the head is written directly.
+func writeProtocolSwitchHead(w io.Writer, resp *http.Response) error {
+	resp.Header.Del("Content-Length")
+	resp.Header.Del("Transfer-Encoding")
+	resp.Header.Del("Trailer")
+	if _, err := fmt.Fprintf(w, "HTTP/1.1 %03d %s\r\n", resp.StatusCode, http.StatusText(resp.StatusCode)); err != nil {
+		return err
+	}
+	if err := resp.Header.Write(w); err != nil {
+		return err
+	}
+	_, err := io.WriteString(w, "\r\n")
+	return err
 }
 
 func (proxy *ProxyHttpServer) hijackConnection(ctx *ProxyCtx, w http.ResponseWriter) (net.Conn, *bufio.Reader, error) {
@@ -93,29 +112,55 @@ func bufferedClientReader(br *bufio.Reader, conn io.Reader) io.Reader {
 	return io.MultiReader(bytes.NewReader(buffered), conn)
 }
 
-// proxyWebsocket relays frames between the client and the upstream server until
-// one side closes. The client read and write sides are passed separately so the
-// caller can hand over a reader that still holds bytes buffered while parsing
-// the upgrade request (e.g. a client frame that arrived in the same write).
+// proxyWebsocket relays bytes between the client and the upstream server until
+// both directions have finished. When one direction reaches EOF it half-closes
+// the opposite write side so the peer observes the end of stream, then keeps
+// relaying the other direction. This is required for generic TCP upgrades,
+// where a client may half-close its write side and still expect a response.
+// The client read and write sides are passed separately so the caller can hand
+// over a reader that still holds bytes buffered while parsing the upgrade
+// request (e.g. a client frame that arrived in the same write).
 func (proxy *ProxyHttpServer) proxyWebsocket(
 	ctx *ProxyCtx,
 	remoteConn io.ReadWriter,
 	clientReader io.Reader,
 	clientWriter io.Writer,
 ) {
-	// 2 is the number of goroutines, this code is implemented according to
-	// https://stackoverflow.com/questions/52031332/wait-for-one-goroutine-to-finish
-	waitChan := make(chan struct{}, 2)
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// remoteConn (the 101 response body) and clientWriter both implement
+	// io.Closer. Use them to unblock the opposite direction on copy errors.
+	remoteCloser, _ := remoteConn.(io.Closer)
+	clientCloser, _ := clientWriter.(io.Closer)
+
 	go func() {
-		_ = copyOrWarn(ctx, remoteConn, clientReader)
-		waitChan <- struct{}{}
+		defer wg.Done()
+		relayCopy(ctx, remoteConn, clientReader, remoteCloser, clientCloser)
 	}()
 
 	go func() {
-		_ = copyOrWarn(ctx, clientWriter, remoteConn)
-		waitChan <- struct{}{}
+		defer wg.Done()
+		relayCopy(ctx, clientWriter, remoteConn, clientCloser, remoteCloser)
 	}()
 
-	// Wait until one end closes the connection
-	<-waitChan
+	wg.Wait()
+}
+
+// relayCopy copies src to dst. On a clean EOF it half-closes dst so the peer
+// observes the end of stream while the reverse direction keeps flowing; on a
+// copy error it fully closes both endpoints to unblock the reverse copy.
+func relayCopy(ctx *ProxyCtx, dst io.Writer, src io.Reader, dstCloser, srcCloser io.Closer) {
+	if err := copyOrWarn(ctx, dst, src); err != nil {
+		if dstCloser != nil {
+			_ = dstCloser.Close()
+		}
+		if srcCloser != nil {
+			_ = srcCloser.Close()
+		}
+		return
+	}
+	if cw, ok := dst.(closeWriter); ok {
+		_ = cw.CloseWrite()
+	}
 }
