@@ -584,6 +584,8 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				}
 
 				if continueLoop := func(req *http.Request) bool {
+					defer ctx.runCleanups()
+
 					// Since we handled the request parsing by our own, we manually
 					// need to set a cancellable context when we finished the request
 					// processing (same behaviour of the stdlib)

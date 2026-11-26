@@ -15,6 +15,15 @@ func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request)
 		proxy.NonproxyHandler.ServeHTTP(w, r)
 		return
 	}
+	hijacked := false
+	defer func() {
+		if !hijacked && len(ctx.cleanups) > 0 {
+			if rc := http.NewResponseController(w); rc != nil {
+				_ = rc.Flush()
+			}
+		}
+		ctx.runCleanups()
+	}()
 	r, resp := proxy.filterRequest(r, ctx)
 
 	if resp == nil {
@@ -84,6 +93,7 @@ func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request)
 		// We have already written the "101 Switching Protocols" response,
 		// now we hijack the connection to send WebSocket data
 		if clientConn, clientReader, err := proxy.hijackConnection(ctx, w); err == nil {
+			hijacked = true
 			wsConn, ok := resp.Body.(io.ReadWriter)
 			if !ok {
 				ctx.Warnf("Unable to use Websocket connection")

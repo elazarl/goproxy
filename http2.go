@@ -152,6 +152,14 @@ func (proxy *ProxyHttpServer) handleH2MitmStream(
 		RoundTripper: parentCtx.RoundTripper,
 		certStore:    parentCtx.certStore,
 	}
+	defer func() {
+		if len(ctx.cleanups) > 0 {
+			if rc := http.NewResponseController(w); rc != nil {
+				_ = rc.Flush()
+			}
+		}
+		ctx.runCleanups()
+	}()
 
 	req, resp := proxy.filterRequest(r, ctx)
 	if resp == nil {
