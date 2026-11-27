@@ -3,13 +3,15 @@ package goproxy
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"strings"
-	"sync"
 )
+
+var errCopyDone = errors.New("hijacked connection copy complete")
 
 func headerContains(header http.Header, name string, value string) bool {
 	for key, values := range header {
@@ -115,45 +117,52 @@ func bufferedClientReader(br *bufio.Reader, conn io.Reader) io.Reader {
 	return io.MultiReader(bytes.NewReader(buffered), conn)
 }
 
-// proxyUpgradedConn relays bytes between the client and the upstream server
-// until both directions have finished. When one direction reaches EOF it
-// half-closes the opposite write side so the peer observes the end of stream,
-// then keeps relaying the other direction. This is required for generic TCP
-// upgrades, where a client may half-close its write side and still expect a
-// response. The client read and write sides are passed separately so the
-// caller can hand over a reader that still holds bytes buffered while parsing
-// the upgrade request (e.g. a client frame that arrived in the same write).
+// proxyUpgradedConn relays bytes between the client and the upstream server.
+// When one direction reaches EOF it half-closes the opposite write side so the
+// peer observes the end of stream, then waits for the other direction. This is
+// required for generic TCP upgrades, where a client may half-close its write
+// side and still expect a response. The client read and write sides are passed
+// separately so the caller can hand over a reader that still holds bytes
+// buffered while parsing the upgrade request (e.g. a client frame that arrived
+// in the same write).
+//
+// This mirrors net/http/httputil.ReverseProxy's switchProtocolCopier: both
+// directions are awaited only when the finished one could half-close its peer.
+// If it could not, the reverse direction has no way to observe EOF and waiting
+// would hang.
 func (proxy *ProxyHttpServer) proxyUpgradedConn(
 	ctx *ProxyCtx,
 	remoteConn io.ReadWriter,
 	clientReader io.Reader,
 	clientWriter io.Writer,
 ) {
-	var wg sync.WaitGroup
-	wg.Add(2)
-
 	// remoteConn (the 101 response body) and clientWriter both implement
 	// io.Closer. Use them to unblock the opposite direction on copy errors.
 	remoteCloser, _ := remoteConn.(io.Closer)
 	clientCloser, _ := clientWriter.(io.Closer)
 
+	errc := make(chan error, 2)
 	go func() {
-		defer wg.Done()
-		relayCopy(ctx, remoteConn, clientReader, remoteCloser, clientCloser)
+		errc <- relayCopy(ctx, remoteConn, clientReader, remoteCloser, clientCloser)
+	}()
+	go func() {
+		errc <- relayCopy(ctx, clientWriter, remoteConn, clientCloser, remoteCloser)
 	}()
 
-	go func() {
-		defer wg.Done()
-		relayCopy(ctx, clientWriter, remoteConn, clientCloser, remoteCloser)
-	}()
-
-	wg.Wait()
+	// A nil error means the destination was half-closed successfully, so the
+	// reverse direction can still make progress: wait for it. A copy error or
+	// a missing CloseWrite aborts the relay.
+	if err := <-errc; err == nil {
+		<-errc
+	}
 }
 
 // relayCopy copies src to dst. On a clean EOF it half-closes dst so the peer
 // observes the end of stream while the reverse direction keeps flowing; on a
-// copy error it fully closes both endpoints to unblock the reverse copy.
-func relayCopy(ctx *ProxyCtx, dst io.Writer, src io.Reader, dstCloser, srcCloser io.Closer) {
+// copy error it fully closes both endpoints to unblock the reverse copy. It
+// returns nil only when dst was half-closed. errCopyDone reports that dst
+// cannot half-close, so the caller must not wait for the reverse direction.
+func relayCopy(ctx *ProxyCtx, dst io.Writer, src io.Reader, dstCloser, srcCloser io.Closer) error {
 	if err := copyOrWarn(ctx, dst, src); err != nil {
 		if dstCloser != nil {
 			_ = dstCloser.Close()
@@ -161,9 +170,11 @@ func relayCopy(ctx *ProxyCtx, dst io.Writer, src io.Reader, dstCloser, srcCloser
 		if srcCloser != nil {
 			_ = srcCloser.Close()
 		}
-		return
+		return err
 	}
-	if cw, ok := dst.(closeWriter); ok {
-		_ = cw.CloseWrite()
+	cw, ok := dst.(closeWriter)
+	if !ok {
+		return errCopyDone
 	}
+	return cw.CloseWrite()
 }
