@@ -202,9 +202,12 @@ func (proxy *ProxyHttpServer) handleH2MitmStream(
 
 	if resp.Body != nil {
 		if shouldFlushStreaming(resp) {
-			// Streaming (gRPC/Connect/SSE/chunked): flush each chunk so it reaches the
-			// client as it arrives. Mirrors net/http/httputil.ReverseProxy.flushInterval.
+			// Streaming (gRPC/Connect/SSE/chunked): flush headers and each chunk so they
+			// reach the client immediately. Mirrors net/http/httputil.ReverseProxy.flushInterval.
 			rc := http.NewResponseController(w)
+			if responseBodyAllowed(r, resp) && resp.Body != http.NoBody {
+				_ = rc.Flush()
+			}
 			buf := make([]byte, 32*1024)
 			for {
 				nr, er := resp.Body.Read(buf)
