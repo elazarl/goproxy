@@ -111,6 +111,10 @@ linters:
         - G404 # Use of weak random number generator (math/rand)
         - G204 # Subprocess launched with a potential tainted input or cmd arguments
         - G602 # Slice index out of range
+    staticcheck:
+      checks:
+        - all
+        - '-SA1008' # Non-canonical key in http.Header map
   exclusions:
     generated: lax
     presets:

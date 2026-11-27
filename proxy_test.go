@@ -505,7 +505,7 @@ func TestRemoveProxyHeadersConnectionTokens(t *testing.T) {
 	}
 
 	t.Run("non-upgrade strips Upgrade and nominated headers", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "http://example.com/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.com/", nil)
 		req.Header.Set("Connection", "keep-alive")
 		req.Header.Set("Upgrade", "foo")
 		req.Header.Set("Keep-Alive", "timeout=5")
@@ -518,7 +518,7 @@ func TestRemoveProxyHeadersConnectionTokens(t *testing.T) {
 	})
 
 	t.Run("upgrade keeps only the upgrade token", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "http://example.com/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.com/", nil)
 		req.Header.Set("Connection", "keep-alive, Upgrade")
 		req.Header.Set("Upgrade", "tcp")
 		req.Header.Set("Keep-Alive", "timeout=5")
@@ -531,7 +531,7 @@ func TestRemoveProxyHeadersConnectionTokens(t *testing.T) {
 	})
 
 	t.Run("non-canonical keys are handled", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "http://example.com/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.com/", nil)
 		req.Header = http.Header{
 			"connection": {"upgrade"},
 			"upgrade":    {"tcp"},
