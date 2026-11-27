@@ -676,15 +676,15 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						// According to resp.Body documentation:
 						// As of Go 1.12, the Body will also implement io.Writer
 						// on a successful "101 Switching Protocols" response,
-						// as used by WebSockets and HTTP/2's "h2c" mode.
-						wsConn, ok := resp.Body.(io.ReadWriter)
+						// as used by WebSockets, h2c, and other protocol upgrades.
+						upgConn, ok := resp.Body.(io.ReadWriter)
 						if !ok {
-							ctx.Warnf("Unable to use Websocket connection")
+							ctx.Warnf("Unable to use upgraded connection")
 							return false
 						}
-						// Set Body to nil so resp.Write only writes the headers
-						// and returns immediately without blocking on the body
-						// (or else we wouldn't be able to proxy WebSocket data).
+						// Set Body to nil so the head writer only writes the
+						// headers and returns immediately without blocking on the
+						// body (or else we wouldn't be able to relay the stream).
 						resp.Body = nil
 						// Buffer the head so it ships as one TLS record, not one tiny record per header (trips strict clients).
 						bw := bufio.NewWriter(client)
@@ -696,11 +696,12 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 							ctx.Warnf("Cannot flush response header from mitm'd client: %v", err)
 							return false
 						}
-						// The client may have sent its first WebSocket frame in the
-						// same write as the upgrade request, so those bytes are still
-						// in the request parser's buffer. Replay them before the raw
-						// connection instead of leaving them stranded.
-						proxy.proxyWebsocket(ctx, wsConn, bufferedClientReader(clientReader.Reader(), client), client)
+						// The client may have sent its first upgrade bytes (e.g. a
+						// WebSocket frame) in the same write as the upgrade request,
+						// so those bytes are still in the request parser's buffer.
+						// Replay them before the raw connection instead of leaving
+						// them stranded.
+						proxy.proxyUpgradedConn(ctx, upgConn, bufferedClientReader(clientReader.Reader(), client), client)
 						return false
 					}
 

@@ -101,7 +101,7 @@ func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request)
 				ctx.Warnf("Unable to use upgraded connection")
 				return
 			}
-			proxy.proxyWebsocket(ctx, upgConn, bufferedClientReader(clientReader, clientConn), clientConn)
+			proxy.proxyUpgradedConn(ctx, upgConn, bufferedClientReader(clientReader, clientConn), clientConn)
 		}
 		return
 	}

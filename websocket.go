@@ -27,6 +27,9 @@ func headerContains(header http.Header, name string, value string) bool {
 	return false
 }
 
+// hasHeader reports whether header contains a non-empty value for name. It
+// iterates over keys instead of using header.Values so it also works with
+// PreventCanonicalization, which leaves header keys in their original case.
 func hasHeader(header http.Header, name string) bool {
 	for key, values := range header {
 		if !strings.EqualFold(key, name) {
@@ -112,15 +115,15 @@ func bufferedClientReader(br *bufio.Reader, conn io.Reader) io.Reader {
 	return io.MultiReader(bytes.NewReader(buffered), conn)
 }
 
-// proxyWebsocket relays bytes between the client and the upstream server until
-// both directions have finished. When one direction reaches EOF it half-closes
-// the opposite write side so the peer observes the end of stream, then keeps
-// relaying the other direction. This is required for generic TCP upgrades,
-// where a client may half-close its write side and still expect a response.
-// The client read and write sides are passed separately so the caller can hand
-// over a reader that still holds bytes buffered while parsing the upgrade
-// request (e.g. a client frame that arrived in the same write).
-func (proxy *ProxyHttpServer) proxyWebsocket(
+// proxyUpgradedConn relays bytes between the client and the upstream server
+// until both directions have finished. When one direction reaches EOF it
+// half-closes the opposite write side so the peer observes the end of stream,
+// then keeps relaying the other direction. This is required for generic TCP
+// upgrades, where a client may half-close its write side and still expect a
+// response. The client read and write sides are passed separately so the
+// caller can hand over a reader that still holds bytes buffered while parsing
+// the upgrade request (e.g. a client frame that arrived in the same write).
+func (proxy *ProxyHttpServer) proxyUpgradedConn(
 	ctx *ProxyCtx,
 	remoteConn io.ReadWriter,
 	clientReader io.Reader,
