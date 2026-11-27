@@ -153,7 +153,7 @@ func (proxy *ProxyHttpServer) proxyUpgradedConn(
 	// reverse direction can still make progress: wait for it. A copy error or
 	// a missing CloseWrite aborts the relay.
 	if err := <-errc; err == nil {
-		<-errc
+		<-errc //nolint:errcheck
 	}
 }
 
