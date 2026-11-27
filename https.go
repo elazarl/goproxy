@@ -524,6 +524,9 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 				client = rawClientTls
 				if err := rawClientTls.HandshakeContext(context.Background()); err != nil {
 					ctx.Warnf("Cannot handshake client %v %v", r.Host, err)
+					if proxy.TLSHandshakeErrorHandler != nil {
+						proxy.TLSHandshakeErrorHandler(r.Host, err, ctx)
+					}
 					return
 				}
 				if proxy.AllowHTTP2 && rawClientTls.ConnectionState().NegotiatedProtocol == "h2" {
