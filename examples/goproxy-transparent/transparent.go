@@ -22,17 +22,9 @@ func orPanic(err error) {
 	}
 }
 
-func main() {
-	verbose := flag.Bool("v", true, "should every proxy request be logged to stdout")
-	http_addr := flag.String("httpaddr", ":3129", "proxy http listen address")
-	https_addr := flag.String("httpsaddr", ":3128", "proxy https listen address")
-	flag.Parse()
-
+func newTransparentProxy(verbose bool) *goproxy.ProxyHttpServer {
 	proxy := goproxy.NewProxyHttpServer()
-	proxy.Verbose = *verbose
-	if proxy.Verbose {
-		log.Printf("Server starting up! - configured to listen on http interface %s and https interface %s", *http_addr, *https_addr)
-	}
+	proxy.Verbose = verbose
 
 	proxy.NonproxyHandler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if req.Host == "" {
@@ -70,6 +62,57 @@ func main() {
 				orPanic(clientBuf.Flush())
 			}
 		})
+	return proxy
+}
+
+func handleTLSConn(c net.Conn, proxy *goproxy.ProxyHttpServer) {
+	tlsConn, err := vhost.TLS(c)
+	if err != nil {
+		log.Printf("Error accepting new connection - %v", err)
+		if tlsConn != nil {
+			_ = tlsConn.Close()
+		} else {
+			_ = c.Close()
+		}
+		return
+	}
+	host := tlsConn.Host()
+	if host == "" {
+		log.Printf("Cannot support non-SNI enabled clients")
+		_ = tlsConn.Close()
+		return
+	}
+	var remoteAddr string
+	if c.RemoteAddr() != nil {
+		remoteAddr = c.RemoteAddr().String()
+	}
+	connectReq := &http.Request{
+		Method:     http.MethodConnect,
+		Proto:      "HTTP/1.1",
+		ProtoMajor: 1,
+		ProtoMinor: 1,
+		URL: &url.URL{
+			Opaque: host,
+			Host:   net.JoinHostPort(host, "443"),
+		},
+		Host:       host,
+		Header:     make(http.Header),
+		RemoteAddr: remoteAddr,
+	}
+	resp := &dumbResponseWriter{Conn: tlsConn}
+	proxy.ServeHTTP(resp, connectReq)
+}
+
+func main() {
+	verbose := flag.Bool("v", true, "should every proxy request be logged to stdout")
+	http_addr := flag.String("httpaddr", ":3129", "proxy http listen address")
+	https_addr := flag.String("httpsaddr", ":3128", "proxy https listen address")
+	flag.Parse()
+
+	proxy := newTransparentProxy(*verbose)
+	if proxy.Verbose {
+		log.Printf("Server starting up! - configured to listen on http interface %s and https interface %s", *http_addr, *https_addr)
+	}
 
 	go func() {
 		log.Fatalln(http.ListenAndServe(*http_addr, proxy))
@@ -86,34 +129,13 @@ func main() {
 			log.Printf("Error accepting new connection - %v", err)
 			continue
 		}
-		go func(c net.Conn) {
-			tlsConn, err := vhost.TLS(c)
-			if err != nil {
-				log.Printf("Error accepting new connection - %v", err)
-			}
-			if tlsConn.Host() == "" {
-				log.Printf("Cannot support non-SNI enabled clients")
-				return
-			}
-			connectReq := &http.Request{
-				Method: http.MethodConnect,
-				URL: &url.URL{
-					Opaque: tlsConn.Host(),
-					Host:   net.JoinHostPort(tlsConn.Host(), "443"),
-				},
-				Host:       tlsConn.Host(),
-				Header:     make(http.Header),
-				RemoteAddr: c.RemoteAddr().String(),
-			}
-			resp := dumbResponseWriter{tlsConn}
-			proxy.ServeHTTP(resp, connectReq)
-		}(c)
+		go handleTLSConn(c, proxy)
 	}
 }
 
 // copied/converted from https.go
 func dial(ctx context.Context, proxy *goproxy.ProxyHttpServer, network, addr string) (c net.Conn, err error) {
-	if proxy.Tr.DialContext != nil {
+	if proxy.Tr != nil && proxy.Tr.DialContext != nil {
 		return proxy.Tr.DialContext(ctx, network, addr)
 	}
 	var d net.Dialer
@@ -130,23 +152,27 @@ func connectDial(ctx context.Context, proxy *goproxy.ProxyHttpServer, network, a
 
 type dumbResponseWriter struct {
 	net.Conn
+	connectRespSkipped bool
 }
 
-func (dumb dumbResponseWriter) Header() http.Header {
+func (dumb *dumbResponseWriter) Header() http.Header {
 	panic("Header() should not be called on this ResponseWriter")
 }
 
-func (dumb dumbResponseWriter) Write(buf []byte) (int, error) {
-	if bytes.Equal(buf, []byte("HTTP/1.0 200 OK\r\n\r\n")) {
+func (dumb *dumbResponseWriter) Write(buf []byte) (int, error) {
+	if !dumb.connectRespSkipped &&
+		(bytes.Equal(buf, []byte("HTTP/1.1 200 OK\r\n\r\n")) ||
+			bytes.Equal(buf, []byte("HTTP/1.0 200 OK\r\n\r\n"))) {
+		dumb.connectRespSkipped = true
 		return len(buf), nil // throw away the HTTP OK response from the faux CONNECT request
 	}
 	return dumb.Conn.Write(buf)
 }
 
-func (dumb dumbResponseWriter) WriteHeader(code int) {
+func (dumb *dumbResponseWriter) WriteHeader(code int) {
 	panic("WriteHeader() should not be called on this ResponseWriter")
 }
 
-func (dumb dumbResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+func (dumb *dumbResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	return dumb, bufio.NewReadWriter(bufio.NewReader(dumb), bufio.NewWriter(dumb)), nil
 }
