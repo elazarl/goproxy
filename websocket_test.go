@@ -2,6 +2,7 @@ package goproxy_test
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -805,4 +807,107 @@ func TestGenericProtocolUpgradeServerFirst(t *testing.T) {
 			assert.Equal(t, "pong:ping", string(reply))
 		})
 	}
+}
+
+// noCloseWriteBody is an io.ReadWriteCloser that deliberately does not
+// implement CloseWrite, like the body of a 101 response produced by a custom
+// RoundTripper. Read blocks until Close so the reverse relay direction cannot
+// observe EOF on its own.
+type noCloseWriteBody struct {
+	mu      sync.Mutex
+	written bytes.Buffer
+	closed  chan struct{}
+	once    sync.Once
+}
+
+func (b *noCloseWriteBody) Read([]byte) (int, error) {
+	<-b.closed
+	return 0, io.EOF
+}
+
+func (b *noCloseWriteBody) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.written.Write(p)
+}
+
+func (b *noCloseWriteBody) Close() error {
+	b.once.Do(func() { close(b.closed) })
+	return nil
+}
+
+func (b *noCloseWriteBody) writtenString() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.written.String()
+}
+
+// TestProtocolUpgradeWithoutCloseWriteDoesNotHang verifies that the relay stops
+// waiting for the reverse direction when the finished direction cannot
+// half-close its peer: without CloseWrite the peer never observes EOF, so
+// waiting would block until the caller tears the connection down. This mirrors
+// net/http/httputil.ReverseProxy's switchProtocolCopier.
+func TestProtocolUpgradeWithoutCloseWriteDoesNotHang(t *testing.T) {
+	body := &noCloseWriteBody{closed: make(chan struct{})}
+
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		return req, &http.Response{
+			StatusCode: http.StatusSwitchingProtocols,
+			Status:     "101 Switching Protocols",
+			Header: http.Header{
+				"Connection": []string{"Upgrade"},
+				"Upgrade":    []string{"tcp"},
+			},
+			Body:    body,
+			Request: req,
+		}
+	})
+	proxyServer := httptest.NewServer(proxy)
+	defer proxyServer.Close()
+
+	proxyURL, err := url.Parse(proxyServer.URL)
+	require.NoError(t, err)
+	client := &http.Client{
+		Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://example.com/upgrade", http.NoBody)
+	require.NoError(t, err)
+	req.Header.Set("Connection", "Upgrade")
+	req.Header.Set("Upgrade", "tcp")
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, http.StatusSwitchingProtocols, resp.StatusCode)
+
+	rw, ok := resp.Body.(io.ReadWriter)
+	require.True(t, ok)
+	_, err = rw.Write([]byte("hello"))
+	require.NoError(t, err)
+
+	halfCloser, ok := resp.Body.(interface{ CloseWrite() error })
+	require.True(t, ok)
+	require.NoError(t, halfCloser.CloseWrite())
+
+	// The proxy must close the client side promptly. Without the fix it keeps
+	// waiting for the reverse direction, which can never observe EOF.
+	readDone := make(chan error, 1)
+	go func() {
+		_, err := io.Copy(io.Discard, resp.Body)
+		readDone <- err
+	}()
+	select {
+	case err := <-readDone:
+		require.NoError(t, err)
+	case <-time.After(3 * time.Second):
+		_ = resp.Body.Close()
+		t.Fatal("proxy hung waiting for a direction that cannot observe EOF")
+	}
+
+	// The client bytes must still have reached the upstream body.
+	assert.Equal(t, "hello", body.writtenString())
 }
