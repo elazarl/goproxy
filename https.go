@@ -178,6 +178,10 @@ var _errorRespMaxLength int64 = 500
 
 const _tlsRecordTypeHandshake = byte(22)
 
+type closeWriter interface {
+	CloseWrite() error
+}
+
 type readBufferedConn struct {
 	net.Conn
 	r io.Reader
@@ -185,6 +189,15 @@ type readBufferedConn struct {
 
 func (c *readBufferedConn) Read(p []byte) (int, error) {
 	return c.r.Read(p)
+}
+
+// CloseWrite forwards a write-side shutdown to the wrapped connection when it
+// supports one, so upgraded streams can propagate a client half-close.
+func (c *readBufferedConn) CloseWrite() error {
+	if cw, ok := c.Conn.(closeWriter); ok {
+		return cw.CloseWrite()
+	}
+	return nil
 }
 
 // ConnectAction enables the caller to override the standard connect flow.
@@ -645,26 +658,37 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 						continueBody.stop()
 					}
 
-					if isWebSocketHandshake(resp.Header) {
+					// A 101 without a valid Upgrade/Connection handshake cannot be
+					// framed as a tunnel. Forwarding it would leave the client
+					// waiting on a stream the proxy will never relay, so report it
+					// as a bad gateway instead.
+					if resp.StatusCode == http.StatusSwitchingProtocols && !isProtocolSwitchResponse(resp) {
+						ctx.Warnf("Ignoring invalid 101 Switching Protocols response without a valid Upgrade handshake")
+						_ = resp.Body.Close()
+						httpError(client, ctx, errors.New("invalid protocol switch response"))
+						return false
+					}
+
+					if isProtocolSwitchResponse(resp) {
 						defer resp.Body.Close()
-						ctx.Logf("Response looks like websocket upgrade.")
+						ctx.Logf("Response looks like protocol upgrade.")
 
 						// According to resp.Body documentation:
 						// As of Go 1.12, the Body will also implement io.Writer
 						// on a successful "101 Switching Protocols" response,
-						// as used by WebSockets and HTTP/2's "h2c" mode.
-						wsConn, ok := resp.Body.(io.ReadWriter)
+						// as used by WebSockets, h2c, and other protocol upgrades.
+						upgConn, ok := resp.Body.(io.ReadWriter)
 						if !ok {
-							ctx.Warnf("Unable to use Websocket connection")
+							ctx.Warnf("Unable to use upgraded connection")
 							return false
 						}
-						// Set Body to nil so resp.Write only writes the headers
-						// and returns immediately without blocking on the body
-						// (or else we wouldn't be able to proxy WebSocket data).
+						// Set Body to nil so the head writer only writes the
+						// headers and returns immediately without blocking on the
+						// body (or else we wouldn't be able to relay the stream).
 						resp.Body = nil
 						// Buffer the head so it ships as one TLS record, not one tiny record per header (trips strict clients).
 						bw := bufio.NewWriter(client)
-						if err := resp.Write(bw); err != nil {
+						if err := writeProtocolSwitchHead(bw, resp); err != nil {
 							ctx.Warnf("Cannot write response header from mitm'd client: %v", err)
 							return false
 						}
@@ -672,11 +696,12 @@ func (proxy *ProxyHttpServer) handleHttps(w http.ResponseWriter, r *http.Request
 							ctx.Warnf("Cannot flush response header from mitm'd client: %v", err)
 							return false
 						}
-						// The client may have sent its first WebSocket frame in the
-						// same write as the upgrade request, so those bytes are still
-						// in the request parser's buffer. Replay them before the raw
-						// connection instead of leaving them stranded.
-						proxy.proxyWebsocket(ctx, wsConn, bufferedClientReader(clientReader.Reader(), client), client)
+						// The client may have sent its first upgrade bytes (e.g. a
+						// WebSocket frame) in the same write as the upgrade request,
+						// so those bytes are still in the request parser's buffer.
+						// Replay them before the raw connection instead of leaving
+						// them stranded.
+						proxy.proxyUpgradedConn(ctx, upgConn, bufferedClientReader(clientReader.Reader(), client), client)
 						return false
 					}
 

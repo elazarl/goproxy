@@ -52,6 +52,17 @@ func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	ctx.Logf("Copying response to client %v [%d]", resp.Status, resp.StatusCode)
+
+	// A 101 without a valid Upgrade/Connection handshake cannot be framed as a
+	// tunnel. Forwarding it would leave the client waiting on a stream the proxy
+	// will never relay, so report it as a bad gateway instead.
+	if resp.StatusCode == http.StatusSwitchingProtocols && !isProtocolSwitchResponse(resp) {
+		ctx.Warnf("Ignoring invalid 101 Switching Protocols response without a valid Upgrade handshake")
+		_ = resp.Body.Close()
+		http.Error(w, "invalid protocol switch response", http.StatusBadGateway)
+		return
+	}
+
 	// http.ResponseWriter will take care of filling the correct response length
 	// Setting it now, might impose wrong value, contradicting the actual new
 	// body the user returned.
@@ -78,18 +89,19 @@ func (proxy *ProxyHttpServer) handleHttp(w http.ResponseWriter, r *http.Request)
 	}
 	w.WriteHeader(resp.StatusCode)
 
-	if isWebSocketHandshake(resp.Header) {
-		ctx.Logf("Response looks like websocket upgrade.")
+	if isProtocolSwitchResponse(resp) {
+		ctx.Logf("Response looks like protocol upgrade.")
 
 		// We have already written the "101 Switching Protocols" response,
-		// now we hijack the connection to send WebSocket data
+		// now we hijack the connection to relay upgraded stream data.
 		if clientConn, clientReader, err := proxy.hijackConnection(ctx, w); err == nil {
-			wsConn, ok := resp.Body.(io.ReadWriter)
+			defer clientConn.Close()
+			upgConn, ok := resp.Body.(io.ReadWriter)
 			if !ok {
-				ctx.Warnf("Unable to use Websocket connection")
+				ctx.Warnf("Unable to use upgraded connection")
 				return
 			}
-			proxy.proxyWebsocket(ctx, wsConn, bufferedClientReader(clientReader, clientConn), clientConn)
+			proxy.proxyUpgradedConn(ctx, upgConn, bufferedClientReader(clientReader, clientConn), clientConn)
 		}
 		return
 	}

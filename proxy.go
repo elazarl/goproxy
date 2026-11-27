@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 
 	"golang.org/x/net/http2"
 )
@@ -114,6 +115,11 @@ func (proxy *ProxyHttpServer) filterResponse(respOrig *http.Response, ctx *Proxy
 }
 
 // RemoveProxyHeaders removes all proxy headers which should not propagate to the next hop.
+//
+// A request carrying a valid protocol upgrade handshake is relayed as a raw
+// tunnel once the upstream accepts it: the proxy stops applying HTTP semantics
+// to that connection. Deployments that rely on hop-by-hop or application
+// header filtering to restrict egress should also filter Upgrade requests.
 func RemoveProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 	r.RequestURI = "" // this must be reset when serving a request with the client
 	ctx.Logf("Sending request %v %v", r.Method, r.URL.String())
@@ -134,12 +140,62 @@ func RemoveProxyHeaders(ctx *ProxyCtx, r *http.Request) {
 	//   options that are desired for that particular connection and MUST NOT
 	//   be communicated by proxies over further connections.
 
-	// We need to keep "Connection: upgrade" header, since it's part of
-	// the WebSocket handshake, and it won't work without it.
-	// For all the other cases (close, keep-alive), we already handle them, by
-	// setting the r.Close variable in the previous lines.
-	if !isWebSocketHandshake(r.Header) {
-		r.Header.Del("Connection")
+	// Connection lists hop-by-hop options that must not cross a proxy
+	// (RFC 9110 §7.6.1). Preserve the upgrade handshake (WebSockets, h2c,
+	// generic TCP upgrades) so the next hop can switch protocols; drop every
+	// other token and the headers it nominates. For non-upgrade requests both
+	// Connection and Upgrade are stripped entirely.
+	if isProtocolSwitchHeader(r.Header) {
+		stripConnectionTokens(r.Header, "upgrade")
+	} else {
+		stripConnectionTokens(r.Header, "")
+		deleteHeaderFold(r.Header, "Upgrade")
+	}
+}
+
+// deleteHeaderFold deletes name from header with a case-insensitive match,
+// because PreventCanonicalization may leave header keys in their original case.
+func deleteHeaderFold(header http.Header, name string) {
+	for key := range header {
+		if strings.EqualFold(key, name) {
+			delete(header, key)
+		}
+	}
+}
+
+// stripConnectionTokens rewrites the Connection header to retain only keep
+// (when non-empty) and deletes the headers nominated by every other token.
+// Headers listed in Connection are hop-by-hop and must not be forwarded
+// (RFC 9110 §7.6.1).
+func stripConnectionTokens(header http.Header, keep string) {
+	var connectionKey, kept string
+	for key, values := range header {
+		if !strings.EqualFold(key, "Connection") {
+			continue
+		}
+		if connectionKey == "" {
+			connectionKey = key
+		}
+		for _, value := range values {
+			for token := range strings.SplitSeq(value, ",") {
+				token = strings.TrimSpace(token)
+				if token == "" {
+					continue
+				}
+				if keep != "" && strings.EqualFold(token, keep) {
+					kept = token
+					continue
+				}
+				deleteHeaderFold(header, token)
+			}
+		}
+	}
+	deleteHeaderFold(header, "Connection")
+	if connectionKey == "" {
+		connectionKey = "Connection"
+	}
+	if kept != "" {
+		header[connectionKey] = []string{kept}
 	}
 }
 

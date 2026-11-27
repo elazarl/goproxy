@@ -498,6 +498,52 @@ func TestNoProxyHeadersHttps(t *testing.T) {
 	_, _ = client.Do(req)
 }
 
+func TestRemoveProxyHeadersConnectionTokens(t *testing.T) {
+	proxy := goproxy.NewProxyHttpServer()
+	newCtx := func(req *http.Request) *goproxy.ProxyCtx {
+		return &goproxy.ProxyCtx{Req: req, Proxy: proxy}
+	}
+
+	t.Run("non-upgrade strips Upgrade and nominated headers", func(t *testing.T) {
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.com/", nil)
+		req.Header.Set("Connection", "keep-alive")
+		req.Header.Set("Upgrade", "foo")
+		req.Header.Set("Keep-Alive", "timeout=5")
+
+		goproxy.RemoveProxyHeaders(newCtx(req), req)
+
+		assert.Empty(t, req.Header.Get("Connection"))
+		assert.Empty(t, req.Header.Get("Upgrade"))
+		assert.Empty(t, req.Header.Get("Keep-Alive"))
+	})
+
+	t.Run("upgrade keeps only the upgrade token", func(t *testing.T) {
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.com/", nil)
+		req.Header.Set("Connection", "keep-alive, Upgrade")
+		req.Header.Set("Upgrade", "tcp")
+		req.Header.Set("Keep-Alive", "timeout=5")
+
+		goproxy.RemoveProxyHeaders(newCtx(req), req)
+
+		assert.Equal(t, "Upgrade", req.Header.Get("Connection"))
+		assert.Equal(t, "tcp", req.Header.Get("Upgrade"))
+		assert.Empty(t, req.Header.Get("Keep-Alive"))
+	})
+
+	t.Run("non-canonical keys are handled", func(t *testing.T) {
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "http://example.com/", nil)
+		req.Header = http.Header{
+			"connection": {"upgrade"},
+			"upgrade":    {"tcp"},
+		}
+
+		goproxy.RemoveProxyHeaders(newCtx(req), req)
+
+		assert.Equal(t, []string{"upgrade"}, req.Header["connection"])
+		assert.Equal(t, []string{"tcp"}, req.Header["upgrade"])
+	})
+}
+
 type VerifyAcceptEncodingHeader struct {
 	ReceivedHeaderValue string
 }
